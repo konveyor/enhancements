@@ -23,8 +23,7 @@ This enhancement will allow for a non cluster-admin to migrate applications usin
 - [ ] Enhancement is `implementable`
 - [ ] Design details are appropriately documented from clear requirements
 - [ ] Test plan is defined
-- [ ] Graduation criteria for dev preview, tech preview, GA
-- [ ] User-facing documentation is created in [openshift-docs](https://github.com/openshift/openshift-docs/)
+- [ ] User-facing documentation is created and linked
 
 ## Open Questions [optional]
 
@@ -219,26 +218,6 @@ challenging to test should be called out.
 All code is expected to have adequate tests (eventually with coverage
 expectations).
 
-### Graduation Criteria
-
-**Note:** *Section not required until targeted at a release.*
-
-Define graduation milestones.
-
-These may be defined in terms of API maturity, or as something else. Initial proposal
-should keep this high-level with a focus on what signals will be looked at to
-determine graduation.
-
-Consider the following in developing the graduation criteria for this
-enhancement:
-- Maturity levels - `Dev Preview`, `Tech Preview`, `GA`
-- Deprecation
-
-Clearly define what graduation means.
-
-#### Examples
-
-
 ##### Setup
 
 Source cluster is OCP3, target cluster is OCP4 and the target cluster is also
@@ -309,27 +288,6 @@ the host cluster.
    create a migmigration. The migmigration needs to perform the validation
    check one more time prior to running the migration.
 
-##### Dev Preview -> Tech Preview
-
-- Ability to utilize the enhancement end to end
-- End user documentation, relative API stability
-- Sufficient test coverage
-- Gather feedback from users rather than just developers
-
-##### Tech Preview -> GA 
-
-- More testing (upgrade, downgrade, scale)
-- Sufficient time for feedback
-- Available by default
-
-**For non-optional features moving to GA, the graduation criteria must include
-end to end tests.**
-
-##### Removing a deprecated feature
-
-- Announce deprecation and support policy of the existing feature
-- Deprecate the feature
-
 ### Upgrade / Downgrade Strategy
 
 To handle the upgrade use case, CAM must not break the existing cluster-scoped
@@ -353,20 +311,6 @@ the namespaced-install.
 
 The operator should be capable of updating/reverting the two types of
 installations when the configuration parameter is changed.
-
-### Version Skew Strategy
-
-How will the component handle version skew with other components?
-What are the guarantees? Make sure this is in the test plan.
-
-Consider the following in developing a version skew strategy for this
-enhancement:
-- During an upgrade, we will always have skew among components, how will this impact your work?
-- Does this enhancement involve coordinating behavior in the control plane and
-  in the kubelet? How does an n-2 kubelet without this feature available behave
-  when this feature is used?
-- Will any other components on the node change? For example, changes to CSI, CRI
-  or CNI may require updating that component before the kubelet.
 
 ## Implementation History
 
