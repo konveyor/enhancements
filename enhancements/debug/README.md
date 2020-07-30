@@ -208,11 +208,14 @@ to us:
 
 The controller can add the `MigPlan` name as a label so the user can use
 `oc get migmigrations -o yaml -l migrations.openshift.io/migPlanName=<name>`.
-Alternatively, we may be able to mark the `spec.migPlanRef.name` as indexed so
+~~Alternatively, we may be able to mark the `spec.migPlanRef.name` as indexed so
 that users can use a field selector in their oc command to retrieve it instead
 of a label. This is preferable because a) it's the authoratative primary key,
 and 2) it doesn't require the controller to write any other data that could
-potentially get out of sync.
+potentially get out of sync.~~ The only field selectors available for custom
+resources right now are [name and namespace](https://github.com/kubernetes/kubernetes/issues/53459),
+so we'll need to go with the controller applied label selector.
+
 
 [3] `Backup` and `Restore` objects have the label `migmigration=<uid>` on it.
 It was very confusing to me that this value was actually the uid from the
