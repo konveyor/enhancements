@@ -5,6 +5,10 @@ catalog the high level types of common issues that can occur, and collectively
 identify opportunities for improvement, with a goal of implementing tractable
 improvements in the 1.3.0 release (and beyond).
 
+## Related issues:
+
+https://github.com/konveyor/mig-controller/issues/612
+
 ## Example Debug Story
 
 I'll use a recent debug session to illustrate issues in the current debug process.
