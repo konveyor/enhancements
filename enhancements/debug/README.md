@@ -205,10 +205,14 @@ users, however, if you're going to begin the debug process if something goes
 wrong, it is important to get this `MigMigration`. Suggestion is to add the
 name in a tooltip.
 
+https://github.com/konveyor/mig-ui/issues/982
+
 [2] Add `MigPlan` name as a label to the `MigMigration`. Apart from adding this
 info to the UI, cli users should be able to easily filter out irrelevant `MigMigrations`
 to list those that are associated with the `MigPlan` A couple options are available
 to us:
+
+https://github.com/konveyor/mig-controller/issues/610
 
 The controller can add the `MigPlan` name as a label so the user can use
 `oc get migmigrations -o yaml -l migrations.openshift.io/migPlanName=<name>`.
@@ -229,17 +233,28 @@ I would propose we 1) make that label very explicit which field it's referencing
 and 2) add a label that contains the name of the related `MigMigration` so it
 can be queried via label selector.
 
+https://github.com/konveyor/mig-controller/issues/614
+
 [4] It's not clear what the "phase" actually represents. Trying to be specific,
 is this the "last started phase", and when an error occurs, the phase is simply
 left alone? So is it fair to say the phase seen here really is the "failed" phase?
 Is there anything that can be done here to help? There is some perception that this
-is the last successfully completed phase, but I don't think this phase
-actually completed in my case, based on the itinerary:
+is the last successfully completed phase, but not the **failed** phase, and that
+can lead to a misleading debug experience. I'm not sure that there's something
+that needs to change here, but would like some clarity on the topic so we can
+be accurate with our debug guide language.
+
+https://github.com/konveyor/mig-controller/issues/615
+
+Here are the stages in question from the debug story:
 https://github.com/konveyor/mig-controller/blob/master/pkg/controller/migmigration/task.go#L111-L112
+
 
 [5] This is not good; we should explore if it's possible to label PVR/PVBs
 with the `MigMigration` name so they can also be retrieved by label selector;
 preferably by name and NOT uid.
+
+https://github.com/konveyor/velero/issues/66
 
 [6] Information about stage pods and the problems that can be introduced should
 be noted in the debug guide.
