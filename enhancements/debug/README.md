@@ -265,4 +265,61 @@ be noted in the debug guide.
 
 ## Proposed UI debug experience
 
-**<TODO>** Link to second doc, POC?
+![IndentedTree](./indentedtree.png)
+
+An indented tree like control has been proposed to easily visualize the
+relationships between all the related objects that are spawned as the result
+of a migration. This is perhaps an incremental improvement on the road to
+a longer term solution that tries to abstract away the details of the objects
+at all so users don't need to understand the underlying basics.
+
+Credit to @djwhatle for the following tree :)
+
+```
+MigPlan: openshift-migration/myplan
+│
+├── MigCluster: openshift-migration/mycluster
+│
+├── MigStorage: openshift-migration/mystorage
+│
+├── MigHook: openshift-migration/myhook1
+├── MigHook: openshift-migration/myhook2
+│
+├── BackupStorageLocation: openshift-migration/mybsl
+├── VolumeSnapshotLocation: openshift-migration/myvsl
+│
+├── MigMigration: openshift-migration/mystagemigration
+│   ├──Backup: openshift-migration/StageBackup1
+│   │  ├── PodVolumeBackup: openshift-migration/mypvb1
+│   │  ├── PodVolumeBackup: openshift-migration/mypvb2
+│   │  └── PodVolumeBackup: openshift-migration/mypvb3
+│   │
+│   └──Restore: openshift-migration/StageRestore1
+│      ├── PodVolumeRestore: openshift-migration/mypvr1
+│      ├── PodVolumeRestore: openshift-migration/mypvr2
+│      └── PodVolumeRestore: openshift-migration/mypvr3
+│
+└── MigMigration: openshift-migration/myfinalmigration
+    ├──Backup: openshift-migration/FinalBackup2
+    │
+    ├──Backup: openshift-migration/StageBackup2
+    │  ├── PodVolumeBackup: openshift-migration/mypvb4
+    │  ├── PodVolumeBackup: openshift-migration/mypvb5
+    │  └── PodVolumeBackup: openshift-migration/mypvb6
+    |
+    ├──Restore: openshift-migration/StageRestore2
+    |  ├── PodVolumeRestore: openshift-migration/mypvr7
+    |  ├── PodVolumeRestore: openshift-migration/mypvr8
+    |  └── PodVolumeRestore: openshift-migration/mypvr9
+    |
+    └──Restore: openshift-migration/FinalRestore2
+```
+
+We need to add restic pods, and stage pods somewhere in this tree, as they
+can also often be the source of pain.
+
+The value provided here is that the entire debug process of manually crawling
+this tree to find the relative objects is removed. Anyone who has participated
+in a real debug session of CAM will attest that this is a significant source
+of friction in the way of diagnosing a root problem and applying a solution.
+
