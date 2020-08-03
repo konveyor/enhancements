@@ -271,7 +271,14 @@ An indented tree like control has been proposed to easily visualize the
 relationships between all the related objects that are spawned as the result
 of a migration. This is perhaps an incremental improvement on the road to
 a longer term solution that tries to abstract away the details of the objects
-at all so users don't need to understand the underlying basics.
+at all so users don't need to understand the underlying basics. Right now, this
+is not available in Patternfly 4, although there *is* some type of WIP tree
+control that we may be able to push forwards upstream and use for our own
+purposes after it has been developed in cooperation with the PF team.
+
+**TODO**: @mturley need some more info on the PF4 stuff.
+
+In the meantime, there is the following off-the-shelf solution we could use:
 
 http://nvd3.org/examples/indentedtree.html
 
