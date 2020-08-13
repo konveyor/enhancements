@@ -259,10 +259,6 @@ https://github.com/konveyor/velero/issues/66
 [6] Information about stage pods and the problems that can be introduced should
 be noted in the debug guide.
 
-## Generic Debug Algorithm
-
-**<TODO>**
-
 ## Proposed UI debug experience
 
 ![IndentedTree](./indentedtree.png)
@@ -276,9 +272,8 @@ is not available in Patternfly 4, although there *is* some type of WIP tree
 control that we may be able to push forwards upstream and use for our own
 purposes after it has been developed in cooperation with the PF team.
 
-**TODO**: @mturley need some more info on the PF4 stuff.
-
-In the meantime, there is the following off-the-shelf solution we could use:
+**UPDATE 08/13**: Outstanding PR @mturley put together we'll use for this
+purpose: https://github.com/konveyor/mig-ui/pull/985
 
 http://nvd3.org/examples/indentedtree.html
 
