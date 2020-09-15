@@ -74,31 +74,46 @@ The `message` field shows how many steps/phases have been completed so far in th
 
 ## Proposal
 
-### Update in CR Status field for progress reporting
+To address the problems discussed in the previous sections, we propose to make two modifications:
 
-All _Phase_ of miration would be broken down to 3 to 4 high level stages that would be useful to give user a better idea about what is the progress of current migration. This could be implemented by introducing anothor attribute _Stage_ in `status` field of _MigMigration_ CR. This new field could hold values like `Initial`, `PVBackup`,`ResourceBackup`, `Restore`, `Cleaning` etc, pertaining to the stages that migration is in. This would be more user friedly than what currently is getting displayed, as there are many _Phase_ about which user would not generally care.
+1. Group existing phases into relevant steps for the end user 
+2. Provide detailed progress information of ongoing migration phase in _MigMigration_ CR
 
-```
-apiVersion: migration.openshift.io/v1alpha1
-kind: MigMigration
-[...]
+### Enhancement 1: Grouping migration phases
+
+All _Phases_ of the migration can be grouped into following high level steps that abstract out the details from the end user:
+
+* Prepare
+* PVBackup
+* ResourceBackup
+* PVRestore
+* ResourceRestore
+* Final
+
+This can be implemented by introducing additional attribute `step` in the `status` field of the _MigMigration_ CR. THere is an example of _MigMigration_ CR with the proposed `step` field:
+
+```yml
 status:
-    conditions:
-        [...]
-    itenerary: <itenerary-type>
-    observedDigest: <digest>
-    phase: <phases of itenerary>
-    stage: <Stage name of current phase>
-    startTimestamp: '<time-stamp>'
+  conditions:
+  - category: Advisory
+    lastTransitionTime: "2020-09-15T14:54:46Z"
+    message: 'Step: 7/33'
+    reason: InitialBackupCreated
+    status: "True"
+    type: Running
+  itenerary: Final
+  observedDigest: 9834d071975562d5e2c2eb855bca6950711ded8a0e45af5307fa56cd0f5ba3c7
+  phase: InitialBackupCreated
+  step: ResourceBackup
 ```
 
-#### Phase to Stage mapping
+#### Phase to Step mapping
 
-A _Phase_ could belong to different _Stage_ based on the the _Itinerary_
+Each phase in the migration will belong to some _Step_ based on the the _Itinerary_. The below sections propose a possible mapping for different phases to their correspoding steps.
 
 ##### Mapping for Final Itinerary 
 
-- Initial: Created, Started, Prepare, EnsureCloudSecretPropagated
+- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
 - ResourceBackup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated, EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced
 - PVBackup: EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
 - PVRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
@@ -107,19 +122,20 @@ A _Phase_ could belong to different _Stage_ based on the the _Itinerary_
 
 ##### Mapping for Stage Itinerary
 
-- Initial: Created, Started, Prepare, EnsureCloudSecretPropagated
+- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
 - ResourceBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced
 - PVBackup: EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
 - PVRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
-- ResourceRestore: EnsureAnnotationsDeleted, EnsureLabelsDeleted
-- Final: Completed
+- Final: EnsureAnnotationsDeleted, EnsureLabelsDeleted, Completed
 
 ##### Mapping for Failed Itinerary
 
-- Cleaning: MigrationFailed, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted
-- RestoreState: UnQuiesceApplications, Completed
+- Final: MigrationFailed, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Completed
 
-##### Mapping for Clean Itinerary
+##### Mapping for Cancel Itinerary
 
-- Cleaning: Canceling, DeleteBackups, DeleteRestores, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, 
-- Final: EnsureMigratedDeleted, UnQuiesceApplications, Canceled
+- Final: Canceling, DeleteBackups, DeleteRestores, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Canceled
+
+### Enhancement 2: Detailed progress of phase
+
+In progress...
