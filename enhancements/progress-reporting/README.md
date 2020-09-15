@@ -22,6 +22,19 @@ superseded-by:
 
 The goal of this document is to highlight user experience issues in current implementation of progress reporting in MTC, and propose improvements in some of the areas for a better user experience.
 
+## Release Signoff Checklist
+
+- [ ] Enhancement is `implementable`
+- [ ] Design details are appropriately documented from clear requirements
+- [ ] Test plan is defined
+- [ ] User-facing documentation is created
+
+## Summary
+
+Once the improvements proposed in this document are implemented, all of the current migration phases will be modified to form relevant high level groups of Migration Steps that abstract out some of the internals of migration phases from the end user. The existing phases will only be _hidden_ from the end user, and will still be available in the _MigMigration_ CR for debugging. Additionally, the migration controller will expose useful data pertaining to the progress of ongoing migration to provide users with a overall view of the progress of migration in one place, which would likely be the _MigMigration_ CR. The MTC UI will be re-designed to incorporate the new enhancements, possibly adopting a whole new approach for showing progress. 
+
+## Motivation
+
 ### How progress reporting looks like in MTC (Until 1.3)?
 
 The Status field in the _MigMigration_ CR contains the information about the progress of ongoing migration. Upon creation of _MigMigration_ CR, the migration transitions from one _Phase_ to another until it reaches the _Completed_ phase. For a user, a _Phase_ simply means a one of the _Steps_ in the migration. 
@@ -57,3 +70,7 @@ The `message` field shows how many steps/phases have been completed so far in th
 
 * Some phases in migration run for a longer period of time than other phases. For such long running phases, MTC currently does not have a way to inform the user of the progress of the ongoing phase itself. For instance, during an initial Backup, the migration controller enters `EnsureInitialBackup` phase where it creates a Velero Backup object and transitions to `InitialBackupCreated` phase upon successful creation of Backup. It then waits until the underlying Backup object has a Completed / PartiallyFailed / Failed condition. While the backup runs in the background, the end user only sees `InitialBackupCreated` in the progress bar. The problem aggrevates when the Backup contains a huge number of resources. The progress bar is stuck in `InitialBackupCreated` phase with a certain percentage value for a very long period of time. The user is left with no reason to believe that there's actually something happening in the background.
 
+
+To address the issues above, we need to re-design the progress reporting in MTC backend as well as in the MTC UI.
+
+## Proposal
