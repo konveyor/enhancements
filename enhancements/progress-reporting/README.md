@@ -74,3 +74,53 @@ The `message` field shows how many steps/phases have been completed so far in th
 To address the issues above, we need to re-design the progress reporting in MTC backend as well as in the MTC UI.
 
 ## Proposal
+
+### Update in CR Status field for progress reporting
+
+All _Phase_ of miration would be broken down to 3 to 4 high level stages that would be useful to give user a better idea about what is the progress of current migration. This could be implemented by introducing anothor attribute _Stage_ in `status` field of _MigMigration_ CR. This new field could hold values like `Initial`, `PVBackup`,`ResourceBackup`, `Restore`, `Cleaning` etc, pertaining to the stages that migration is in. This would be more user friedly than what currently is getting displayed, as there are many _Phase_ about which user would not generally care.
+
+```
+apiVersion: migration.openshift.io/v1alpha1
+kind: MigMigration
+[...]
+status:
+    conditions:
+        [...]
+    itenerary: <itenerary-type>
+    observedDigest: <digest>
+    phase: <phases of itenerary>
+    stage: <Stage name of current phase>
+    startTimestamp: '<time-stamp>'
+```
+
+#### Phase to Stage mapping
+
+A _Phase_ could belong to different _Stage_ based on the the _Itinerary_
+
+##### Mapping for Final Itinerary 
+
+- Initial: Created, Started, Prepare, EnsureCloudSecretPropagated
+- ResourceBackup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated, EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced
+- PVBackup: EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- PVRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- ResourceRestore: EnsureAnnotationsDeleted, EnsureInitialBackupReplicated, PostBackupHooks, PreRestoreHooks, EnsureFinalRestore, FinalRestoreCreated, EnsureLabelsDeleted, PostRestoreHooks
+- Final: Verification, Completed
+
+##### Mapping for Stage Itinerary
+
+- Initial: Created, Started, Prepare, EnsureCloudSecretPropagated
+- ResourceBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced
+- PVBackup: EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- PVRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- ResourceRestore: EnsureAnnotationsDeleted, EnsureLabelsDeleted
+- Final: Completed
+
+##### Mapping for Failed Itinerary
+
+- Cleaning: MigrationFailed, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted
+- RestoreState: UnQuiesceApplications, Completed
+
+##### Mapping for Clean Itinerary
+
+- Cleaning: Canceling, DeleteBackups, DeleteRestores, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, 
+- Final: EnsureMigratedDeleted, UnQuiesceApplications, Canceled
