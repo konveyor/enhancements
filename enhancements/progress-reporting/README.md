@@ -4,6 +4,7 @@ authors:
   - "@pranavgaikwad"
   - "@JaydipGabani"
 reviewers:
+  - "@jortel"
   - "@djwhatle"
   - "@alaypatel07"
 approvers:
@@ -32,7 +33,7 @@ The goal of this document is to highlight user experience issues in the current 
 
 ## Summary
 
-With the proposed changes, the current migration phases will be divided into high level groups / steps of relevant phases. The new steps will abstract out some of the details of the migration from the end user. The existing phases will only be _hidden_ from the end user, and will still be available in the _MigMigration_ CR for debugging. Additionally, the migration controller will expose useful data pertaining to the progress of ongoing migration, likely in the status field of _MigMigration_ CR. The MTC UI will be re-designed to incorporate the enhancements, possibly adopting a whole new approach for showing progress. 
+With the proposed changes, the migration controller will expose useful data pertaining to the progress of ongoing migration, likely in the status field of _MigMigration_ CR. The MTC UI will be re-designed to incorporate the enhancements, possibly adopting a pipeline like view for showing progress. Additionally, the current migration phases will be divided into high level groups / steps of relevant phases. The new steps will abstract out some of the details of the migration from the end user. The existing phases will only be _hidden_ from the end user, and will still be available in the _MigMigration_ CR for debugging. 
 
 ## Motivation
 
@@ -128,6 +129,9 @@ Similar changes will take place for _FinalBackupCreated_ phase too.
       type: Running
       progress: InProgress
 ```
+
+Apart from the above phases, we propose to incorporate similar progress reporting for other phases of migration, wherever possible. For example, in Stage Pod phases, We can relay the status of the pods to _MigMigration_ CR. This is useful since we have been repeatedly observing issues in Stage pod phases.
+
  
 ### Enhancement 2: Grouping migration phases
 
