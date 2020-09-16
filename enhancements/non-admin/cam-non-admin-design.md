@@ -3,12 +3,16 @@ title: cam-non-admin-design
 authors:
   - "@dymurray"
 reviewers:
-  - TBD
+  - "@dwhatley"
+  - "@jortel"
+  - "@alaypatel07"
 approvers:
-  - TBD
+  - "@dwhatley"
+  - "@jortel"
+  - "@alaypatel07"
 creation-date: 2020-02-17
 last-updated: 2020-02-17
-status: implementable
+status: deferred
 see-also:
 replaces:
 superseded-by:
