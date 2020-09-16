@@ -74,9 +74,9 @@ The `message` field shows how many steps/phases have been completed so far in th
 
 ## Proposal
 
-To address the problems discussed in the previous sections, we propose to make two modifications:
+To address the problems discussed in the previous section, we propose to make two modifications:
 
-1. Group existing phases into relevant steps for the end user 
+1. Group existing phases into relevant steps 
 2. Provide detailed progress information of ongoing migration phase in _MigMigration_ CR
 
 ### Enhancement 1: Grouping migration phases
@@ -84,10 +84,10 @@ To address the problems discussed in the previous sections, we propose to make t
 All _Phases_ of the migration can be grouped into following high level steps that abstract out the details from the end user:
 
 * Prepare
-* PVBackup
-* ResourceBackup
-* PVRestore
-* ResourceRestore
+* VolumeBackup
+* Backup
+* VolumeRestore
+* Restore
 * Final
 
 This can be implemented by introducing additional attribute `step` in the `status` field of the _MigMigration_ CR. THere is an example of _MigMigration_ CR with the proposed `step` field:
@@ -114,18 +114,17 @@ Each phase in the migration will belong to some _Step_ based on the the _Itinera
 ##### Mapping for Final Itinerary 
 
 - Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
-- ResourceBackup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated, EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced
-- PVBackup: EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- PVRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- Backup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated
+- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
 - ResourceRestore: EnsureAnnotationsDeleted, EnsureInitialBackupReplicated, PostBackupHooks, PreRestoreHooks, EnsureFinalRestore, FinalRestoreCreated, EnsureLabelsDeleted, PostRestoreHooks
 - Final: Verification, Completed
 
 ##### Mapping for Stage Itinerary
 
 - Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
-- ResourceBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced
-- PVBackup: EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- PVRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
 - Final: EnsureAnnotationsDeleted, EnsureLabelsDeleted, Completed
 
 ##### Mapping for Failed Itinerary
@@ -138,4 +137,51 @@ Each phase in the migration will belong to some _Step_ based on the the _Itinera
 
 ### Enhancement 2: Detailed progress of phase
 
-In progress...
+With this enhancement, we propose to modify _MigMigration_ CR to incorporate an additional field that shows progress of the ongoing phase. This is particularly useful for long running phases. This will require a significant change in _migration_ controller. 
+
+Here are some examples of proposed change:
+
+1. _StageBackupCreated_ Phase:
+
+```yml
+  status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:39:44Z"
+      message: 'Step: 18/33'
+      reason: StageBackupCreated
+      status: "True"
+      type: Running
+      progress: 6/9 items backed up
+```
+
+Velero 1.4 onwards, we have the progress information reported in the Backup CR:
+
+```yml
+  status:
+    completionTimestamp: "2020-09-16T15:38:58Z"
+    expiration: "2020-10-16T15:38:52Z"
+    formatVersion: 1.1.0
+    phase: Completed
+    progress:
+      itemsBackedUp: 26
+      totalItems: 26
+```
+
+Similar changes will take place for _FinalBackupCreated_ phase too.
+
+2. _StageRestoreCreated_ phase:
+
+```yml
+ status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:41:41Z"
+      message: 'Step: 21/33'
+      reason: StageRestoreCreated
+      status: "True"
+      type: Running
+      progress: InProgress
+```
+
+
