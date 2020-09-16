@@ -4,11 +4,12 @@ authors:
   - "@pranavgaikwad"
   - "@JaydipGabani"
 reviewers:
-  - TBD
+  - "@djwhatle"
+  - "@alaypatel07"
 approvers:
   - TBD
 creation-date: 2020-09-14
-last-updated: 2020-09-15
+last-updated: 2020-09-16
 status: implementable
 see-also:
   - "N/A" 
@@ -76,66 +77,10 @@ The `message` field shows how many steps/phases have been completed so far in th
 
 To address the problems discussed in the previous section, we propose to make two modifications:
 
-1. Group existing phases into relevant steps 
-2. Provide detailed progress information of ongoing migration phase in _MigMigration_ CR
+1. Provide detailed progress information of ongoing migration phase in _MigMigration_ CR
+2. Group existing phases into relevant steps 
 
-### Enhancement 1: Grouping migration phases
-
-All _Phases_ of the migration can be grouped into following high level steps that abstract out the details from the end user:
-
-* Prepare
-* VolumeBackup
-* Backup
-* VolumeRestore
-* Restore
-* Final
-
-This can be implemented by introducing additional attribute `step` in the `status` field of the _MigMigration_ CR. THere is an example of _MigMigration_ CR with the proposed `step` field:
-
-```yml
-status:
-  conditions:
-  - category: Advisory
-    lastTransitionTime: "2020-09-15T14:54:46Z"
-    message: 'Step: 7/33'
-    reason: InitialBackupCreated
-    status: "True"
-    type: Running
-  itenerary: Final
-  observedDigest: 9834d071975562d5e2c2eb855bca6950711ded8a0e45af5307fa56cd0f5ba3c7
-  phase: InitialBackupCreated
-  step: ResourceBackup
-```
-
-#### Phase to Step mapping
-
-Each phase in the migration will belong to some _Step_ based on the the _Itinerary_. The below sections propose a possible mapping for different phases to their correspoding steps.
-
-##### Mapping for Final Itinerary 
-
-- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
-- Backup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated
-- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
-- ResourceRestore: EnsureAnnotationsDeleted, EnsureInitialBackupReplicated, PostBackupHooks, PreRestoreHooks, EnsureFinalRestore, FinalRestoreCreated, EnsureLabelsDeleted, PostRestoreHooks
-- Final: Verification, Completed
-
-##### Mapping for Stage Itinerary
-
-- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
-- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
-- Final: EnsureAnnotationsDeleted, EnsureLabelsDeleted, Completed
-
-##### Mapping for Failed Itinerary
-
-- Final: MigrationFailed, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Completed
-
-##### Mapping for Cancel Itinerary
-
-- Final: Canceling, DeleteBackups, DeleteRestores, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Canceled
-
-### Enhancement 2: Detailed progress of phase
+### Enhancement 1: Detailed progress of phase
 
 With this enhancement, we propose to modify _MigMigration_ CR to incorporate an additional field that shows progress of the ongoing phase. This is particularly useful for long running phases. This will require a significant change in _migration_ controller. 
 
@@ -183,5 +128,85 @@ Similar changes will take place for _FinalBackupCreated_ phase too.
       type: Running
       progress: InProgress
 ```
+ 
+### Enhancement 2: Grouping migration phases
 
+With the progress information relayed in the _MigMigration_ CR, we believe that the user will have enough information in their hands to understand what exactly is happening in the background. With that, we can simplify the migration progress in broader steps instead of having the user to know the details of each step. 
+
+All _Phases_ of the migration can be grouped into following high level steps that abstract out the details from the end user:
+
+* Prepare
+* VolumeBackup
+* Backup
+* VolumeRestore
+* Restore
+* Final
+
+Having a fixed number of steps will make it possible for us to implement a pipeline type progress view in the UI. 
+
+This can be implemented by introducing additional attribute `step` in the `status` field of the _MigMigration_ CR. Here is an example of _MigMigration_ CR with the proposed `step` field:
+
+```yml
+status:
+  conditions:
+  - category: Advisory
+    lastTransitionTime: "2020-09-15T14:54:46Z"
+    message: 'Step: 7/33'
+    reason: InitialBackupCreated
+    status: "True"
+    type: Running
+  itenerary: Final
+  observedDigest: 9834d071975562d5e2c2eb855bca6950711ded8a0e45af5307fa56cd0f5ba3c7
+  step: Backup
+```
+
+#### Phase to Step mapping
+
+Each phase in the migration will belong to some _Step_ based on the the _Itinerary_. The below sections propose a possible mapping for different phases to their correspoding steps.
+
+##### Final Itinerary 
+
+- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
+- Backup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated
+- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- ResourceRestore: EnsureAnnotationsDeleted, EnsureInitialBackupReplicated, PostBackupHooks, PreRestoreHooks, EnsureFinalRestore, FinalRestoreCreated, EnsureLabelsDeleted, PostRestoreHooks
+- Final: Verification, Completed
+
+##### Stage Itinerary
+
+- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
+- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- Final: EnsureAnnotationsDeleted, EnsureLabelsDeleted, Completed
+
+##### Failed Itinerary
+
+- Final: MigrationFailed, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Completed
+
+##### Cancel Itinerary
+
+- Final: Canceling, DeleteBackups, DeleteRestores, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Canceled
+
+#### How will migration progress through different steps?
+
+In this section, we will discuss how a journey of a migration will look like to an end user.
+
+##### Scenario 1: Migration completed without issues
+
+Migration enters `Prepare` step, moves forward to `Backup` step, and so on until reaching the `Final` step and returning successfully.
+
+```
+Prepare -> Backup -> VolumeBackup -> VolumeRestore -> Restore -> Final
+```
+
+##### Scenario 2: Migration fails during StageBackupCreated phase
+
+Migration enters `Prepare` step, moves forward to until `VolumeBackup` step and fails. Then, it skips the remaining steps and jumps to `Final` step. 
+
+```
+Prepare -> Backup -> VolumeBackup (Failed Here) -> VolumeRestore (Skipped) -> VolumeBackup (Skipped) -> Restore (Skipped) -> Final
+```
+
+A user now knows where exactly the migration failed, they can inspect the _MigMigration_ CR and report the actual phase it failed at. 
 
