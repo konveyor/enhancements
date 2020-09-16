@@ -8,7 +8,7 @@ approvers:
   - TBD
 creation-date: 2020-06-22
 last-updated: 2020-06-22
-status: implementable
+status: deferred
 see-also:
 replaces:
 superseded-by:
