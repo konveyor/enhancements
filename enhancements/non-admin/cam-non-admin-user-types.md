@@ -1,11 +1,15 @@
 ---
 title: cam-non-admin-user-types
 authors:
-  - TBD
+  - alaypatel07
 reviewers:
-  - TBD
+  - dymurray
+  - dwhatley
+  - jortel
 approvers:
-  - TBD
+  - dymurray
+  - dwhatley
+  - jortel
 creation-date: 2020-06-22
 last-updated: 2020-06-22
 status: deferred
