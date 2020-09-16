@@ -94,7 +94,6 @@ Here are some examples of proposed change:
     conditions:
     - category: Advisory
       lastTransitionTime: "2020-09-16T15:39:44Z"
-      message: 'Step: 18/33'
       reason: StageBackupCreated
       status: "True"
       type: Running
@@ -123,7 +122,6 @@ Similar changes will take place for _FinalBackupCreated_ phase too.
     conditions:
     - category: Advisory
       lastTransitionTime: "2020-09-16T15:41:41Z"
-      message: 'Step: 21/33'
       reason: StageRestoreCreated
       status: "True"
       type: Running
