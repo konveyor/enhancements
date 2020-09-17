@@ -7,8 +7,12 @@ reviewers:
   - "@jortel"
   - "@djwhatle"
   - "@alaypatel07"
+  - "@dymurray"
 approvers:
-  - TBD
+  - "@jortel"
+  - "@djwhatle"
+  - "@alaypatel07"
+  - "@dymurray"
 creation-date: 2020-09-14
 last-updated: 2020-09-16
 status: implementable
@@ -22,7 +26,7 @@ superseded-by:
 
 # MTC Progress Reporting Improvements
 
-The goal of this document is to highlight user experience issues in the current implementation of progress reporting in MTC, and propose improvements in some of the areas for a better user experience.
+The goal of this document is to highlight user experience issues in the current implementation of progress reporting in MTC, and propose improvements in some of the areas for a better user experience. The driving goal of the effort is to ensure that the user has enough information in their hands to understand what exactly is happening in the background of an ongoing migration. 
 
 ## Release Signoff Checklist
 
@@ -128,14 +132,16 @@ Similar changes will take place for _FinalBackupCreated_ phase too.
       progress: InProgress
 ```
 
+Detailed progress of _Restore_ objects is currently unavailable in Velero.  
+
 Apart from the above phases, we propose to incorporate similar progress reporting for other phases of migration, wherever possible. For example, in Stage Pod phases, We can relay the status of the pods to _MigMigration_ CR. This is useful since we have been repeatedly observing issues in Stage pod phases.
 
  
 ### Enhancement 2: Grouping migration phases
 
-With the progress information relayed in the _MigMigration_ CR, we believe that the user will have enough information in their hands to understand what exactly is happening in the background. With that, we can simplify the migration progress in broader steps instead of having the user to know the details of each step. 
+With the progress information relayed in the _MigMigration_ CR, we believe that the user will have enough information in their hands to understand what exactly is happening in the background. We can then simplify the migration by dividing existing phases into broader steps of migration.  
 
-All _Phases_ of the migration can be grouped into following high level steps that abstract out the details from the end user:
+All _Phases_ in a migration can be grouped into following high level steps that abstract out the details from the end user:
 
 * Prepare
 * VolumeBackup
@@ -207,7 +213,7 @@ Prepare -> Backup -> VolumeBackup -> VolumeRestore -> Restore -> Final
 Migration enters `Prepare` step, moves forward to until `VolumeBackup` step and fails. Then, it skips the remaining steps and jumps to `Final` step. 
 
 ```
-Prepare -> Backup -> VolumeBackup (Failed Here) -> VolumeRestore (Skipped) -> VolumeBackup (Skipped) -> Restore (Skipped) -> Final
+Prepare -> Backup -> VolumeBackup (Failed Here) -> VolumeRestore (Skipped) -> Restore (Skipped) -> Final
 ```
 
 A user now knows where exactly the migration failed, they can inspect the _MigMigration_ CR and report the actual phase it failed at. 
