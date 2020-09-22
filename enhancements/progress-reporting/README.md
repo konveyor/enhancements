@@ -168,9 +168,10 @@ status:
   step: Backup
 ```
 
-#### Phase to Step mapping
+#### Relationship between Step and Phase
 
-Each phase in the migration will belong to some _Step_ based on the the _Itinerary_. The below sections propose a possible mapping for different phases to their correspoding steps.
+Each phase in the migration will belong to some _Step_ based on the the _Itinerary_. The existing itinerary struct will be updated to form a nested view of Phases through Steps. See the exact nested structs in [implementation details](#grouping-phases)
+
 
 ##### Final Itinerary 
 
@@ -217,4 +218,37 @@ Prepare -> Backup -> VolumeBackup (Failed Here) -> VolumeRestore (Skipped) -> Re
 ```
 
 A user now knows where exactly the migration failed, they can inspect the _MigMigration_ CR and report the actual phase it failed at. 
+
+
+### Implementation Details/Notes/Constraints
+
+#### Velero Restore Progress
+
+As of Velero 1.4, _Restore_ objects do not have Progress reported in the Status field like _Backup_ objects. In the first iteration, we will only show progress of _Restore_ objects in the form of `InProgress, Completed, Failed, PartiallyFailed`. Next, we will implement the Progress for Restore objects in Konveyor Velero fork and eventually, work to get the features submitted upstream.
+
+#### Grouping Phases
+
+Here's the new  _Itinerary_ struct with nested _Steps_ and _Phases_.
+
+```go
+// Itinerary
+type Itinerary struct {
+	Name  string
+	Steps []Step
+}
+// Step
+type Step struct {
+	Name string
+        Phases []Phase
+}
+// Phases
+type Phase struct {
+	// A phase name.
+	Name string
+	// Phases included when ALL flags evaluate true.
+	all uint8
+	// Phases included when ANY flag evaluates true.
+	any uint8
+}
+```
 
