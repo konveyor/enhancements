@@ -101,7 +101,8 @@ Here are some examples of proposed change:
       reason: StageBackupCreated
       status: "True"
       type: Running
-      progress: 6/9 items backed up
+      progress:
+      - [Backup migmigration-rpltn] 6 out of estimated total of 9 items backed up
 ```
 
 Velero 1.4 onwards, we have the progress information reported in the Backup CR:
@@ -115,6 +116,15 @@ Velero 1.4 onwards, we have the progress information reported in the Backup CR:
     progress:
       itemsBackedUp: 26
       totalItems: 26
+```
+
+For a _Backup_ with associated _PodVolumeBackup_ resources, the `progress` field would look like:
+
+```yml
+  progress:
+  - [Backup migmigration-xxdmb] 0 out of estimated total of 6 items backed up
+  - [VolumeBackup migmigration-xxdmb-6xmmb] 1001231 out of 2001230 bytes backed up
+  - [VolumeBackup migmigration-xxdmb-gg9ll] 0 out of 1000123 bytes backed up
 ```
 
 Similar changes will take place for _FinalBackupCreated_ phase too.
