@@ -83,7 +83,7 @@ The `message` field shows how many steps/phases have been completed so far in th
 To address the problems discussed in the previous section, we propose to make two modifications:
 
 1. Provide detailed progress information of ongoing migration phase in _MigMigration_ CR
-2. Group existing phases into relevant steps 
+2. Group existing phases into relevant steps to simplify user view
 
 ### Enhancement 1: Detailed progress of phase
 
@@ -102,7 +102,7 @@ Here are some examples of proposed change:
       status: "True"
       type: Running
       progress:
-      - [Backup migmigration-rpltn] 6 out of estimated total of 9 items backed up
+      - "Backup openshift-migration/migmigration-rpltn: 6 out of estimated total of 9 items backed up"
 ```
 
 Velero 1.4 onwards, we have the progress information reported in the Backup CR:
@@ -122,9 +122,9 @@ For a _Backup_ with associated _PodVolumeBackup_ resources, the `progress` field
 
 ```yml
   progress:
-  - [Backup migmigration-xxdmb] 0 out of estimated total of 6 items backed up
-  - [VolumeBackup migmigration-xxdmb-6xmmb] 1001231 out of 2001230 bytes backed up
-  - [VolumeBackup migmigration-xxdmb-gg9ll] 0 out of 1000123 bytes backed up
+  - "Backup openshift-migration/migmigration-xxdmb: 0 out of estimated total of 6 items backed up"
+  - "VolumeBackup openshift-migration/migmigration-xxdmb-6xmmb: 100 MB out of 2 GB backed up"
+  - "PodVolumeBackup openshift-migration/migmigration-xxdmb-gg9ll: 0 MB out of 1 GB backed up"
 ```
 
 Similar changes will take place for _FinalBackupCreated_ phase too.
@@ -139,13 +139,99 @@ Similar changes will take place for _FinalBackupCreated_ phase too.
       reason: StageRestoreCreated
       status: "True"
       type: Running
-      progress: InProgress
+      progress: 
+      - "Restore openshift-migration/migmigration-xxdmb: InProgress"
+      - "PodVolumeRestore openshift-migration/migmigration-xxdmb: 10 MB out of 1 GB restored"
 ```
 
 Detailed progress of _Restore_ objects is currently unavailable in Velero.  
 
 Apart from the above phases, we propose to incorporate similar progress reporting for other phases of migration, wherever possible. For example, in Stage Pod phases, We can relay the status of the pods to _MigMigration_ CR. This is useful since we have been repeatedly observing issues in Stage pod phases.
 
+3. _Prepare_ phase:
+
+```yml
+ status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:41:41Z"
+      reason: Prepare
+      status: "True"
+      type: Running
+      progress: 
+      - "Adding labels on image streams"
+```
+
+4. _(Pre|Post)(Backup|Restore)Hooks_ phases:
+
+```yml
+ status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:41:41Z"
+      reason: PreBackupHooks
+      status: "True"
+      type: Running
+      progress: 
+      - "Hook Job test-ns/job-1: Running"
+```
+
+```yml
+ status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:41:41Z"
+      reason: PreBackupHooks
+      status: "True"
+      type: Running
+      progress: 
+      - "Hook Job test-ns/job-1: Failed"
+```
+
+5. _StagePodsCreated_ phase:
+
+```yml
+ status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:41:41Z"
+      reason: StagePodsCreated
+      status: "True"
+      type: Running
+      progress: 
+      - "Pod test-ns/stage-pod-xcml: Not running. Phase Pending"
+      - "Pod test-ns-2/stage-pod-xcml: Not running. Phase Pending"
+```
+
+6. _EnsureStagePodsTerminated_ phase:
+
+```yml
+ status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:41:41Z"
+      reason: EnsureStagePodsTerminated
+      status: "True"
+      type: Running
+      progress: 
+      - "Pod test-ns/stage-pod-xcml: Not terminated."
+      - "Pod test-ns-2/stage-pod-xcml: Not terminated."
+```
+
+7. _Ensure(Initial|Final)BackupReplicated_ phases:
+
+```yml
+ status:
+    conditions:
+    - category: Advisory
+      lastTransitionTime: "2020-09-16T15:41:41Z"
+      reason: EnsureInitialBackupReplicated
+      status: "True"
+      type: Running
+      progress: 
+      - "Backup openshift-migration/migmigration-xxdmb: Not replicated."
+      
+```
  
 ### Enhancement 2: Grouping migration phases
 
@@ -172,10 +258,11 @@ status:
     message: 'Step: 7/33'
     reason: InitialBackupCreated
     status: "True"
+    step: Backup
     type: Running
   itenerary: Final
   observedDigest: 9834d071975562d5e2c2eb855bca6950711ded8a0e45af5307fa56cd0f5ba3c7
-  step: Backup
+  phase: InitialBackupCreated
 ```
 
 #### Relationship between Step and Phase
@@ -187,16 +274,16 @@ Each phase in the migration will belong to some _Step_ based on the the _Itinera
 
 - Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
 - Backup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated
-- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- StageBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- StageRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
 - ResourceRestore: EnsureAnnotationsDeleted, EnsureInitialBackupReplicated, PostBackupHooks, PreRestoreHooks, EnsureFinalRestore, FinalRestoreCreated, EnsureLabelsDeleted, PostRestoreHooks
 - Final: Verification, Completed
 
 ##### Stage Itinerary
 
 - Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
-- VolumeBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- VolumeRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
+- StageBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
+- StageRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
 - Final: EnsureAnnotationsDeleted, EnsureLabelsDeleted, Completed
 
 ##### Failed Itinerary
@@ -216,15 +303,15 @@ In this section, we will discuss how a journey of a migration will look like to 
 Migration enters `Prepare` step, moves forward to `Backup` step, and so on until reaching the `Final` step and returning successfully.
 
 ```
-Prepare -> Backup -> VolumeBackup -> VolumeRestore -> Restore -> Final
+Prepare -> Backup -> StageBackup -> StageRestore -> Restore -> Final
 ```
 
 ##### Scenario 2: Migration fails during StageBackupCreated phase
 
-Migration enters `Prepare` step, moves forward to until `VolumeBackup` step and fails. Then, it skips the remaining steps and jumps to `Final` step. 
+Migration enters `Prepare` step, moves forward to until `StageBackup` step and fails. Then, it skips the remaining steps and jumps to `Final` step. 
 
 ```
-Prepare -> Backup -> VolumeBackup (Failed Here) -> VolumeRestore (Skipped) -> Restore (Skipped) -> Final
+Prepare -> Backup -> StageBackup (Failed Here) -> StageRestore (Skipped) -> Restore (Skipped) -> Final
 ```
 
 A user now knows where exactly the migration failed, they can inspect the _MigMigration_ CR and report the actual phase it failed at. 
@@ -249,7 +336,7 @@ type Itinerary struct {
 // Step
 type Step struct {
 	Name string
-        Phases []Phase
+  Phases []Phase
 }
 // Phases
 type Phase struct {
@@ -261,4 +348,3 @@ type Phase struct {
 	any uint8
 }
 ```
-
