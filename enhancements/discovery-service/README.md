@@ -19,7 +19,7 @@ status: implemented
 
 ## Background
 
-The CAM application controller reconciler watches MIG CRs and ensures that source and destination clusters are as declared in the Spec. In addition, the controller discovers information that is used by the controller and provided to the user. This (currently) includes:
+The MTC application controller reconciler watches MIG CRs and ensures that source and destination clusters are as declared in the Spec. In addition, the controller discovers information that is used by the controller and provided to the user. This (currently) includes:
 
 - MigCluster (performed: every reconcile)
   - Storage Classes
@@ -31,11 +31,11 @@ The CAM application controller reconciler watches MIG CRs and ensures that sourc
 
 The discovery is performed by querying resources on each cluster as needed and the data is stored on the CR. This approach is reasonable for relatively small data sets. Further, the PVs are merged to the MigPlan spec to provide the user with a _fill in the blank_ experience. The user selection is needed & preserved by the controller. For large data sets (Eg: 100k namespaces), this approach has the following pros & cons:
 
-Pros:
+**Pros:**
 
 - The discovery is performed during reconcile and data stored on the CR which makes it available to user/UI using standard kubernetes mechanisms and paradigms.
 
-Cons:
+**Cons:**
 
 - The discovery is performed during reconcile which may be triggered by changes to watched MIG and standard kube resources. As a result, the discovery frequency and interval is excessive. Further, since the reconciler does not know which watched resource has changed, the controller queries all of the resources to be discovered. This has significant performance and cluster load drawbacks.
 - The data is stored on the CR.
@@ -78,15 +78,15 @@ Discovery controller that is either part of the _migration-controller_ manager P
 
 ### Concepts
 
-Cluster scoped - All data is scoped to a cluster (MigCluster).
+*Cluster scoped* - All data is scoped to a cluster (MigCluster).
 
-Pagination - All GET requests support pagination by passing the offset and limit parameters.
+*Pagination* - All GET requests support pagination by passing the offset and limit parameters.
 
-Availability - To protect against returning partial datasets, each collection must be initially/completely reconciled prior to REST API fulling a GET request on the collection. A 206 _RequestTimeout_ is returned when data is not yet available.
+*Availability* - To protect against returning partial datasets, each collection must be initially/completely reconciled prior to REST API fulling a GET request on the collection. A 206 _RequestTimeout_ is returned when data is not yet available.
 
-Eventual Consistency - After a collection is initially reconciled (available), remote watches are used to add/update/delete individual resources. This has been tuned to be very fast but the kubernetes informer subsystem has some inherent latency. As a result, a GET on a collection will represent a snapshot in time but will eventually become consistent with the inventory on the cluster.
+*Eventual Consistency* - After a collection is initially reconciled (available), remote watches are used to add/update/delete individual resources. This has been tuned to be very fast but the kubernetes informer subsystem has some inherent latency. As a result, a GET on a collection will represent a snapshot in time but will eventually become consistent with the inventory on the cluster.
 
-Standard parameters:
+*Standard parameters*:
 
 - offset - The offset of the first item to be included (default: 0).
 - limit - The number of items returned (default: unlimited).
@@ -97,31 +97,31 @@ Standard parameters:
 
 ### Resources:
 
-Endpoints:
+**Endpoints:**
 
-- /schema - Show schema.
-- /namespaces/ - List top level namespaces.
-- /namespaces/<name>/clusters/<name>/ - Get clusters by _name_ else all clusters.
-  - namespaces/ - All namespaces on a cluster.
+- `/schema` - Show schema.
+- `/namespaces/` - List top level namespaces.
+- `/namespaces/<name>/clusters/<name>/` - Get clusters by _name_ else all clusters.
+  - `namespaces/` - All namespaces on a cluster.
     - Params: none
     - Returns: Collection with resources of []Cluster.
-  - /namespaces/<name>/pods/<name> Get pods by _name_ else all pods.
+  - `/namespaces/<name>/pods/<name>` Get pods by _name_ else all pods.
     - Params: none
     - Returns: Pod
-  - /namespaces/<name>/pods/<name>/logs - Get pod logs.
+  - `/namespaces/<name>/pods/<name>/logs` - Get pod logs.
     - Params:
       - tail - (bool) Get logs from the _tail_. (defail: false)
       - container - A container name.
     - Returns: []string
-  - persistentvolumes/<name> - Get PV by _name_ else all on the cluster.
+  - `persistentvolumes/<name>` - Get PV by _name_ else all on the cluster.
     - Params: none
     - Returns: Collection with PV of []Namespace
-- /namespaces/<name>/plans/<name>/ - Get Migration plan by _name_ else all plans.
+- `/namespaces/<name>/plans/<name>/` - Get Migration plan by _name_ else all plans.
   - pods/ - Get the plan pod report.
     - Params: none
     - Returns: _PlanPods_
 
-Types:
+**Types:**
 
 The overall pattern is for each discovery service resource (type) to provide both the raw k8s resource (object) and value-add fields. The object field is the standard field for the k8s type/CR. To support use cases whereby only the value-add fields are needed by the caller, the object field could be omitted using a query parameter making the payload lighter.
 
@@ -183,14 +183,14 @@ Requests are authorized using the `Authorization: Bearer` token request header. 
 
 Resource hierarchy (scoping) follows kubernetes with cluster at the top. So, namespaces are nested under cluster, pods are nested under namespace etc … The _owner_ relationship will also be reflected in the inventory.
 
-Immediate:
+**Immediate:**
 
 - PersistentVolumes
 - Pods
 - Pods/log
-
-Future (possibilities):
-
 - Storage classes
+
+**Future (possibilities):**
+
 - Services
 - Pods nested under _owner_ resources (Eg: Deployment). This includes health status.
