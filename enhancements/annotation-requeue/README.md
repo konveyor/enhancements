@@ -74,7 +74,7 @@ for i, ns := range allResource() {
 }
 
 ```
-Changes in task.go file
+Changes in task.go file in `AnnotateResource` switch case:
 
 ```
 if t.Requeue != PollReQ {
