@@ -1,18 +1,19 @@
 ---
 title: Adding Requeue in Long running phase - AnnotateResources
 authors:
-  - "@pranavgaikwad"
   - "@JaydipGabani"
 reviewers:
   - "@jortel"
   - "@djwhatle"
   - "@alaypatel07"
   - "@dymurray"
+  - "@pranavgaikwad"
 approvers:
   - "@jortel"
   - "@djwhatle"
   - "@alaypatel07"
   - "@dymurray"
+  - "@pranavgaikwad"
 creation-date: 2020-11-04
 last-updated: 2020-11-04
 status: implementable
