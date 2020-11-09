@@ -51,7 +51,7 @@ We propose the following modifications in the function responsible for annotatin
 
 ```
 total := len(allResource)
-annotation := 0
+now := time.Now()
 for i, ns := range allResource() {
     retrieve single resource
     .
@@ -66,9 +66,8 @@ for i, ns := range allResource() {
     .
     .
     .
-    annotation ++
-    if total >= 5 && annotation == total / 5 {
-        t.Requeue = PollReQ
+    if time.Now().Sub(now) == time.Second * 3 {
+        t.Requeue = FastReQ
         return nil
     }
     t.Progress = []string{fmt.Sprintf("%v/%v Namespace labeled", i, total)}    
@@ -78,7 +77,7 @@ for i, ns := range allResource() {
 Changes in task.go file in `AnnotateResource` switch case:
 
 ```
-if t.Requeue != PollReQ {
+if t.Requeue != FastReQ {
     if err = t.next(); err != nil {
         return liberr.Wrap(err)
     }
