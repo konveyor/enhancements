@@ -51,7 +51,6 @@ We propose the following modifications in the function responsible for annotatin
 
 ```
 total := len(allResource)
-now := time.Now()
 for i, ns := range allResource() {
     retrieve single resource
     .
@@ -66,12 +65,25 @@ for i, ns := range allResource() {
     .
     .
     .
-    if time.Now().Sub(now) == time.Second * 3 {
-        t.Requeue = FastReQ
+    itemsUpdated ++
+    if itemsUpdated > 50 {
+        t.Progress = []string{fmt.Sprintf("%v/%v Namespace labeled", i, total)}        
         return nil
     }
-    t.Progress = []string{fmt.Sprintf("%v/%v Namespace labeled", i, total)}    
 }
+
+```
+Changes in `annotateStageResources()` function
+```
+itemsUpdate := 0
+// Namespaces
+itemsUpdate, err = t.labelNamespaces(sourceClient, itemsUpdate)
+<...>
+if itemsUpdate > 50 {
+  t.Requeue = FastReQ
+  return nil
+}
+// similar code for all the other resource processing
 
 ```
 Changes in task.go file in `AnnotateResource` switch case:
