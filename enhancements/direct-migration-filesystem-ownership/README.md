@@ -106,7 +106,7 @@ I'm going to use `securityContext` in the following as a shorthand for
   client pods and explicitly set the node to match the current pod that the
   volume is attached to.
   * Attached to more than one pod, raise a warning because this could lead to
-  indeterminate behavior. Pick any of the pods’s fsGroup at random and use it
+  indeterminate behavior. Pick any of the pods’s `securityContext` at random and use it
   for the rsync client pod while explicitly setting the node to match the picked pod’s.
   * If pvc’s are attached to pods and none of them have a `securityContext`.
   This will adopt the namespaces default security context.
