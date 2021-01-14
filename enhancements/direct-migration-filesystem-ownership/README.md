@@ -1,6 +1,6 @@
 # Filesystem ownership reconciliation with direct volume migrations
 
-While working the [direct volume migration] feature, it became apparent that
+While working the [direct volume migration](https://issues.redhat.com/browse/MIG-284) feature, it became apparent that
 is can be complex to manage the owner and group permissions of volumes between
 the source, replication pod (rsync pod), and target destination pods. This is
 especially true when considering the many different provisioners that potentially
