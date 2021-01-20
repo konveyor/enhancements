@@ -96,9 +96,23 @@ The requested capacity in a Persistent Volume Claim either follows standard SI n
 
 ### Risks and Mitigations [Omitted]
 
-## Design Details [Omitted]
+## Design Details
 
-### Test Plan [Omitted]
+### Test Plan 
+
+#### E2E Test Cases
+
+1. Scenario 1: Source volume size != requested size & usage less than 97%
+
+In this case, the restored volume will be resized to whatever its actual volume size is in the source cluster.
+
+2. Scenario 2: Source volume usage close to 98%
+
+In this case, the restored volume will be resized to 101% of its original capacity. 
+
+3. Scenario 3: Source volume size == requested size & volume usage less than 97%
+
+The expected behaviour in this case will be that the original requested size of the volume will be used "as-is" for the restored volume. 
 
 ### Upgrade / Downgrade Strategy
 
