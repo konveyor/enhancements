@@ -6,27 +6,29 @@ reviewers:
   - "@dymurray"
   - "@sseago"
   - "@shawn-hurley"
+  - "@djwhatle"
 approvers:
   - "@sseago"
+  - "@djwhatle"
 creation-date: 2021-01-19
-last-updated: 2021-01-19
-status: provisional
+last-updated: 2021-02-05
+status: implementable
 ---
 
 # Intelligent PV resizing
 
-When using filesytem copy mode in MTC to migrate Persistent Volume data, MTC uses Velero's default capabilities to restore the associated Persistent Volume Claim in the target cluster. The capacity of the new Persistent Volume in the target cluster is determined by the requested capacity in its Persistent Volume Claim. While this approach works well in most scenarios, there are some cases in which the capacity of Persistent Volume in the source cluster may actually be different than the requested capacity in its Claim. In such cases, the filesystem copy mode in MTC will fail if the capacity of the volume is more than requested. This document proposes a common solution to address this problem in MTC's direct and indirect migration workflows both.
+When using Direct Volume Migration in MTC to migrate Persistent Volume data, MTC creates volumes in the target cluster by using Persistent Volume Claims found in the source namespaces. The capacity of the new Persistent Volume in the target cluster is determined by the requested capacity in its Persistent Volume Claim. While this approach works well in most scenarios, there are some cases in which the capacity of Persistent Volume in the source cluster may actually be different than the requested capacity in its Claim. In such cases, the migration of data will fail if the capacity of the volume is more than requested. This document proposes a solution to address this problem primarily in MTC's direct migration workflow while leaving room for similar improvement in the indirect migration. 
 
 ## Release Signoff Checklist
 
-- [ ] Enhancement is `implementable`
+- [x] Enhancement is `implementable`
 - [x] Design details are appropriately documented from clear requirements
-- [ ] Test plan is defined
+- [x] Test plan is defined
 - [ ] User-facing documentation is created
 
 ## Summary
 
-In filesystem copy mode, MTC relies on Velero to restore Persistent Volume Claims in the target cluster for both direct and indirect migrations. As stated in the opening section, the actual capacity of a provisioned volume isn't necessarily same as the requested capacity in its claim. Both direct and indirect migration workflows in MTC don't take into account such a scenario. For instance, GlusterFS storage in OpenShift 3.11 cannot handle requested capacities in the granularity of Megabytes or below. As a result, when a user requests a volume of 1100Mi, the provisioned volume will actually be of 2Gi capacity. However, when Velero restores such a volume in a cluster with AWS EBS backed storage, the resulting volume will match its requested size i.e. 1100Mi. This will make a migration fail if the volume in the source contains more than 1100Mi of data. Additionally, when volume usage in the source cluster is close to 100%, it is likely that the same data may require more than 100% of capacity in the target cluster due to differences in underlying storage classes. MTC doesn't handle this scenario either. This document proposes a solution to accurately determine the resulting volume size in a way that it can be leveraged by the direct and the indirect migration both. 
+As stated in the opening section, the actual capacity of a provisioned volume isn't necessarily same as the requested capacity in its claim. Both direct and indirect migration workflows in MTC don't take into account such a scenario. For instance, GlusterFS storage in OpenShift 3.11 cannot handle requested capacities in the granularity of Megabytes or below. As a result, when a user requests a volume of 1100Mi, the provisioned volume will actually be of 2Gi capacity. However, when Velero restores such a volume in a cluster with AWS EBS backed storage, the resulting volume will match its requested size i.e. 1100Mi. This will make a migration fail if the volume in the source contains more than 1100Mi of data. Additionally, when volume usage in the source cluster is close to 100%, it is likely that the same data may require more than 100% of capacity in the target cluster due to differences in underlying storage classes. MTC doesn't handle this scenario either. This document proposes a solution to accurately determine the resulting volume size for Direct Volume Migration. The approach described in this document can also be applied to indirect volume migrations. 
 
 ## Motivation
 
@@ -34,9 +36,9 @@ When working with one of our upstream tooling - [pvc-migrate](https://github.com
 
 ### Goals
 
-1. Accurately determine and adjust the size of the volume to be restored such that the data copy operations don't result into failure caused due to insufficient disk space
-2. Design a common solution so that it can be leveraged by both direct and indirect migration workflows.
-3. Provide a way for the user to verify the newly adjusted volume size or propose their own value in Mig UI
+1. Accurately determine and adjust the size of the volume to be restored such that the data copy operations don't result into failure caused due to insufficient disk space. 
+2. Provide a way for the user to verify the newly adjusted volume size or propose their own value in Mig UI
+3. Design a solution which can be easily ported to indirect volume migration in the future.
 
 ### Non-Goals
 
@@ -50,7 +52,8 @@ The proposed solution will work in three steps:
 2. Computing resulting disk capacity in the target cluster
 3. Creating the volume in the target cluster
 
-Steps 1 & 2 will be common for both direct and indirect migrations, while Step 3 will need to be implemented separately for both.
+
+> Please note that if we intend to implement the above for Indirect Volume Migrations in future, Steps 1 & 2 will be common for both direct and indirect, while Step 3 will be implemented separately in both. 
 
 #### Gathering disk capacity and actual usage data from the source cluster.
 
@@ -64,17 +67,13 @@ Once the capacity and the usage information is successfully collected in the pre
 - Actual provisioned volume capacity
 - Requested volume capacity in the Persistent Volume Claim
 
-The "threshold" value specified above will be set to 3% by default and will be configureable through an exposed variable in _MigrationController_ or _MigPlan_ CR. In the Mig UI, the new adjusted size will be displayed in the MigPlan Wizard. An editeable field (disabled by default) for adjusted volume size will allow user to either confirm the size or propose a new size by enabling the editeable field with the help of a check box. The Mig UI will run validation on the field such that the user cannot propose a smaller value than the original requested size of the volume. Additionally, similar validation will be implemented in the _MigPlan_ controller to allow similar experience for CLI users. The _MigMigration_ controller will add an annotation on each Persistent Volume Claim to indicate the actual capacity of the to-be-restored volume.
+The "threshold" value specified above will be set to 3% by default and will be configureable through an exposed variable in _MigrationController_ or _MigPlan_ CR. In the Mig UI, the new adjusted size will be displayed in the MigPlan Wizard. An editeable field (disabled by default) for adjusted volume size will allow user to either confirm the size or propose a new size by enabling the editeable field with the help of a check box. The Mig UI will run validation on the field such that the user cannot propose a smaller value than the original requested size of the volume. Additionally, similar validation will be implemented in the _MigPlan_ controller to allow similar experience for CLI users. The _MigPlan_ controller will add a new field in the plan's spec to indicate the adjusted capacity.
 
 #### Creating the volume in the destination cluster
 
 ##### Direct Volume Migration
 
-The DVM controller will look for the annotation on each claim to determine the resulting size. It will make adjustments accordingly when creating a new PVC in the target cluster.
-
-##### Indirect Volume Migration
-
-The Velero Restore plugin will look for the annotation on each claim and create a new PVC accordingly.
+The DVM controller will read the _MigPlan_ spec to determine if the capacity of the volume is adjusted previously. If the adjusted capacity is found, DVM will use it. It will use the original capacity otherwise. 
 
 ---
 
@@ -93,6 +92,17 @@ Since the application pod which is using the volume may or may not have `df` com
 #### Size conversions 
 
 The requested capacity in a Persistent Volume Claim either follows standard SI notation or their power-2 equivalents as specified [here](https://github.com/kubernetes/community/blob/master/contributors/design-proposals/scheduling/resources.md#resource-quantities). The `df` command on the other hand only follows the SI notation. It is important for the controller to accurately convert all sizes from-to / to-from Kubernetes and `df` units. The conversion code should be absolutely bug free and tested for all posssible sizes.  
+
+#### Handling updates to volumes post creation of MigPlan
+
+It is possible that the volumes may be resized after the migplan was created. Since _MigPlan_ is reconciled once before running a migration, it is possible to add a warning condition on _MigPlan_ whenever a change is detected in the volume capacity after user made the selection. 
+
+The change can be handled in two ways: 
+1. MigPlan can be marked "Not Ready" and we can force user to make the selection again
+2. Migration can proceed by choosing a maximum of the following values:
+  - Previous capacity confirmed/selected by the user
+  - New calculated adjusted capacity
+  
 
 ### Risks and Mitigations [Omitted]
 
