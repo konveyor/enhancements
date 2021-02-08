@@ -55,19 +55,23 @@ The proposed solution will work in three steps:
 
 > Please note that if we intend to implement the above for Indirect Volume Migrations in future, Steps 1 & 2 will be common for both direct and indirect, while Step 3 will be implemented separately in both. 
 
+To determine the usage information, the _MigPlan_ controller will depend on _MigAnalytic_ CR.
+
 #### Gathering disk capacity and actual usage data from the source cluster.
 
-To determine the usage information, the _MigPlan_ controller will run `df` command in one of the Restic Pods which is mounting the source volume. The information for each volume will be stored in the _MigPlan_ status. When the controller fails to gather this information, it will raise a _Warning_ condition to inform the user that the volume capacity cannot be adjusted automatically. However, this will not be considered a _fatal_ failure and migrations can still continue despite this missing information. 
+_MigAnalytic_ controller will run `df` command in one of the Restic Pods which is mounting the source volume. The information for each volume will be stored in the _MigAnalytic_ status. When the controller fails to gather this information, it will raise a _Warning_ condition to inform the user that the volume capacity cannot be adjusted automatically. However, this will not be considered a _fatal_ failure and migrations can still continue despite this missing information. 
 
 #### Computing resulting disk capacity in the target cluster
 
-Once the capacity and the usage information is successfully collected in the previous step, the _MigPlan_ controller will compute the new adjusted capacity. The controller will use the maximum of the following values as the resulting capacity for the to-be-restored volume:
+Once, _MigAnalytic_ controller finishes running `df` for all volumes, it will compute the new adjusted capacity. The controller will use the maximum of the following values as the resulting capacity for the to-be-restored volume:
 
 - Actual used volume size + threshold value in percentage
 - Actual provisioned volume capacity
 - Requested volume capacity in the Persistent Volume Claim
 
-The "threshold" value specified above will be set to 3% by default and will be configureable through an exposed variable in _MigrationController_ or _MigPlan_ CR. In the Mig UI, the new adjusted size will be displayed in the MigPlan Wizard. An editeable field (disabled by default) for adjusted volume size will allow user to either confirm the size or propose a new size by enabling the editeable field with the help of a check box. The Mig UI will run validation on the field such that the user cannot propose a smaller value than the original requested size of the volume. Additionally, similar validation will be implemented in the _MigPlan_ controller to allow similar experience for CLI users. The _MigPlan_ controller will add a new field in the plan's spec to indicate the adjusted capacity.
+The "threshold" value specified above will be set to 3% by default and will be configureable through an exposed variable in _MigrationController_ or _MigPlan_ CR. 
+
+_MigPlan_ controller will read the _status_ field of _MigAnalytic_ and find an intersection between the volumes present its own list and the ones present in the _MigAnalytic_ status. For all volumes found in the intersection, _MigPlan_ will add the `adjustedCapacity` field in its own spec. In the Mig UI, the new adjusted size will be displayed in the MigPlan Wizard. An editeable field (disabled by default) for adjusted volume size will allow user to either confirm the size or propose a new size by enabling the editeable field with the help of a check box. The Mig UI will run validation on the field such that the user cannot propose a smaller value than the original requested size of the volume. Additionally, similar validation will be implemented in the _MigPlan_ controller to allow similar experience for CLI users. The _MigPlan_ controller will add a new field in the plan's spec to indicate the adjusted capacity.
 
 #### Creating the volume in the destination cluster
 
@@ -87,7 +91,10 @@ As a user, I want to be able to see the *proposed* destination volume size (alon
 
 #### Using Restic pod to run df command
 
-Since the application pod which is using the volume may or may not have `df` command installed, Restic pods are a good choice to run the `df` command. However, this makes the solution completely rely on the fact that Restic will always be available in the source cluster. Another approach would be to launch a temporary pod to gather this information. Some storage classes also report volume usage information as metrics. We can leverage this information for known storage classes.
+Since the application pod which is using the volume may or may not have `df` command installed, Restic pods are a good choice to run the `df` command. However, this makes the solution completely rely on the fact that Restic will always be available in the source cluster. Another approach would be to launch a temporary pod to gather this information. Some storage classes also report volume usage information as metrics. We can leverage this information for known storage classes. To ensure we have an easy way to implement one of the alternatives in the future, the Step 1 of the solution will be implemented as a well-interfaced module:
+
+<img src="./df-module.png" width="500" height="700" />
+
 
 #### Size conversions 
 
