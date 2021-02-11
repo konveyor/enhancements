@@ -172,3 +172,39 @@ We'd like to build an "escape hatch" into the operator
 that allows admins to **explicitly opt in** to running the transfer pod as
 privileged. Proper caution should be taken in this case by the admin to ensure
 unauthorized access to the transfer pod is not possible while the transfer is underway.
+
+## Why would a user require Privileged SCC
+
+There a many differnt storage classes in kube with different file permissions
+behaviour. The anyuid was tested against glusterfs and aws block storage,
+hence, for your storage class if anyuid root is unable to carry the file
+permissions to the destination, you would have to try with the privileged SCC.
+We have not hit a scenario yet where privileged SCC is required
+
+## Configuring DVM for Privileged SCC
+
+If for some reason, a user observes that their file permissions are not
+carried over to the destination, the privileged SCC mode can be tried. MTC
+allows a configuration option where the user can make the DVM controller run
+the rsync pods with privileged SCC. Before doing so, it is important to
+understand that the privileged SCC is effective root on the host. The DVM
+controller creates rsync client pods in the user namespace, hence a non
+-admin user can potentially have admin access to entire cluster as admin,
+leading to severe privilege escalation. The best course of action if this
+is required is to open a support case and seek help. Once the user is sure 
+Privileged SCC is required and is comfortable trying it out, the following
+command can be used:    
+
+1. On the source cluster:
+    ```
+    oc patch migrationcontroller migration-controller --type='json' -p='[{"op": "replace", "path": "/spec/migration_rsync_privileged", "value": false}]'
+    ```
+2. Verify the change in the source cluster:
+    ```
+   $ oc get cm -n openshift-migration  migration-cluster-config -oyaml | grep RSYNC_PRIVILEGED
+     RSYNC_PRIVILEGED: "TRUE"
+   $ oc get migrationcontroller migration-controller -oyaml | grep migration_rsync_privileged
+       migration_rsync_privileged: true
+   ```
+3. Follow the steps 1 and 2 on the _destination_ cluster
+4. Run the migration
