@@ -14,10 +14,10 @@ approvers:
   - "@alaypatel07"
   - "@dymurray"
 creation-date: 2020-09-14
-last-updated: 2020-09-16
-status: implementable
+last-updated: 2021-02-04
+status: implemented
 see-also:
-  - "N/A" 
+  - "../dynamic-pipeline/README.md"
 replaces:
   - "N/A"
 superseded-by:
@@ -82,217 +82,81 @@ The `message` field shows how many steps/phases have been completed so far in th
 
 To address the problems discussed in the previous section, we propose to make two modifications:
 
-1. Provide detailed progress information of ongoing migration phase in _MigMigration_ CR
+1. Provide detailed progress information of an ongoing migration phase in _MigMigration_ CR
 2. Group existing phases into relevant steps to simplify user view
 
-### Enhancement 1: Detailed progress of phase
-
-With this enhancement, we propose to modify _MigMigration_ CR to incorporate an additional field that shows progress of the ongoing phase. This is particularly useful for long running phases. This will require a significant change in _migration_ controller. 
-
-Here are some examples of proposed change:
-
-1. _StageBackupCreated_ Phase:
-
-```yml
-  status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:39:44Z"
-      reason: StageBackupCreated
-      status: "True"
-      type: Running
-      progress:
-      - "Backup openshift-migration/migmigration-rpltn: 6 out of estimated total of 9 items backed up"
-```
-
-Velero 1.4 onwards, we have the progress information reported in the Backup CR:
-
-```yml
-  status:
-    completionTimestamp: "2020-09-16T15:38:58Z"
-    expiration: "2020-10-16T15:38:52Z"
-    formatVersion: 1.1.0
-    phase: Completed
-    progress:
-      itemsBackedUp: 26
-      totalItems: 26
-```
-
-For a _Backup_ with associated _PodVolumeBackup_ resources, the `progress` field would look like:
-
-```yml
-  progress:
-  - "Backup openshift-migration/migmigration-xxdmb: 0 out of estimated total of 6 items backed up"
-  - "VolumeBackup openshift-migration/migmigration-xxdmb-6xmmb: 100 MB out of 2 GB backed up"
-  - "PodVolumeBackup openshift-migration/migmigration-xxdmb-gg9ll: 0 MB out of 1 GB backed up"
-```
-
-Similar changes will take place for _FinalBackupCreated_ phase too.
-
-2. _StageRestoreCreated_ phase:
-
-```yml
- status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:41:41Z"
-      reason: StageRestoreCreated
-      status: "True"
-      type: Running
-      progress: 
-      - "Restore openshift-migration/migmigration-xxdmb: InProgress"
-      - "PodVolumeRestore openshift-migration/migmigration-xxdmb: 10 MB out of 1 GB restored"
-```
-
-Detailed progress of _Restore_ objects is currently unavailable in Velero.  
-
-Apart from the above phases, we propose to incorporate similar progress reporting for other phases of migration, wherever possible. For example, in Stage Pod phases, We can relay the status of the pods to _MigMigration_ CR. This is useful since we have been repeatedly observing issues in Stage pod phases.
-
-3. _Prepare_ phase:
-
-```yml
- status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:41:41Z"
-      reason: Prepare
-      status: "True"
-      type: Running
-      progress: 
-      - "Adding labels on image streams"
-```
-
-4. _(Pre|Post)(Backup|Restore)Hooks_ phases:
-
-```yml
- status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:41:41Z"
-      reason: PreBackupHooks
-      status: "True"
-      type: Running
-      progress: 
-      - "Hook Job test-ns/job-1: Running"
-```
-
-```yml
- status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:41:41Z"
-      reason: PreBackupHooks
-      status: "True"
-      type: Running
-      progress: 
-      - "Hook Job test-ns/job-1: Failed"
-```
-
-5. _StagePodsCreated_ phase:
-
-```yml
- status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:41:41Z"
-      reason: StagePodsCreated
-      status: "True"
-      type: Running
-      progress: 
-      - "Pod test-ns/stage-pod-xcml: Not running. Phase Pending"
-      - "Pod test-ns-2/stage-pod-xcml: Not running. Phase Pending"
-```
-
-6. _EnsureStagePodsTerminated_ phase:
-
-```yml
- status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:41:41Z"
-      reason: EnsureStagePodsTerminated
-      status: "True"
-      type: Running
-      progress: 
-      - "Pod test-ns/stage-pod-xcml: Not terminated."
-      - "Pod test-ns-2/stage-pod-xcml: Not terminated."
-```
-
-7. _Ensure(Initial|Final)BackupReplicated_ phases:
-
-```yml
- status:
-    conditions:
-    - category: Advisory
-      lastTransitionTime: "2020-09-16T15:41:41Z"
-      reason: EnsureInitialBackupReplicated
-      status: "True"
-      type: Running
-      progress: 
-      - "Backup openshift-migration/migmigration-xxdmb: Not replicated."
-      
-```
- 
-### Enhancement 2: Grouping migration phases
+### Enhancement 1: Grouping migration phases
 
 With the progress information relayed in the _MigMigration_ CR, we believe that the user will have enough information in their hands to understand what exactly is happening in the background. We can then simplify the migration by dividing existing phases into broader steps of migration.  
 
 All _Phases_ in a migration can be grouped into following high level steps that abstract out the details from the end user:
 
 * Prepare
-* VolumeBackup
+* StageBackup
 * Backup
-* VolumeRestore
+* StageRestore
 * Restore
-* Final
+* DirectImage
+* DirectVolume
+* Cleanup
 
-Having a fixed number of steps will make it possible for us to implement a pipeline type progress view in the UI. 
+The _MigMigration_ CR is updated to include a new field `status.pipeline` designed to show transition of steps in a migration:
 
-This can be implemented by introducing additional attribute `step` in the `status` field of the _MigMigration_ CR. Here is an example of _MigMigration_ CR with the proposed `step` field:
+```go
+// MigMigrationStatus defines the observed state of MigMigration
+type MigMigrationStatus struct {
+	Conditions         `json:",inline"`
+	UnhealthyResources `json:",inline"`
+	ObservedDigest     string       `json:"observedDigest,omitempty"`
+	StartTimestamp     *metav1.Time `json:"startTimestamp,omitempty"`
+	Phase              string       `json:"phase,omitempty"`
+	Pipeline           []*Step      `json:"pipeline,omitempty"`       <---- New field
+	Itinerary          string       `json:"itinerary,omitempty"`
+	Errors             []string     `json:"errors,omitempty"`
+}
 
-```yml
-status:
-  conditions:
-  - category: Advisory
-    lastTransitionTime: "2020-09-15T14:54:46Z"
-    message: 'Step: 7/33'
-    reason: InitialBackupCreated
-    status: "True"
-    step: Backup
-    type: Running
-  itenerary: Final
-  observedDigest: 9834d071975562d5e2c2eb855bca6950711ded8a0e45af5307fa56cd0f5ba3c7
-  phase: InitialBackupCreated
+// Step defines a task in a step of migration
+type Step struct {
+	Timed `json:",inline"`    <---- Timestamps
+
+	Name     string   `json:"name"`
+	Phase    string   `json:"phase,omitempty"`      <---- Currently ongoing phase
+	Message  string   `json:"message,omitempty"`    <---- Human readable description of phase
+	Progress []string `json:"progress,omitempty"`   <---- Provides detailed progress information
+	Failed   bool     `json:"failed,omitempty"`
+	Skipped  bool     `json:"skipped,omitempty"`
+}
 ```
+
+### Enhancement 2: Detailed progress of phase
+
+`task.go` introduces a new function `setProgress([]string)` which will set the `Pipeline[*].Progress` field with a list of custom progress messages provided by the phase. The changes will be applied before next reconcile returns. 
+
+The standard format followed for each progress message in the array is:
+
+```
+<kind> <namespace>/<name>: <message>
+```
+
+The above format allows the UI to parse the messages. 
 
 #### Relationship between Step and Phase
 
-Each phase in the migration will belong to some _Step_ based on the the _Itinerary_. The existing itinerary struct will be updated to form a nested view of Phases through Steps. See the exact nested structs in [implementation details](#grouping-phases)
+Each phase in the migration will belong to some _Step_ based on the the _Itinerary_. A new field `Step` in the `Phase` struct allows associating a phase with a step:
 
-
-##### Final Itinerary 
-
-- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
-- Backup: PreBackupHooks, EnsureInitialBackup, InitialBackupCreated
-- StageBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- StageRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
-- ResourceRestore: EnsureAnnotationsDeleted, EnsureInitialBackupReplicated, PostBackupHooks, PreRestoreHooks, EnsureFinalRestore, FinalRestoreCreated, EnsureLabelsDeleted, PostRestoreHooks
-- Final: Verification, Completed
-
-##### Stage Itinerary
-
-- Prepare: Created, Started, Prepare, EnsureCloudSecretPropagated
-- StageBackup: EnsureStagePodsFromRunning, EnsureStagePodsFromTemplates, EnsureStagePodsFromOrphanedPVCs, StagePodsCreated, AnnotateResources, RestartRestic, ResticRestarted, QuiesceApplications, EnsureQuiesced, EnsureStageBackup, StageBackupCreated, EnsureStageBackupReplicated
-- StageRestore: EnsureStageRestore, StageRestoreCreated, EnsureStagePodsDeleted, EnsureStagePodsTerminated
-- Final: EnsureAnnotationsDeleted, EnsureLabelsDeleted, Completed
-
-##### Failed Itinerary
-
-- Final: MigrationFailed, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Completed
-
-##### Cancel Itinerary
-
-- Final: Canceling, DeleteBackups, DeleteRestores, EnsureStagePodsDeleted, EnsureAnnotationsDeleted, DeleteMigrated, EnsureMigratedDeleted, UnQuiesceApplications, Canceled
+```go
+// Phase defines phase in the migration
+type Phase struct {
+	// A phase name.
+	Name string
+	// High level Step this phase belongs to
+	Step string             <---- New field
+	// Step included when ALL flags evaluate true.
+	all uint16
+	// Step included when ANY flag evaluates true.
+	any uint16
+}
+```
 
 #### How will migration progress through different steps?
 
@@ -303,7 +167,7 @@ In this section, we will discuss how a journey of a migration will look like to 
 Migration enters `Prepare` step, moves forward to `Backup` step, and so on until reaching the `Final` step and returning successfully.
 
 ```
-Prepare -> Backup -> StageBackup -> StageRestore -> Restore -> Final
+Prepare -> Backup -> StageBackup -> StageRestore -> Restore -> Cleanup
 ```
 
 ##### Scenario 2: Migration fails during StageBackupCreated phase
@@ -311,7 +175,7 @@ Prepare -> Backup -> StageBackup -> StageRestore -> Restore -> Final
 Migration enters `Prepare` step, moves forward to until `StageBackup` step and fails. Then, it skips the remaining steps and jumps to `Final` step. 
 
 ```
-Prepare -> Backup -> StageBackup (Failed Here) -> StageRestore (Skipped) -> Restore (Skipped) -> Final
+Prepare -> Backup -> StageBackup (Failed Here) -> StageRestore (Skipped) -> Restore (Skipped) -> Cleanup
 ```
 
 A user now knows where exactly the migration failed, they can inspect the _MigMigration_ CR and report the actual phase it failed at. 
@@ -323,28 +187,3 @@ A user now knows where exactly the migration failed, they can inspect the _MigMi
 
 As of Velero 1.4, _Restore_ objects do not have Progress reported in the Status field like _Backup_ objects. In the first iteration, we will only show progress of _Restore_ objects in the form of `InProgress, Completed, Failed, PartiallyFailed`. Next, we will implement the Progress for Restore objects in Konveyor Velero fork and eventually, work to get the features submitted upstream.
 
-#### Grouping Phases
-
-Here's the new  _Itinerary_ struct with nested _Steps_ and _Phases_.
-
-```go
-// Itinerary
-type Itinerary struct {
-	Name  string
-	Steps []Step
-}
-// Step
-type Step struct {
-	Name string
-  Phases []Phase
-}
-// Phases
-type Phase struct {
-	// A phase name.
-	Name string
-	// Phases included when ALL flags evaluate true.
-	all uint8
-	// Phases included when ANY flag evaluates true.
-	any uint8
-}
-```
