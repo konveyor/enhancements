@@ -27,7 +27,7 @@ superseded-by:
 
 ## Release Signoff Checklist
 
-- [ ] Enhancement is `implementable`
+- [x] Enhancement is `implementable`
 - [ ] Design details are appropriately documented from clear requirements
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
@@ -58,7 +58,7 @@ At the time of this writing, MTC doesn't consistently give _enough_ __understand
 
 ## Motivation
 
-Due to the large _matrix of cluster configurations, network conditions, and cluster activity_, it's unlikely that a users first migration attempt will succeed 100% of the time.
+Due to the large _matrix of cluster configurations, network conditions, and cluster activity_, it's likely that a user will need to troubleshoot some problems during a migration.
 
 We should work to __enhance discoverability__ by giving our users feedback in the places they would naturally expect to find it. When a problem occurs, we should provide clues on where to look next. 
 
