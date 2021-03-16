@@ -36,9 +36,8 @@ superseded-by:
 
 This is where to call out areas of the design that require closure before deciding
 to implement the design.  For instance, 
- > 1. Is it acceptable to modify our mig-controller codebase so that we _always_ have access to a logger with contextual key-value pairs attached? 
- > 2. Should we move away from having a pkg level logger object to enable concurrent reconciles without disturbing the per-reconcile logged UID?
- > 3. Should we carry a patch in the Velero codebase so that it would log a migration name or UID  we would pass in through an annotation? 
+ > 1. Should we move away from having a pkg level logger object to enable concurrent reconciles without disturbing the per-reconcile logged UID?
+ > 2. Should we carry a patch in the Velero codebase so that it would log a migration name or UID  we would pass in through an annotation? 
 
 ## Summary
 
@@ -80,80 +79,39 @@ How will we know that this has succeeded?
 - If feasible, avoid complete re-architecture of how we pass errors around in mig-controller.
 - Do not provide logs or events on things that will never be useful in a troubleshooting situation
 
-# Below is work in progress...
-
 ## Proposal
 
-This is where we get down to the nitty gritty of what the proposal actually is.
+### Logging 
 
-#### Story 1
+- For our controllers that carry out migration tasks (migmigration, dvm, dim, dism) we should log
+  - At the beginning of reconcile
+  - When we make important decisions during the reconcile
+  - When we create/update/delete resources on the user cluster during reconcile
+  - When we exit the reconcile without proceeding (being sure to provide a reason why we can't proceed).
 
-#### Story 2
+- Logging should make use of structured K/V pairs where possible instead of Sprintf. Keys need to be explicit. Don't use keys like `ns` or `name` if these will introduce ambiguity into the log message. Keep in mind that K/V pairs have probably already been passed to the logger so you may be overwriting existing K/Vs if you don't select a unique key name.
 
-### Implementation Details/Notes/Constraints [optional]
+- For CRs that only reconcile occasionally such as MigCluster, MigPlan, MigStorage: we should log all conditions on each reconcile so user knows the state of these resources.
+- For CRs that reconcile constantly while a migration is running such as MigMigration, DVM, DIM, DISM, DVMP: we should only log critical conditions, since logging all conditions would reduce the signal to noise ratio in the logs.
 
-What are the caveats to the implementation? What are some important details that
-didn't come across above. Go in to as much detail as necessary here. This might
-be a good place to talk about core concepts and how they relate.
+- Whenever logging about a reason why the controller can't proceed, be sure to include the `type`, `ns/name` and `cluster` of the resource blocking progress so that the user can go investigate without having to intimately know our API hierarchy.
 
 ### Risks and Mitigations
 
-What are the risks of this proposal and how do we mitigate. Think broadly. For
-example, consider both security and how this will impact the larger OKD
-ecosystem.
+Risks 
+ - Wrong amount of logging
+   - Not enough logging: this will result in difficult or impossible to troubleshoot situations without attaching a debugger
+   - Too much logging: this will result in low signal-to-noise ratio in logs, making troubleshooting more difficult
+ - Logging sensitive information
 
-How will security be reviewed and by whom? How will UX be reviewed and by whom?
-
-Consider including folks that also work outside your immediate sub-project.
-
-## Design Details
-
-### Test Plan
-
-**Note:** *Section not required until targeted at a release.*
-
-Consider the following in developing a test plan for this enhancement:
-- Will there be e2e and integration tests, in addition to unit tests?
-- How will it be tested in isolation vs with other components?
-
-No need to outline all of the test cases, just the general strategy. Anything
-that would count as tricky in the implementation and anything particularly
-challenging to test should be called out.
-
-All code is expected to have adequate tests (eventually with coverage
-expectations).
-
-### Upgrade / Downgrade Strategy
-
-If applicable, how will the component be upgraded and downgraded? Make sure this
-is in the test plan.
-
-Consider the following in developing an upgrade/downgrade strategy for this
-enhancement:
-- What changes (in invocations, configurations, API use, etc.) is an existing
-  cluster required to make on upgrade in order to...
-  -  keep previous behavior?
-  - make use of the enhancement?
+Mitigations:
+ - Developers should take care when writing a log message to think about how the user could use the information being logged.
+ - We should not be logging _contents_ of secrets, ever, if we can help it.
 
 ## Implementation History
 
-Major milestones in the life cycle of a proposal should be tracked in `Implementation
-History`.
+ - Large chunk of logs added throughout controller: https://github.com/konveyor/mig-controller/pull/992
 
 ## Drawbacks
 
-The idea is to find the best form of an argument why this enhancement should _not_ be implemented.
-
-## Alternatives
-
-Similar to the `Drawbacks` section the `Alternatives` section is used to
-highlight and record other possible approaches to delivering the value proposed
-by an enhancement.
-
-## Infrastructure Needed [optional]
-
-Use this section if you need things from the project. Examples include a new
-subproject, repos requested, github details, and/or testing infrastructure.
-
-Listing these here allows the community to get the process for these resources
-started right away.
+Additional logs will make the codebase a bit less clean, but I think this is worthwhile for the enhnaced debugging experience that will result. 
