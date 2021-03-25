@@ -55,14 +55,29 @@ For problem 2, We will do the following things:
 - The check whether the Rsync Pods are in completed state or not is based on the status in DVMP. Now in order to change the DVMP CR status update logic we need to update its status explicitly based on the Rsync container rather than the Pod. DVMP will mark the rsync to be completed from the status obtained from rsync container inside the Src transfer pod. The `dvmp.Status.PodPhase` needs to be updated based on the rsync container status and not Pod status. We will be checking/looking for the rsync container status to be `terminated` and the reason to be `Completed` in order to update the DVMP status to `succeeded`/`Completed`, thus helping us correctly identify whether the rsync container finished its execution successfully or not. 
 
 ## Alternative solutions:
-- Combine rsync and stunnel utilities into one single container inside the proposed Src transfer Pod.
-  -  This could be possible because:
-       - Both Stunnel and Rsync currently use the same container image.
-       - We could combine the limits and requests for both the pods.
-       - Similar security context is used by both of them
-  -  Some of the difficulties with this solution are:
-       -  Rsync pods are created per PVC and Stunnel ones are created per namespace
-       -  Some new container command/shell script would be needed in order to combine the commands of both rsync and stunnel.
-       -  As they will be in the same container, we won't have decoupled logs for debugging
-
 - One Alternative for problem 2 is marking the Stunnel Pod completed based on the existence of the file created by Rsync upon its completion, this would subsequently mark the Src transfer Pod as completed because both its container will be in completed state.
+
+## Comparing Rsync + stunnel as 2 containers vs Rsync + Stunnel in a single container
+
+### Seperate containers
+Pros:
+- Rsync and Stunnel logs will be separate from each other.
+- As the containers are decoupled, debugging will a bit easier.
+- Stunnel and Rsync container statuses are different, they succeed differently, Rsync container is terminated and goes to completion but Stunnel keeps in running, DVMP depends on the Rsync container status, it might be a bit easier to explicitly track Rsync container status and then update DVMP accordingly.
+- Volumes to be migrated can be seperately mounted for Rsync container and similarly stunnel certs and configs will be separately mounted by stunnel container.
+  
+Cons: 
+- The proposed Src transfer pod (Rsync + Stunnel) will be created per volume to be migrated, and this pod has 2 containers, this may lead to competition for resources amongst containers.
+
+
+### Single container
+Pros:
+- Both Rsync and Stunnel containers use the same container image, resource limits and resource requests, use same security context, thus easier to combine them into one container.
+- As the Rsync and Stunnel utilities will be present in the same container, there will be no competition of resources.
+
+Cons:
+- Rsync and Stunnel logs will not seperate from each other.
+- No decoupling in containers, debugging might get tricky.
+- Updating DVMP is difficult here as we do not have explicity Rsync container status to be mapped with.
+- Rsync needs PVCs to be migrated as volumes but Stunnel does not, it just needs stunnel certs and configs, in single container approach we will be mounting things onto a single container which are not necessary for each utility.
+- Combining the container commands of Stunnel as well as Rsync will be a requirement in this apporach.
