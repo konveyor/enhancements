@@ -30,7 +30,7 @@ According to the current implementation of Direct Volume Migration, we create th
 ## Problems to be addressed
 
 If we go ahead with the proposal of combining the two pods into one, there are some problems which need to be addressed. 
-- Wait for Stunnel Client Pods to be Running: The current Direct Volume Migration itinerary has phase called `WaitForStunnelClientPodsRunning` . This phase checks whether all the Stunnel Client Pods are in running state or not before creation of Rsync Client Pods. This is essential because if the Stunnel Pods are not in a `Running` state then the data transfer from the Rsync Client Pod over the Stunnel Service would not be possbile as the Stunnel server would not respond. But now with our new proposal of combining the two pods into one and spawning each client pod as a container inside the Source Transfer Pod, we need a new logic/mechanism to check up on whether the Stunnel container is in running state before spawning the Rsync container. The Stunnel container needs to be in running state so that the Rsync container once created can communicate with the Stunnel server over localhost.
+- Wait for Stunnel Client Pods to be Running: The current Direct Volume Migration itinerary has phase called `WaitForStunnelClientPodsRunning` . This phase checks whether all the Stunnel Client Pods are in running state or not before creation of Rsync Client Pods. This is essential because if the Stunnel Pods are not in a `Running` state then the data transfer from the Rsync Client Pod over the Stunnel Service would not be possbile as the Stunnel server would not respond. But now with our new proposal of combining the two pods into one and spawning each client pod as a container inside the Source Transfer Pod, we need a new logic/mechanism to check up on whether the Stunnel process is in running state before spawning the Rsync client process. The Stunnel process needs to be in running state so that the Rsync once started can communicate with the Stunnel server over localhost.
 - Wait for Rsync Client Pods to be Completed: The Direct Volume Migration itinerary has another phase called `WaitForRsyncClientPodsCompleted` . This phase checks whether the spawned Rsync Client Pods are in Completed State or Failed State. The whole mechanism for this is based on the Status present on Direct Volume Migration Progress (DVMP) CR. The DVMP CR updates it status based on the Rsync Client Pods status. Since we are removing the Rsync Client Pod and spawning it as a container, we need to change the logic/mechanism to update DVMP CR Status based on the Rsync container status of the new Source Transfer Pod. 
 
 ## Proposed solution
@@ -41,8 +41,8 @@ container.
 
 For Stunnel container:
 - Start the Stunnel process with the Stunnel config in background mode (as we are embedding the stunnel command in a bash script).
-- Continuously check for the existence of a file named `transfer-complete` on the shared volume.
-- Once the file exists (the existence of file named `transfer-complete` indicates the successful completion of rsync command) then kill the stunnel process.
+- Continuously check for the existence of a file named `rsync-client-container-done` on the shared volume.
+- Once the file exists (the existence of file named `rsync-client-container-done` indicates the successful completion of rsync command) then we `break` from the loop.
 - Finally, we will `exit` the container and thus the stunnel process will be killed, consequently marking the container as `completed` (Solves problem 2).
 - The above logic will be embedded in a bash script in the container command as follows:
 ```
@@ -52,7 +52,7 @@ For Stunnel container:
     - |
       /bin/stunnel /etc/stunnel/stunnel.conf
       while true
-      do test -f /rsync-data/transfer-complete
+      do test -f /rsync-data/rsync-client-container-done
       if [ $? -eq 0 ]
       then
       break
@@ -62,9 +62,9 @@ For Stunnel container:
 ```
 
 For Rsync Container:
-- Continuously checkup on the `localhost` interface (port 2222) whether the stunnel server container is up and ready to accept connections using the `nc` command (Solves problem 1).
+- Continuously checkup (for 10 minutes) on the `localhost` interface (port 2222) whether the stunnel server container is up and ready to accept connections using the `nc` command (Solves problem 1).
 - Once the stunnel container is ready to accept connections, execute the rsync command.
-- Post completion of the rsync command (irrespective of whether successful or not), create a file named `transfer-complete` on the shared volume to indicate successful completion of rsync command.
+- Post completion of the rsync command (irrespective of whether successful or not), create a file named `rsync-client-container-done` on the shared volume using `trap` to indicate successful completion of rsync command.
 - Break the monitoring loop on `localhost` interface and thus container goes to completion.
 - The above logic will be embedded in a bash script in the container command as follows:
 ```
@@ -72,12 +72,14 @@ For Rsync Container:
     - /bin/bash
     - -c
     - |
-      while true
+      timeout=600
+      SECONDS=0
+      while [ $SECONDS -lt $timeout ]
       do nc -z localhost 2222
       if [ $? -eq 0 ]
       then
       rsync --archive --delete --recursive --hard-links --partial --info=COPY2,DEL2,REMOVE2,SKIP2,FLIST2,PROGRESS2,STATS2 --human-readable --port "2222" --log-file /dev/stdout /mnt/app-3/postgresql/ rsync://root@localhost/postgresql
-      touch /usr/share/rsync-data/transfer-complete
+      trap "touch /usr/share/rsync-data/rsync-client-container-done" exit
       break
       fi
       done
@@ -109,19 +111,17 @@ For the single container:
 
 ## Comparing Rsync + stunnel as 2 containers vs Rsync + Stunnel in a single container
 
-| Parameters                                  | Single Containers                                                                                                 | Separate Containers                                                                                                                                                        | Preferred approach  |
-|---------------------------------------------|-------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------|
-| Logging                                     | Each rsync and stunnel container will have their own separate logs.                                               | The rsync and stunnel logs will be  merged into single view.                                                                                                               | Separate containers |
-| Competition for Resources (CPU, Memory etc) | There is only one container for both the  processes, competition for resources might take place in this approach. | Separate resource constraints and allocation can be done for both the processes as they have separate containers, resource competition scenario is unlikely to take place. | Separate containers |
-| Updating DVMP                               | DVMP will update based on the container status of the combined container of rsync + stunnel.                      | DVMP will update itself based on the container status of the rsync container only.                                                                                         | Separate containers |
-| Event timeline                              | Combined logging provides a merged timeline of events  that occurred during the data transfer.                    | As logs are decoupled, both the containers will have a  separate and exclusive timeline of events only pertaining to themselves.                                           | Single containers   |
-| Applications with Multiple PVCs             | Migration works fine with many Stunnel client to one Stunnel server scenario.                                     | Migration works fine with many Stunnel client to one Stunnel server scenario.                                                                                              | No preference       |
-
+| Parameters                                  | Single Containers                                                                                                                                               | Separate Containers                                                                                                                                                                                    | Preferred approach  |
+|---------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------|
+| Logging and Event timeline                  | The rsync and stunnel logs will be  merged into single view and combined  logging provides a merged timeline of events  that occurred during the data transfer. | Each rsync and stunnel container will have their own separate logs and as logs are decoupled, both the containers will have a separate and exclusive timeline of events only pertaining to themselves. | Tie                 |
+| Competition for Resources (CPU, Memory etc) | There is only one container for both the  processes, competition for resources might take place in this approach.                                               | Separate resource constraints and allocation can be done for both the processes as they have separate containers, resource competition scenario is unlikely to take place.                             | Separate containers |
+| Updating DVMP                               | DVMP will update based on the container status of the combined container of rsync + stunnel.                                                                    | DVMP will update itself based on the container status of the rsync container only.                                                                                                                     | Separate containers |
+| Event timeline                              | Combined logging provides a merged timeline of events  that occurred during the data transfer.                                                                  | As logs are decoupled, both the containers will have a  separate and exclusive timeline of events only pertaining to themselves.                                                                       | Single containers   |
 ## Outcome
 We have decided that we will be going ahead with the separate container approach because of the following reasons:
 - Separate container approach had 2 main concerns (which handled by logic embedded in the bash scripts for each container):
     - Dependency of Stunnel process on Rsync execution: Consider a case when Rsync did not execute successfully, it does not matter because the inter-process communication
-    would not falter as we are creating the `transfer-complete` file on the shared volume irrespective of Rsync's successful execution. This Rsync and Stunnel both will go to completion, and the 
+    would not falter as we are creating the `rsync-client-container-done` file on the shared volume irrespective of Rsync's successful execution. This Rsync and Stunnel both will go to completion, and the 
     dependency would not hinder the migration workflow.
     - Dependency of Rsync process on Stunnel: Consider a case when Stunnel process does not start, and the stunnel container goes in error state, consequently the rsync container
     would not get executed as the stunnel process would not be available for connection acceptance, thus both containers would not be successfully executed, and the Pod status as a whole
