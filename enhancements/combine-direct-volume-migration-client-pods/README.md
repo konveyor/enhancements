@@ -35,7 +35,7 @@ If we go ahead with the proposal of combining the two pods into one, there are s
 
 ## Proposed solution
 ### Separate container approach:
-In this approach we will be spawning 2 containers - Stunnel and Rsync under a single Pod (Source Transfer Pod). We will be introducing a shared volume called `shared-data` and this volume will be mounted
+In this approach we will be spawning 2 containers - Stunnel and Rsync under a single Pod (Source Transfer Pod). We will be introducing a shared volume called `rsync-stunnel-ipc` and this volume will be mounted
 for both the containers. The utility of this shared volume is to facilitate inter-process communication amongst the 2 containers. Now Let's take a look at the workflow and lifecyle of each
 container.
 
@@ -72,6 +72,7 @@ For Rsync Container:
     - /bin/bash
     - -c
     - |
+      trap "touch /usr/share/rsync-data/rsync-client-container-done" exit $rc
       timeout=600
       SECONDS=0
       while [ $SECONDS -lt $timeout ]
@@ -79,7 +80,7 @@ For Rsync Container:
       if [ $? -eq 0 ]
       then
       rsync --archive --delete --recursive --hard-links --partial --info=COPY2,DEL2,REMOVE2,SKIP2,FLIST2,PROGRESS2,STATS2 --human-readable --port "2222" --log-file /dev/stdout /mnt/app-3/postgresql/ rsync://root@localhost/postgresql
-      trap "touch /usr/share/rsync-data/rsync-client-container-done" exit
+      rc=$?
       break
       fi
       done
@@ -131,3 +132,20 @@ At the same time, we are not settling for any lower debug experience from what w
 - The main concern with single container approach is the competition of resources (CPU, Memory), this might result in varying problems, and these problems might need different solutions in different production
 environments, as a whole not a nice problem to solve if occurred. On the other hand as we have seen, separate container concerns can be solved with the help of embedding logic in the bash scripts once in for all. 
 - All in all, decoupling the stunnel process from rsync enables us to keep everything a bit modular.
+
+## Implementation
+
+- Stunnel Configuration changes:
+    - Removal of `foreground = yes` so that the stunnel process runs as daemon.
+    - Addition of `output = /dev/stdout` for streaming of stunnel process logs as we are running the process in daemon mode.
+    - Updating `accept = localhost:2222` in order to facilitate data transfer between rsync and stunnel over the lcoalhost interface.
+- Transfer Image changes: These involve the addition of new packages/utilities used for embedding new workflow log in the container commands of rsync and stunnel.
+- Accommodate Stunnel alongside Rsync in the `RunRsyncOperations` phase:
+    - Modifying `getRsyncClientPodRequirements` to have destination IP for rsync process as `localhost`.
+    - Modifying  `getRsyncClientPodTemplate` :
+        - To add Stunnel Volumes consisting of stunnel configuration file, stunnel certs as well as the volume called `rsync-stunnel-ipc` (used for facilitating inter-process communication between rsync and stunnel).  
+        - To add Stunnel VolumeMounts of stunnel certs, configs, `rsync-stunnel-ipc`. 
+        - To add `rsync-stunnel-ipc` alongside the PV involved in the migration of the application.
+        - To add bash scripts for rsync container command as well as the stunnel contaienr command.
+        - To add stunnel container manifest consisting of all the above changes stunnel changes.
+- DVMP seemed to work fine with the above changes, hence no additional changes needed in its controller.
