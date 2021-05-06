@@ -42,7 +42,7 @@ need to move applications between clusters, or want to move to a new deployment
 - Ability to run transformations on a set of kubernetes manifests
 - Ability to codify the transformations and run them
 - Ability to run transformations such that they can be applied at one time
-- Transformations should be able to be determined if they conflict. 
+- When Applying transformations the tool should warn about conflicting changes to a particular path
 
 ### Non-Goals
 
