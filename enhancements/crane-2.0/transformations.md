@@ -80,8 +80,10 @@ that conforms to the transform definition.
 
 A library to implement a command that will conform to the defined
 CLI interface for a plugin. 
-The output will be a set of CLI flags and an options struct that can be used by
-the users as well as used by further library functions and packages
+The output will be a set of CLI flags and a corresponding options struct.
+The output should be used by a new binary to:
+1. Generate transformations in a specified directory
+2. Create a new library/command to generate custom transformations
 
 ##### pkg/transfrom
 
