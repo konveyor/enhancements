@@ -61,7 +61,7 @@ will not attempt to transfer state contained in:
 ## Proposal
 
 - Create a library with interfaces to enable transfer of data between clusters
-- The current WIP progress implementation provides for three interfaces to build a connection
+- The current WIP implementation provides for three interfaces to build a connection
   - Transfer: Defines a transfer program such as rsync or rclone
   - Transport: Defines a proxy for encrypting traffic. Currently stunnel is the only option.
     - In case a transfer utility provides its own encryption a null transport is provided.
@@ -71,3 +71,6 @@ will not attempt to transfer state contained in:
 - The library will make it easy to run against all PVCs in one or more project
 - The library will accept two rest configurations for client and server
 - Provide a CLI tool demonstrating how to implement functionality
+
+## Links
+[WIP implementtaion](https://github.com/konveyor/crane-lib/pull/2)
