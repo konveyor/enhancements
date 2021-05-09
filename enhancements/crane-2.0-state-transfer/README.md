@@ -61,9 +61,13 @@ will not attempt to transfer state contained in:
 ## Proposal
 
 - Create a library with interfaces to enable transfer of data between clusters
-- The library will operate on one PVC at a time
+- The current WIP progress implementation provides for three interfaces to build a connection
+  - Transfer: Defines a transfer program such as rsync or rclone
+  - Transport: Defines a proxy for encrypting traffic. Currently stunnel is the only option.
+    - In case a transfer utility provides its own encryption a null transport is provided.
+  - Endpoint: Route, Load Balancer, or another alternative for exposing a server for sync.
+- The library will use a PVC as the basic unit to transfer.
+  - It will be possible to transfer PVCs concurrently.
 - The library will make it easy to run against all PVCs in one or more project
-- Because the library will need to speak to multiple clusters
-  - KUBECONFIG / ~/.kube/config will always be used for destination
-  - Tools developed can build a config from another location, i.e. ~/.kube-src
+- The library will accept two rest configurations for client and server
 - Provide a CLI tool demonstrating how to implement functionality
