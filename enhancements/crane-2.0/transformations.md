@@ -76,16 +76,7 @@ that conforms to the transform definition.
 
 #### Packages
 
-##### pkg/cmd
-
-A library to implement a command that will conform to the defined
-CLI interface for a plugin. 
-The output will be a set of CLI flags and a corresponding options struct.
-The output should be used by a new binary to:
-1. Generate transformations in a specified directory
-2. Create a new library/command to generate custom transformations
-
-##### pkg/transfrom
+##### transfrom
 
 A library that will be responsible for helpers for creating and updating the
 defined files for a transform directory.
@@ -93,9 +84,9 @@ This will work on file byte arrays to make all the implementation details of
 the file, internal to the package.
 We will add a versioning system for this file and internally to this package
 
-##### pkg/apply
+##### apply
 
-A package responsible for applying a transformation, defined as a byte array,
+A package responsible for applying a transformation defined as a byte array,
 to create a new byte array that a user can use.
 The user is responsible for what to do with the new byte array that will be
 valid yaml.
@@ -103,7 +94,7 @@ valid yaml.
 
 ### Test Plan
 
-We will use a set of testdata files to verify that the transforms are created
+We will use a set of test data files to verify that the transforms are created
 correctly and that the application of the transformations is correct.
 An e2e test will be created to use the cmd package and exercise the fully
 defined interface that we expect to be present.
