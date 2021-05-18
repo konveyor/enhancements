@@ -64,8 +64,13 @@ to a YAML object and return a YAML object.
 
 #### Story 3
 
-As a library user, I would like to be able to create a plugin command easily
-that conforms to the transform definition.
+As a library user, I would like to easily create the CLI commands 
+that conforms to the transform CLI interface, by only having to provide the
+code that provides my transformation. 
+
+As a transformations runner author, I would like to verify that I can expect the
+same set of CLI flags and sub command name to provide the transformation from
+a plugin
 
 ## Design Details
 
