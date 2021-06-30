@@ -5,12 +5,14 @@ authors:
 reviewers:
   - "@shawn_hurley"
   - "@alaypatel07"
+  - "@sseago"
+  - "@djwhatle"
 approvers:
   - "@shawn_hurley"
   - "@alaypatel07"
-  - "@djwhatle"
+  - "@sseago"
 creation-date: 2021-06-10
-last-updated: 2021-06-25
+last-updated: 2021-06-30
 status: implementable
 see-also:
   - "../crane-2.0/state-transfer/dvm-crane-feature-parity/README.md"  
@@ -176,6 +178,8 @@ Since we will be adding optional inclusion list and label selector to the MigPla
 |  6 	| A0  A1   B0   B1   C0   C1 	|           A           	|          A, C          	|        -       	|           C0   C1          	|
 |  7 	| A0  A1   B0   B1   C0   C1 	|           A           	|            -           	|        1       	|           B1   C1          	|
 |  8 	| A0  A1   B0   B1   C0   C1 	|           A           	|          A, C          	|        1       	|             C1             	|
+
+> Each alphabet represents a distinct Kube Resource present in the ns, while the numbers represent different labels added on the instances of those resources. For instance, A0 and A1 could be two 'Services' in a namespace with one distinct label on each of them - 1, and 2.
 
 Both `includedResources` and `labelSelector` are optional variables in MigPlan spec. On the existing MigPlans, these will be defaulted to empty values and Final migration will continue to include all resources in the migration (See case 1 in the table). Downgrades are unaffected as well. The old API will simply ignore the extra options. 
 
