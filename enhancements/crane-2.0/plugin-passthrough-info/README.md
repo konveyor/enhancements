@@ -38,7 +38,7 @@ superseded-by:
 
 A plugin developer wants the ability to ask for more information to more fully create the correct transformations for
 a kubernetes manifest.
-Because plugins **MUST NOT** have access to clusters, a plugin user must give the information that in has previously determined from a cluster. 
+Because plugins **MUST NOT** have access to clusters, a plugin user must give the information that is determined from a cluster. 
 
 ## Motivation
 
@@ -64,7 +64,7 @@ needing the user to provide the information.
 
 We will provide a call via standard-in for a plugin to tell the `BinaryPlugin` type that it has specific optional fields as strings. If the plugin is expecting some numeric type, they will have to validate it on their side. A particular plugin error is created when this validation fails to communicate this type of failure. 
 
-We will create a Standard-In call, `Metadata`, which when called will cause a binary plugin to print out the `PluginMetadata` type. The Plugin library will be responsible for this and will be responsible for determining the versions of Response and Request's that it can handle. We will also add a version for the plugin itself and a name of the plugin. It will also return with a set of optional information that could be added.
+We will create a Standard-In call, `Metadata`, which when called, will cause a binary plugin to print out the `PluginMetadata` type. The Plugin library will be responsible for this and will be responsible for determining the versions of Response and Request's that it can handle. We will also add a version for the plugin itself and a name of the plugin. It will also return with a set of optional information that could be added.
 
 ### User Stories [optional]
 
@@ -84,7 +84,7 @@ The output should be:
 
 #### Story 3
 
-As a plugin author, I should expect that the extra information is added to the `Run` method while determining the patches that I would like to create.
+As a plugin author, I should expect that the extra information is added to the `Run` method while determining the patches I would like to create.
 
 #### Story 4
 
@@ -108,25 +108,24 @@ As a plugin author, I want to state the input and out that a given version of my
 A new type in the plugin package will be created 
 
 ```go 
+    type OptionalFields struct {
+      FlagName string
+      Help string
+      Example string
+    }
     type PluginMetdata struct {
         Name string
         Version string
-        RequestVersion RequestVersion
-        ResponseVersion ResponseVersion
-        OptionalFields []string
+        RequestVersion Version 
+        ResponseVersion Version
+        OptionalFields []OptionalFields
     }
 
-    type RequestVersion string
+    type Version string
 
     const(
-        v1 RequestVersion = "v1"
+        v1 Version = "v1"
     ) 
-
-    type ResponseVersion string
-
-    const(
-        v1 ResponseVersion = "v1"
-    )
 ```
 
 When creating a plugin, you will also have to pass in Name, version, and OptionalFields in the CLI package
@@ -135,7 +134,35 @@ When creating a plugin, you will also have to pass in Name, version, and Optiona
 func NewCustomPlugin(name, version string, optionalFields []string, runFunc func(*unstructured.Unstructured) (transform.PluginResponse, error))
 ```
 
-We will also unexport the CustomPlugin type.
+We will also un-export the CustomPlugin type.
+
+We will also have to update the `PluginRun` interface  to accept a map of FlagName to Value
+
+```go
+
+type PluginRun interface {
+  Run(*unstructured.Unstrucutured, map[string]string) (PluginResponse, error)
+}
+```
+
+The runner will also have to be updated to handle these new parameters
+
+```go
+type Runner struct {
+  ....
+  OptionalFields map[string]string
+}
+```
+
+Crane CLI for transforms will have to be enhanced to include an optional parameters flag with an example. 
+
+We will also have to handle taking a large string and getting each optional input. That means there must be some defined delimiter between flags, an example:
+```
+--optional-flags="hello=world;testing=value1,value2"
+```
+
+Initially, `;` is purposed as the delimiter because `,` will be used to denote a list of options. 
+
 
 ### Test Plan
 
