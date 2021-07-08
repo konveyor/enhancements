@@ -93,36 +93,45 @@ _options.go_
 ```golang
 package rsync
 
-type RsyncTransferOptions struct {
-	RsyncCommandOptions
-	RsyncResourceMetadata
+// TransferOptions defines customizeable options for Rsync Transfer
+type TransferOptions struct {
+	CommandOptions
+	sourceResourceMetadata      transfer.ResourceMetadata
+	destinationResourceMetadata transfer.ResourceMetadata
 }
 
-// RsyncCommandOptions defines options that can be customized in the Rsync command
-type RsyncCommandOptions struct {
-	Recursive            bool
-	SymLinks             bool
-	Permissions          bool
-	ModTimes             bool
-	DeviceFiles          bool
-	SpecialFiles         bool
-	HardLinks            bool
-	Delete               bool
-	Partial              bool
-	BwLimit              int
-	Info                 string
+// TransferOption
+type TransferOption interface {
+	ApplyTo(*TransferOptions) error
 }
 
-// RsyncResourceMetadata defines options that let consumers customize different metadata placed on Rsync resources
-type RsyncResourceMetadata struct {
-	SourcePodLabels                 map[string]string
-	SourcePodAnnotations            map[string]string
-	SourcePodOwnerReferences        []metav1.OwnerReference
-	SourcePodSecurityContext        *corev1.SecurityContext
-	DestinationPodLabels            map[string]string
-	DestinationPodAnnotations       map[string]string
-	DestinationPodOwnerReferences   []metav1.OwnerReference
-	DestinationPodSecurityContext   *corev1.SecurityContext
+// CommandOptions defines options that can be customized in the Rsync command
+type CommandOptions struct {
+	Recursive    bool
+	SymLinks     bool
+	Permissions  bool
+	ModTimes     bool
+	DeviceFiles  bool
+	SpecialFiles bool
+	Groups       bool
+	Owners       bool
+	HardLinks    bool
+	Delete       bool
+	Partial      bool
+	BwLimit      int
+	Info         []string
+	Extras       []string
+}
+```
+Struct _ResourceMetadata_ defines extra customizeable information that can be used while creating any temporary resource used by State Transfer.
+
+```golang
+// ResourceMetadata defines options that let consumers customize different metadata placed on Rsync resources
+type ResourceMetadata struct {
+	Labels            map[string]string
+	Annotations       map[string]string
+	OwnerReferences   []metav1.OwnerReference
+	SecurityContext   *corev1.SecurityContext
 }
 ```
 
@@ -154,16 +163,17 @@ type RsyncTransferOption interface {
 This interface will prove useful in cases where we want to provide users with a set of pre-defined options like below: 
 
 ```golang
-type RsyncCommandArchive bool
+type ArchiveFiles bool
 
-func (rca RsyncCommandArchive) ApplyTo(opts *RsyncTransferOptions) error {
+func (rca ArchiveFiles) ApplyTo(opts *TransferOptions) error {
 	opts.Recursive = bool(rca)
 	opts.SymLinks = bool(rca)
 	opts.Permissions = bool(rca)
 	opts.ModTimes = bool(rca)
-	opts.DeviceFiles = bool(rca)
 	opts.Groups = bool(rca)
-	opts.Users = bool(rca)
+	opts.Owners = bool(rca)
+	opts.DeviceFiles = bool(rca)
+	opts.SpecialFiles = bool(rca)
 	return nil
 }
 ```
@@ -175,15 +185,21 @@ _common.go_
 ```golang
 package rsync
 
-func NewRsyncTransfer(opts ...RsyncTransferOption) error {
-	options := RsyncTransferOptions{}
-	err := options.Apply(opts)
+func NewTransfer(t transport.Transport, e endpoint.Endpoint, src *rest.Config, dest *rest.Config,
+	pvc corev1.PersistentVolumeClaim, opts ...TransferOption) (transfer.Transfer, error) {
+	options := TransferOptions{}
+	err := options.Apply(opts...)
 	if err != nil {
-		return fmt.Errorf("validation for Rsync Options failed")
+		return nil, err
 	}
 	return &RsyncTransfer{
-		options: options,
-	}
+		transport:   t,
+		endpoint:    e,
+		source:      src,
+		destination: dest,
+		pvc:         pvc,
+		options:     options,
+	}, nil
 }
 ```
 #### Rsync Retry
@@ -197,12 +213,6 @@ In the second phase, we will gradually bring the Rsync retry logic in crane-lib.
 In the last phase, we will also bring the DVMP's logic in the library. At the end of this phase, we will simply call crane-lib functions to get progress information of Rsync Pods in DVM.
 
 This enhancement will be updated at every phase to include implementation details.
-
-### Implementation Details/Notes/Constraints [optional]
-
-What are the caveats to the implementation? What are some important details that
-didn't come across above. Go in to as much detail as necessary here. This might
-be a good place to talk about core concepts and how they relate.
 
 ### Risks and Mitigations
 
