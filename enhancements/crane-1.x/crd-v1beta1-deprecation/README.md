@@ -30,6 +30,7 @@ This enhancement proposes maintaining a long-term support MTC/Crane 1.5.z versio
 
 Users currently have the choice of which cluster (OCP 3.7 - 4.7) to use as the control cluster. This proposal would require users of MTC/Crane 1.6+ to use a minimum of OCP 4.3+ as their _control cluster_ to support `apiextensions/v1`.
  
+ <img src="./crd_compat_api_chart.png" width="700">
 
 ## Motivation
 
@@ -41,17 +42,12 @@ The two sets of CRDs that Crane/MTC must install are:
 - Mig* CRDs (must be installed on the control cluster only)
 - Velero CRDs (must be installed on all clusters serving as a source / destination)
 
-![crd_compat_api_chart](./crd_compat_api_chart.png)
-
 ### Goals
 
 - Support main migration scenarios we care about as OCP API evolves
 - Develop a strategy that can be used in the future when further Kubernetes API deprecations inevitably happen
-
-### Non-Goals
-
-- Introduce high burden of backporting fixes 
-- Block introduction of new features/bugfixes into Crane 1.x
+- Avoid introduce high burden of backporting fixes 
+- Avoid blocking introduction of new features/bugfixes into Crane 1.x
 
 ## Proposal
 
