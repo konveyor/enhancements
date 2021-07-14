@@ -46,7 +46,7 @@ The two sets of CRDs that Crane/MTC must install are:
 
 - Support main migration scenarios we care about as OCP API evolves
 - Develop a strategy that can be used in the future when further Kubernetes API deprecations inevitably happen
-- Avoid introduce high burden of backporting fixes 
+- Avoid introducing high burden of backporting fixes 
 - Avoid blocking introduction of new features/bugfixes into Crane 1.x
 
 ## Proposal
