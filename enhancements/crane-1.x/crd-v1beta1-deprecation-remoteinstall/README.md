@@ -28,7 +28,7 @@ This enhancement proposes Crane handling the upcoming removal of `apiextensions/
 - Enhancing the MigCluster controller to perform remote install of dependencies such as Velero, Restic, and mig-log-reader.
 - Dynamically installing a suitably versioned set of Velero CRDs on the remote cluster 
 
-Users currently have the choice of which cluster (OCP 3.7 - 4.7) to use as the control cluster. This proposal would require users of MTC/Crane 1.6+ to use a minimum of OCP 4.3+ as their _control cluster_ to support `apiextensions/v1`. 
+Users currently have the choice of which cluster (OCP 3.7 - 4.7) to use as the control cluster. This proposal would require users of MTC/Crane 1.6+ to use a minimum of OCP 4.6+ as their _control cluster_ to support `apiextensions/v1`. Although the OCP 4.3 API supported v1 CRDs, OLM lagged and only started supporting CRD v1 in OCP 4.6
 
 _In exchange for dropping OCP 3.x control cluster capability_, we gain the following benefits:
 
