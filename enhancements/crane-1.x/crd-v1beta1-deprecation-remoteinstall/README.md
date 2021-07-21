@@ -84,7 +84,7 @@ Common migration scenarios can be handled with this strategy:
 
 #### Migration of Config that previously lived in MigrationController CR to the MigCluster CR
 
-Config info previously in the MigrationController CR spec on the remote cluster cann be moved to an equivalent ConfigMap on the control cluster that would be referenced from the MigCluster  CR.
+Config info previously in the MigrationController CR spec on the remote cluster can be moved to an equivalent ConfigMap on the control cluster that would be referenced from the MigCluster  CR.
 
 Alternatively we could include this config info directly on the MigCluster CR. This would require us to worry about schema changes, whereas the ConfigMap approach would be schema-less similar to how the MigrationConroller spec field is today.
 
