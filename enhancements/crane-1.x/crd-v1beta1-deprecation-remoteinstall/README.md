@@ -65,15 +65,15 @@ The two sets of CRDs that Crane/MTC must install are:
 
 Common migration scenarios can be handled with this strategy:
 
-- OCP 3.x to 4.5+
+- OCP 3.x to 4.6+
   - OCP 4.6+: Install Crane 1.6+ 
   - OCP 3.x: Install Crane dependencies remotely
 
-- OCP 4.5+ to 4.5+
+- OCP 4.6+ to 4.6+
   - OCP 4.6+: Install Crane 1.6+ 
-  - OCP 4.5+: Install Crane dependencies remotely
+  - OCP 4.6+: Install Crane dependencies remotely
 
-- OCP 4.1 to 4.4-
+- OCP 4.1 to 4.5-
   - No longer possible 
 
 - OCP 3.x to 3.x
