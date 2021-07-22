@@ -32,7 +32,7 @@ Users currently have the choice of which cluster (OCP 3.7 - 4.7) to use as the c
 
 _In exchange for dropping OCP 3.x control cluster capability_, we gain the following benefits:
 
-- We can avoid maintaining an additional long term support OCP 3.x compatible version of Crane
+- We can avoid maintaining an additional legacy OCP 3.x compatible version of Crane
   - Test burden on QE is not doubled
   - Backport/CVE/Bugfix burden on devs is not doubled
 - Only need to maintain and test one set of Crane CRDs (v1)
@@ -63,30 +63,52 @@ The two sets of CRDs that Crane/MTC must install are:
 
 ## Proposal
 
-Common migration scenarios can be handled with this strategy:
+Discontinue Crane installation on OCP 3.x with mig-operator. Write remote install functionality to get Crane deps on all remote clusters.
 
-- OCP 3.x to 4.6+
+
+_Common migration scenarios, and how they are affected by this enhancement:_
+
+- OCP 3.9+ to 4.6+
   - OCP 4.6+: Install Crane 1.6+ 
-  - OCP 3.x: Install Crane dependencies remotely
+  - OCP 3.9+: Install Crane dependencies remotely
 
 - OCP 4.6+ to 4.6+
   - OCP 4.6+: Install Crane 1.6+ 
   - OCP 4.6+: Install Crane dependencies remotely
 
-- OCP 4.1 to 4.5-
+- OCP 4.5- to 4.6+
+  - OCP 4.6+: Install Crane 1.6+ 
+  - OCP 4.5-: Install Crane dependencies remotely
+
+- OCP 4.5- to 4.5-
   - No longer possible 
 
-- OCP 3.x to 3.x
+- OCP 3.9+ to 3.9+
   - No longer possible
+
+- On-premises OCP 3.9+ to cloud OCP 4.6+
+  - Would require a "hole-punch" solution for cloud OCP 4.x to reach into network of on-premises OCP 3.x cluster
+  - Ideas: we may be able to accomplish this tunnel with [stunnel](https://www.stunnel.org/) or [submariner](https://www.openshift.com/blog/connecting-managed-clusters-with-submariner-in-red-hat-advanced-cluster-management-for-kubernetes)
+  - Look to pvc-migrate for ideas
+  - Look to proxy work in Crane for ideas
 
 
 ### Implementation Details/Notes/Constraints
 
 #### Migration of Config that previously lived in MigrationController CR to the MigCluster CR
 
-Config info previously in the MigrationController CR spec on the remote cluster can be moved to an equivalent ConfigMap on the control cluster that would be referenced from the MigCluster  CR.
+Config info previously in the MigrationController CR spec on the remote cluster can be migrated upon Crane 1.6 upgrade to a ConfigMap on the control cluster with a `generateName` and `label` matching the corresponding MigCluster name. 
 
-Alternatively we could include this config info directly on the MigCluster CR. This would require us to worry about schema changes, whereas the ConfigMap approach would be schema-less similar to how the MigrationConroller spec field is today.
+_Example:_
+  - MigCluster 
+    - name: `host`
+  - ConfigMap 
+    - generateName: `migcluster-config-host`
+    - name: `migcluster-config-host-8x7ex`
+    - labels: 
+      - `migration.openshift.io/migcluster-config-for`: `host`
+
+No MigCluster API changes should be required, although MigCluster internals and status reporting will need to change. _Read on for upgrade/downgrade considerations_.
 
 #### Moving all Velero (and other remote dependency) setup tasks to MigCluster controller
 
@@ -96,9 +118,49 @@ Even on the control cluster, we should move all Velero, ConfigMap, and mig-log-r
 
 We may be able to make use of Jinja or Go templates to achieve remote cluster dependency installs.
 
+#### Velero Option 1 (Preferred): Accepting the burden of maintaining a legacy flavor of Velero
+
+In order to maintain the ability to migrate apps from OCP 3.9+, we will need to continue our legacy maintenence of an older version of Velero compatible with older K8s APIs.
+
+- Velero 1.6.z is the last series of Velero releases that will work with both v1beta1 CRDs and v1 CRDs. 
+- Starting with Velero 1.7, we expect that v1beta1 CRDs will not be included. 
+
+Once we have a version of Crane which supports Velero 1.7, two things will be needed:
+
+- __1__: We will need two different sets of velero images: Velero 1.6.z, Velero 1.7+. Each MTC release will need two Velero release branches (release-1.y.z
+and release-1.y.z-velero-1.6). We will need to test both branches.
+  - velero
+  - velero-restic-restore-helper
+  - velero-plugin-for-aws
+  - velero-plugin-for-gcp
+  - velero-plugin-for-microsoft-azure
+ 
+- __2__. Velero 1.6.z is planned to be be out-of-support upstream, which means that we may need to backport CVE and certain bugfixes (essentially blocker bugs that affect backup creation), since upstream CVE and bugfixes will only go to the 
+latest releases.
+  - We are already running Velero on 3.x clusters in an out-of-support configuration, as Velero 1.6 is only supported on Kubernetes 1.12 and newer.
+  - With this change, we will be running no-longer-supported-at-all Velero on a Kubernetes version that this Velero release never officially supported. 
+  - We'll be on our own for bugfixes and other issues.
+
+#### Velero Option 2: Modifying up-to-date Velero to generate v1beta1 CRDs
+
+We could modify our Velero fork to continue generating v1beta1 CRDs that upstream will stop
+generating after 1.6. 
+ 
+ - This doesn’t reduce our maintenance burden. It shifts it around. 
+ - We will now be on the hook for maintaining CRD generation for v1beta1 CRDs for Velero releases that upstream has never generated them for. 
+ - There is no guarantee that the upstream releases in question won’t make use of v1 CRD features that are incompatible with v1beta1. 
+ 
+_Beyond CRD concerns_, there’s also no guarantee that upstream won’t make code changes in other
+areas that are no longer compatible with legacy Kubernetes versions. The issue here is that
+with this scenario, our maintenance burden extends to new feature development rather than simply
+backporting bugfixes. When we previously discussed this option, the feeling was that this
+alternative is actually riskier than the two-streams-of-velero approach.
+
 #### Requirement for highly-permissioned remote cluster SA token
 
 Currently, mig-operator sets up the `migration-controller` SA that we use to perform actions on the remote cluster. We would need the cluster admin of that cluster to create an SA token for us instead of having mig-operator do this. This should be a trivial difference.
+
+Our clusterrole used for the `migration-controller` SA has some variable templated parts to it, we will need a way to deal with these. [Link to SA jinja template - mig_rbac.yml.j2](https://github.com/konveyor/mig-operator/blob/5a8ce7209b9a62b8afa66fafb877ad0a5d0fbb85/roles/migrationcontroller/templates/mig_rbac.yml.j2). 
 
 #### Generating v1 CRDs
 
@@ -123,13 +185,6 @@ The OLM team has outlined steps that we can follow to ensure that the cluster up
 
 We will also need to configure Crane 1.6 with a minimum install version of OCP 4.3 due to v1 CRDs.
 
-##### Strategies if Velero 1.7+ stops supporting v1beta1 CRDs
-
-It is expected that Velero 1.7+ will stop supporting v1beta1 CRDs, meaning we would need to either
-
-- Stop upgrading Crane with latest Velero
-- Re-insert the v1beta1 CRD generation code into our fork of Velero, then take on any associated maintenence and test burden of running a modified fork.
-
 ### Risks and Mitigations
 
 - _Risk:_ implementing this will require significant rework of how Velero, Restic, mig-log-reader, and our ConfigMaps are set up on the remote cluster. We currently carry out these setup tasks using Ansible tasks in mig-operator. We would need to create a functional equivalent of this provisioning code in Golang and have it undergo QE regression testing.
@@ -142,9 +197,28 @@ It is expected that Velero 1.7+ will stop supporting v1beta1 CRDs, meaning we wo
 - _Risk_: it's not clear what the upgrade path would look like for users jumping from Crane 1.5 to Crane 1.6, given that all of their previous Config data on the MigrationController CR would need to land in its new home in Crane 1.6. We would need to develop a strategy for migrating users Crane config to the new format
   - _Mitigation_: if users upgrade their OCP 4.x clusters to the latest version, we could remotely read the config out of the MigrationController CR and copy it to the new location on the MigCluster spec (or wherever we decide to store config data)
 
+## Design Details
 
+### Upgrade / Downgrade Strategy
+
+We can provide automatic upgrades to this new method of managing remote cluster Cranes deps, however the downgrade process will be manual.
+
+#### Automatic Upgrade steps (Crane 1.5 to 1.6+):
+1. All config values found in MigrationController.spec on the remote cluster would be copied over to new ConfigMap upon MigCluster reconcile
+2. Remote `MigrationController` instance would be deleted after data is safely in new ConfigMap
+3. Wait for termination of `MigrationController` owned resources on remote cluster
+4. [Remote OCP 4 clusters only] remove subscription to Crane (MTC)
+5. [Remote OCP 3 clusters only] run manual deletion of everything in mig-operator.yaml 
+6. Wait for termination of resources
+7. Proceed with MigCluster controller provisioning of replacement Velero, Restic, and mig-log-reader.
+
+#### Manual Downgrade steps (Crane 1.6+ to 1.5):ig-` ConfigMap
+1. User runs `oc delete -f non-olm/mig-operator.yaml` on remote cluster
+2. User runs `oc create -f non-olm/mig-operator.yaml` on remote cluster
+3. User runs `oc create -f non-olm/operator-3.yaml` on remote cluster
+4. User copies config values out of `migcluster-config-` ConfigMap and drops them into remote cluster MigrationController CR
 
 
 ## Alternatives
 
-The original idea proposed as an enhancement was maintaining a long term support 1.5.z release for OCP 3.x clusters that would serve mostly as a Velero installer. Check out the `crd-v1beta1-deprecation` enhancement for more details.
+The original idea proposed as an enhancement was maintaining a legacy 1.5.z release for OCP 3.x clusters that would serve mostly as a Velero installer. Check out the `crd-v1beta1-deprecation` enhancement for more details.
