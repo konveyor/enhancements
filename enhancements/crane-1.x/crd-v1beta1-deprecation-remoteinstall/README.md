@@ -92,6 +92,12 @@ Discontinue Crane installation on OCP 3.x with mig-operator. Write remote instal
   - Look to pvc-migrate for ideas
   - Look to proxy work in Crane for ideas
 
+- **Disconnected OCP 3.9+ to disconnected OCP 4.6+**  
+  - [Current docs on deploying in a disconnected env](https://github.com/konveyor/mig-operator/blob/master/docs/usage/DisconnectedDeployment.md) 
+  - Current docs refer to manually pulling in the mig-operator image. This will not be necessary on OCP 3.9+ since mig-operator won't be present.
+  - We will need to provide new user input fields insertable into the MigCluster ConfigMap where users to specify each required disconnected image location. 
+  
+
 
 ### Implementation Details/Notes/Constraints
 
