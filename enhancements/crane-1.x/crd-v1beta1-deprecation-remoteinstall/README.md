@@ -216,12 +216,9 @@ We can provide automatic upgrades to this new method of managing remote cluster 
 
 #### Automatic Upgrade steps (Crane 1.5 to 1.6+):
 1. All config values found in MigrationController.spec on the remote cluster would be copied over to new ConfigMap upon MigCluster reconcile
-2. Remote `MigrationController` instance would be deleted after data is safely in new ConfigMap
-3. Wait for termination of `MigrationController` owned resources on remote cluster
-4. [Remote OCP 4 clusters only] remove subscription to Crane (MTC)
-5. [Remote OCP 3 clusters only] run manual deletion of everything in mig-operator.yaml 
-6. Wait for termination of resources
-7. Proceed with MigCluster controller provisioning of replacement Velero, Restic, and mig-log-reader.
+2. Remote mig-operator would be scaled to 0 replicas
+3. Run deletion of Velero, Restic, mig-log-reader on remote cluster 
+4. Proceed with MigCluster controller provisioning of replacement Velero, Restic, and mig-log-reader.
 
 #### Manual Downgrade steps (Crane 1.6+ to 1.5):
 1. User runs `oc delete -f non-olm/mig-operator.yaml` on remote cluster
