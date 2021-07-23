@@ -66,27 +66,27 @@ The two sets of CRDs that Crane/MTC must install are:
 Discontinue Crane installation on OCP 3.x with mig-operator. Write remote install functionality to get Crane deps on all remote clusters.
 
 
-_Common migration scenarios, and how they are affected by this enhancement:_
+### Common migration scenarios affected by this enhancement:
 
-- OCP 3.9+ to 4.6+
+- **OCP 3.9+ to 4.6+**
   - OCP 4.6+: Install Crane 1.6+ 
   - OCP 3.9+: Install Crane dependencies remotely
 
-- OCP 4.6+ to 4.6+
+- **OCP 4.6+ to 4.6+**
   - OCP 4.6+: Install Crane 1.6+ 
   - OCP 4.6+: Install Crane dependencies remotely
 
-- OCP 4.5- to 4.6+
+- **OCP 4.5- to 4.6+**
   - OCP 4.6+: Install Crane 1.6+ 
   - OCP 4.5-: Install Crane dependencies remotely
 
-- OCP 4.5- to 4.5-
+- **OCP 4.5- to 4.5-**
   - No longer possible 
 
-- OCP 3.9+ to 3.9+
+- **OCP 3.9+ to 3.9+**
   - No longer possible
 
-- On-premises OCP 3.9+ to cloud OCP 4.6+
+- **On-premises OCP 3.9+ to cloud OCP 4.6+**
   - Would require a "hole-punch" solution for cloud OCP 4.x to reach into network of on-premises OCP 3.x cluster
   - Ideas: we may be able to accomplish this tunnel with [stunnel](https://www.stunnel.org/) or [submariner](https://www.openshift.com/blog/connecting-managed-clusters-with-submariner-in-red-hat-advanced-cluster-management-for-kubernetes)
   - Look to pvc-migrate for ideas
@@ -99,7 +99,9 @@ _Common migration scenarios, and how they are affected by this enhancement:_
 
 Config info previously in the MigrationController CR spec on the remote cluster can be migrated upon Crane 1.6 upgrade to a ConfigMap on the control cluster with a `generateName` and `label` matching the corresponding MigCluster name. 
 
-_Example:_
+**Example**
+
+```
   - MigCluster 
     - name: `host`
   - ConfigMap 
@@ -107,6 +109,7 @@ _Example:_
     - name: `migcluster-config-host-8x7ex`
     - labels: 
       - `migration.openshift.io/migcluster-config-for`: `host`
+```
 
 No MigCluster API changes should be required, although MigCluster internals and status reporting will need to change. _Read on for upgrade/downgrade considerations_.
 
@@ -118,7 +121,9 @@ Even on the control cluster, we should move all Velero, ConfigMap, and mig-log-r
 
 We may be able to make use of Jinja or Go templates to achieve remote cluster dependency installs.
 
-#### Velero Option 1 (Preferred): Accepting the burden of maintaining a legacy flavor of Velero
+#### Handling of Velero
+
+##### Velero Option 1 (Preferred): Accepting the burden of maintaining a legacy flavor of Velero
 
 In order to maintain the ability to migrate apps from OCP 3.9+, we will need to continue our legacy maintenence of an older version of Velero compatible with older K8s APIs.
 
@@ -141,7 +146,7 @@ latest releases.
   - With this change, we will be running no-longer-supported-at-all Velero on a Kubernetes version that this Velero release never officially supported. 
   - We'll be on our own for bugfixes and other issues.
 
-#### Velero Option 2: Modifying up-to-date Velero to generate v1beta1 CRDs
+##### Velero Option 2: Modifying up-to-date Velero to generate v1beta1 CRDs
 
 We could modify our Velero fork to continue generating v1beta1 CRDs that upstream will stop
 generating after 1.6. 
