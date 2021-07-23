@@ -223,7 +223,7 @@ We can provide automatic upgrades to this new method of managing remote cluster 
 6. Wait for termination of resources
 7. Proceed with MigCluster controller provisioning of replacement Velero, Restic, and mig-log-reader.
 
-#### Manual Downgrade steps (Crane 1.6+ to 1.5):ig-` ConfigMap
+#### Manual Downgrade steps (Crane 1.6+ to 1.5):
 1. User runs `oc delete -f non-olm/mig-operator.yaml` on remote cluster
 2. User runs `oc create -f non-olm/mig-operator.yaml` on remote cluster
 3. User runs `oc create -f non-olm/operator-3.yaml` on remote cluster
