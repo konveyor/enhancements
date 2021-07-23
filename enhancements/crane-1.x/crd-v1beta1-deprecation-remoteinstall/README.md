@@ -68,9 +68,9 @@ Discontinue Crane installation on OCP 3.x with mig-operator. Write remote instal
 
 ### Common migration scenarios affected by this enhancement:
 
-- **OCP 3.9+ to 4.6+**
+- **OCP 3.7+ to 4.6+**
   - OCP 4.6+: Install Crane 1.6+ 
-  - OCP 3.9+: Install Crane dependencies remotely
+  - OCP 3.7+: Install Crane dependencies remotely
 
 - **OCP 4.6+ to 4.6+**
   - OCP 4.6+: Install Crane 1.6+ 
@@ -83,16 +83,16 @@ Discontinue Crane installation on OCP 3.x with mig-operator. Write remote instal
 - **OCP 4.5- to 4.5-**
   - No longer possible 
 
-- **OCP 3.9+ to 3.9+**
+- **OCP 3.7+ to 3.7+**
   - No longer possible
 
-- **On-premises OCP 3.9+ to cloud OCP 4.6+**
+- **On-premises OCP 3.7+ to cloud OCP 4.6+**
   - Would require a "hole-punch" solution for cloud OCP 4.x to reach into network of on-premises OCP 3.x cluster
   - Ideas: we may be able to accomplish this tunnel with [stunnel](https://www.stunnel.org/) or [submariner](https://www.openshift.com/blog/connecting-managed-clusters-with-submariner-in-red-hat-advanced-cluster-management-for-kubernetes)
   - Look to pvc-migrate for ideas
   - Look to proxy work in Crane for ideas
 
-- **Disconnected OCP 3.9+ to disconnected OCP 4.6+**  
+- **Disconnected OCP 3.7+ to disconnected OCP 4.6+**  
   - [Current docs on deploying in a disconnected env](https://github.com/konveyor/mig-operator/blob/master/docs/usage/DisconnectedDeployment.md) 
   - Current docs refer to manually pulling in the mig-operator image. This will not be necessary on OCP 3.9+ since mig-operator won't be present.
   - We will need to provide new user input fields insertable into the MigCluster ConfigMap where users to specify each required disconnected image location. 
