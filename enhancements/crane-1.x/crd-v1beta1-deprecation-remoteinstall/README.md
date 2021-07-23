@@ -204,10 +204,6 @@ We will also need to configure Crane 1.6 with a minimum install version of OCP 4
 - _Risk_:  large amounts of documentation refer to the current methods for configuring Crane settings using the _MigrationController_ CR provided by mig-operator. Since this functionality would be moving out of the _MigrationController_ CR, we'd need to change all of our documentation to reflect this. 
   - _Mitigation_: work with docs team early on our solution, letting them know where things will be shifting. 
 
-
-- _Risk_: it's not clear what the upgrade path would look like for users jumping from Crane 1.5 to Crane 1.6, given that all of their previous Config data on the MigrationController CR would need to land in its new home in Crane 1.6. We would need to develop a strategy for migrating users Crane config to the new format
-  - _Mitigation_: if users upgrade their OCP 4.x clusters to the latest version, we could remotely read the config out of the MigrationController CR and copy it to the new location on the MigCluster spec (or wherever we decide to store config data)
-
 ## Design Details
 
 ### Upgrade / Downgrade Strategy
