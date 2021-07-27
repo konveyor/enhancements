@@ -127,6 +127,22 @@ Even on the control cluster, we should move all Velero, ConfigMap, and mig-log-r
 
 We may be able to make use of Jinja or Go templates to achieve remote cluster dependency installs.
 
+#### Restricted network scenario workarounds
+
+_Previously_, users of Crane could use the tool if _either_ of their two clusters APIserver endpoint were remotely accessible. 
+
+_With this enhancement_, it will be required that the OCP 3 APIserver is remotely accessible. This may require workarounds if the OCP 3 cluster is on-premise within a locked down network and OCP 4 is in the cloud. 
+
+**Possible solutions:**
+ - Enroll both clusters in OpenShift Advanced Cluster Management (ACM) and use submariner for the connection between clusters
+   - Requires OCP 3.11+ on OCP 3 side
+   - Needs evaluation of whether this will provide OCP APIserver connectivity
+
+ - If egress proxies are in place on both clusters that serve as the entry-point for all traffic, use Squid proxy configuration on both ends to create a tunnel between clusters
+
+ - If VPN link of both clusters is possible, use this mechanism to bridge the networks and allow for connection from OCP 4 to 3.
+
+
 #### Handling of Velero
 
 ##### Velero Option 1 (Preferred): Accepting the burden of maintaining a legacy flavor of Velero
