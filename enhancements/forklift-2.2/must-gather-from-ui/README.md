@@ -141,12 +141,24 @@ Demo video: https://youtu.be/b5YTxyp6WyY
 
 ### Risks and Mitigations
 
+#### UX/UI
+
 The UI needs to be intuitive for user, will be discussed with UX team.
+
+#### Security
 
 Must-gather itself needs ```cluster-admin``` role. It could provide sensitive information about the cluster so needs to be authorized by OpenShift RBAC.
 
 - HTTP API will require ```oauth``` token and verify if the token provides ```cluster-admin``` access to the cluster
 - backend service needs a service account token/kubeconfig that will be ona PV mounted by Operator (in similar way as for other migration-toolkit components)
+
+The must-gather wrapper service is an administration tool serving users with oauth token for ```cluster-admin``` role, so it does not accept requests from anonymous or unknown clients, so e.g. accepting arbitrary ```image``` as API parameter seems reasonable.
+
+#### Resources consumption and limits
+
+Compute power - the must-gather wrapper service is not a bottle-neck regarding to CPU. The gathering itself runs in a pod started from the must-gather image separate namespace in OpenShift outside the pod where the wrapper runs, so there doesn't seem to be need for amount of must-gather executions running in paralel.
+
+Disk space - result archives are temporary stored directly on the filesystem of the pod where must-gather wrapper service is running. The archive size is unknown before the must-gather archive is downloaded to the must-gather wrapper pod. Reasonable maximum disk limit for the must-gather wraper service pod seems to me to be 10GB or more, however I do believe that the limit should be just space that OpenShift node could provide to the pod with must-gather, no must-gather wrapper service limits.
 
 ## Design Details
 
