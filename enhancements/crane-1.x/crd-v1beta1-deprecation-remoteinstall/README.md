@@ -14,7 +14,7 @@ approvers:
   - "@pranavgaikwad"
 creation-date: 2021-07-21
 last-updated: 2021-07-21
-status: provisional
+status: deferred
 ---
 
 # CRD v1beta1 API deprecation handling via remote install
