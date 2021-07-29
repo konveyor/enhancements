@@ -13,8 +13,8 @@ approvers:
   - "@alaypatel07"
   - "@pranavgaikwad"
 creation-date: 2021-07-14
-last-updated: 2021-07-14
-status: provisional
+last-updated: 2021-07-29
+status: implementable
 ---
 
 # CRD v1beta1 API deprecation handling
