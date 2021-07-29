@@ -2,7 +2,7 @@
 
 In OCP 4.9, the v1beta1 CRD API will be removed. The Crane maintainers considered multiple options for handling this API removal.  
 
-### Option 1: Maintain Current and Legacy Versions of Crane
+### Option 1: Maintain Current and Legacy Versions of Crane (selected for Crane 1.6)
 
 _See `crd-v1beta1-removal-dual-stream` for details_
 
@@ -12,7 +12,7 @@ _See `crd-v1beta1-removal-dual-stream` for details_
  We will be taking this approach in the Crane 1.6 timeframe to ensure that we will have a working version of Crane shipped in time for OCP 4.9 to avoid blocking user upgrades.
 
 
-### Option 2: Implement Remote Dependency Install for Crane
+### Option 2: Implement Remote Dependency Install for Crane (selected for Crane 1.7)
 
 _See `crd-v1beta1-removal-remote-install` for details_
 
@@ -21,10 +21,10 @@ _See `crd-v1beta1-removal-remote-install` for details_
 
 This approach should reduce the matrix of versions we have to ship bugfixes, CVE patches, etc to, reducing overall work in the long term.
 
-However, this approach it represents a greater up-front time investment. We will reconsider this path in the Crane 1.7 timeframe to reduce long term complexity in the dev/QE/rel-eng version matrix.
+Given that this approach represents a greater up-front time investment, we will strongly reconsider this path in the Crane 1.7 timeframe to reduce long term complexity in the dev/QE/rel-eng version matrix.
 
 
-### Option 3: Generate v1beta1 and v1 CRDs, make mig-controller read both
+### Option 3: Generate v1beta1 and v1 CRDs, make mig-controller read both (not selected)
 
 _This option is not documented as heavily, but was considered and dismissed_
 
