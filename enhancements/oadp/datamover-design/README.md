@@ -93,11 +93,11 @@ We will need to have versioing from the start, and a backwards compatability gui
 
 ## Implementation History
 
-We have create a plugin for the openshift resources. 
+We have created a plugin for the openshift resources. 
 
 The CSI velero plugin already exists and can be used as a resource. 
 
-VolumeProvisioner's and VolumePopulators from the CSI addon are also good example of the concepts.
+VolumeProvisioner's and VolumePopulators from the CSI org are also good example of the concepts.
 
 
 ## Drawbacks
@@ -106,4 +106,4 @@ The major drawback with this approach is that it is another interface that the s
 
 ## Alternatives
 
-No alternatives were explored. If there are ideas during the review, we should add them here and discuss why we may or may not choose them. If we choose one of them we should merge this enhancement as rejected and create an enhancement for that approach.
+Prior work was explored in the [data-mover](https://github.com/konveyor/data-mover/pull/3) repo. 
