@@ -34,7 +34,7 @@ Providing a set of plugins that a user can choose to use will greatly increase t
 ### Goals
 
 1. Users can find and use a set of plugins for what they need.
-2. Developers can publish plugins, to a common repository to get data.
+2. Developers can publish plugins, to a common repository for discovery.
 3. Plugins can be delivered downstream in a different way than upstream.
 4. Plugins will be vetted to make sure that there is some quality control. We will need to have some CI in place to do this efficently.
 
@@ -58,9 +58,57 @@ As a developer of a crane plugin, I would like to be able to publish a plugin fo
 
 I believe that we should follow a pattern like [krew index](https://github.com/kubernetes-sigs/krew-index). I believe that we do not have to start with the full type. For now we will have a smaller subset of fields. We will make sure of github releases and create a new folder called crane-index in the crane repo. This will be baked into the crane CLI for start. We will in a follow on enhancement allow for folks to provide their own indexes.
 
+#### Plugin Struct Type
+
+```go
+
+type PluginDefinition struct {
+
+  Name string
+  Description string
+  //Map os and ARCH to a particular Plugin
+  Plugins map[string]OSPlugin
+}
+
+type OSPlugin struct {
+  Path string
+  Checksum string
+}
+```
+
+
+#### Command Line Interface
+
+Example plugin manager command will have 
+
+##### List Command
+```sh
+$ crane plugin-manager list
+
+Plugin Name       OS Supported                              Description
+
+Openshift          linux-amd64,windows-amd64,darwin-arm     The plugin for transforming specific openshit resources. 
+```
+
+This will list all the available plugins for the user to choose from.
+
+##### Get Command
+```sh
+$ crane plugin-manager get openshift --plugin-dir <dir>
+```
+
+I believe that we should use this to create `~/.crane-plugins` as the default plugin dir but a user can specificy their own. We should make this default for the transform command. We should use the checksum to verify the binary.
+
+##### Update Command
+```sh
+$ crane plugin-manager update --plugin-dir <dir>
+```
+
+This will look through each plugin in the directory, and determine if the manager knows about it, and check the checksum. If it needs to be updated we will pull the new binary and overwrite.
+
 ### Risks and Mitigations
 
-Upgrading a plugin in this workflow would require an update in the CLI binary. For now this is acceptable, but we will come back and change this in the future.
+Updating a plugin in this workflow would require an update in the CLI binary. For now this is acceptable, but we will come back and change this in the future.
 
 ## Design Details
 
