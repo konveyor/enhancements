@@ -7,11 +7,11 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2021-07-16
-last-updated: 2021-07-28
+last-updated: 2021-09-13
 status: implementable
 see-also:
   - "https://bugzilla.redhat.com/show_bug.cgi?id=1944402"
-  - "https://github.com/aufi/must-gather-rest-wrapper/issues/1"
+  - "https://github.com/konveyor/forklift-must-gather-api"
 ---
 
 # Forklift must-gather from UI
@@ -72,6 +72,7 @@ type Gathering struct {
 	ID          uint      `gorm:"primarykey" json:"id"`
 	CreatedAt   time.Time `json:"created-at"`
 	UpdatedAt   time.Time `json:"updated-at"`
+	AuthToken   string    `json:"-"` // Hashed auth token from the must-gather execute request
 	CustomName  string    `gorm:"index" form:"custom-name" json:"custom-name"`
 	Status      string    `json:"status"` // Expected values: new, inprogress, completed, error
 	Image       string    `form:"image" json:"image"`
@@ -135,7 +136,7 @@ Example of must-gather JSON object returned by API
 }
 ```
 
-Initial implementation: https://github.com/aufi/must-gather-rest-wrapper
+Initial implementation: https://github.com/konveyor/forklift-must-gather-api
 
 Demo video: https://youtu.be/b5YTxyp6WyY
 
@@ -147,12 +148,13 @@ The UI needs to be intuitive for user, will be discussed with UX team.
 
 #### Security
 
-Must-gather itself needs ```cluster-admin``` role. It could provide sensitive information about the cluster so needs to be authorized by OpenShift RBAC.
+Must-gather itself needs ```cluster-admin``` role since it could provide sensitive information about the cluster, that is OpenShift design which needs to followed.
 
-- HTTP API will require ```oauth``` token and verify if the token provides ```cluster-admin``` access to the cluster
-- backend service needs a service account token/kubeconfig that will be ona PV mounted by Operator (in similar way as for other migration-toolkit components)
+- Must-gather API requires ```oauth bearer``` token
+- The oc adm must-gather command execution uses the provided bearer token to autheticate against OpenShift cluster
+- No ServiceAccount or other secret is used
 
-The must-gather wrapper service is an administration tool serving users with oauth token for ```cluster-admin``` role, so it does not accept requests from anonymous or unknown clients, so e.g. accepting arbitrary ```image``` as API parameter seems reasonable.
+To ensure that the must-gather result archive is provided to the right user, a hash of the provided bearer token is stored for each must-gather execution and API filters must-gather results by the bearer token hash.
 
 #### Resources consumption and limits
 
@@ -171,6 +173,8 @@ E2E test should have following scenario:
 - After a VM migration from VMware or RHV to OpenShift Virtualization, click on button to trigger must-gather and wait until an archive is downloaded. It should not take more than 5 minutes. The archive should contain same information as an archive originated in OpenShift CLI must-gather execution.
 
 ## Implementation History
+
+2021-09-13 Added oauth bearer token for oc login and moved project repository to https://github.com/konveyor/forklift-must-gather-api
 
 2021-07-26 Updated backend must-gather-rest-wrapper API to provide archive name, size and progressing exec-output. Added custom-name which could be used for query must-gather executions by UI without need for remembering execution ID.
 
