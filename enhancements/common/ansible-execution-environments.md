@@ -32,22 +32,43 @@ Two of the Konveyor projects - Crane and Forklift - have a requirement to run pr
 
 These playbooks need to run podified, from container images built to contain the playbooks and all dependencies such as Python, Ansible Runner, collections, and user-defined roles. They will be run using `ansible-runner`. This is conceptually very similar to an Ansible _Execution Environment_ (see [Execution Environments](https://ansible-runner.readthedocs.io/en/stable/execution_environments.html)).
 
-This enhancement proposes that Konveyor projects use the established Ansible Execution Environment (EE) technology for hooks, along with [Ansible Builder](https://ansible-builder.readthedocs.io/en/latest/) to build the hook images.
+This enhancement proposes that Konveyor projects use the established Ansible Execution Environment (EE) technology for Ansible-based hooks, along with [Ansible Builder](https://ansible-builder.readthedocs.io/en/latest/) to build the hook images.
 
 ## Motivation
 
-### Goals
+The Forklift project has a requirement to create an Ansible Hooks Image Builder. The outline of this requirement is as follows:
+##### Goal
+Provide users a way to use the Git repositories where they store Ansible Playbooks as a source to build Images to be used for automation before and after a VM migration.
+##### Background
+Automation will be run as a container image from the registry. We will provide a way to run Ansible playbooks by building the images containing them.
+We want to be sure that the playbooks being run in a plan are not modified during the plan. Therefore the image has to be created, stored and run, not being modified during the run or afterwards.
+##### User Stories
+As a migration owner, when creating a migration plan, I would like the ability to add some Ansible playbooks for automation to be executed before or after a VM is migrated.
+##### Implementation Notes
+Source for playbooks will be a git repository (including branch)
+In the repository we may find more than one playbook. We will provide a way to select the playbook to be run.
+##### Acceptance Criteria
+I can provide a git repository with a playbook to be run. 
+An image will be generated from that repository taking into account branch and available playbooks in it. 
+I will be able to choose for my Migration Plan, the generated image which will be run. I will be able to choose if it will run before or after migration.
 
-The main goal is to re-use as much of the existing Execution Environment and ansible-builder technology as possible. This will allow for:
+### Goals (of this proposal)
 
-- Use existing technologies - no wheel re-invention.
-- Less custom development and maintenance effort for Konveyor.
-- Commonality of technologies between Ansible & Konveyor projects.
-- Greater end-user familiarity with the technology being used.
+1. The main goal in the implementation of this Forklift story is to re-use as much of the existing Execution Environment and ansible-builder technology as possible. This will allow for:
+
+ - Use existing technologies - no wheel re-invention.
+ - Less custom development and maintenance effort for Konveyor.
+ - Commonality of technologies between Ansible & Konveyor projects.
+ - Greater end-user familiarity with the technology being used.
+
+2. Creating an EE-based hook image using the UI components added to Forklift should be the easiest way for users to add hook images - the path of least resistance for hook implementation. Creating Ansible-based hook images manually or via alternate means should still be possible if a user wishes and has knowldge to do so (but this should be discouraged/deprecated).
+
+3. The implementation of this automation hook architecture for the Forklift project should be shareable and useable by other Konveyor projects.
 
 ### Non-Goals
 
-- Considerable development of the Execution Environment, `ansible-runner`, or `ansible-builder` technology.
+1. Considerable development of the Execution Environment, `ansible-runner`, or `ansible-builder` technology.
+2. Preventing other executables from being run in a hook image (golang binary, bash script, etc.).
 
 ## Proposal
 
@@ -65,7 +86,7 @@ As a migration user hook developer I would like to use the `ansible-builder` too
 
 ### Implementation Details/Notes/Constraints
 
-The following components will probably be required for each Konveyor project:
+The following components will probably be required:
 
 - UI support
 - Hook definition CR
@@ -84,7 +105,7 @@ Some contributions may need to be made to the [ansible-builder](https://github.c
 - `requirements.txt` <--- optional pip package dependencies needed in the image
 - `requirements.yml` <--- optional ansible collections needed in the image
 
-The Konveyor projects will need a UI extension to point to a Git repository that contains the required configuration files, and well as roles and playbooks for the hook.
+The Konveyor projects will need a UI extension to point to a Git repository that contains the required configuration files, and well as roles and playbooks for the hook. The resultant hook image will be saved to the local cluster registry.
 
 #### Constraints
 
@@ -110,5 +131,5 @@ This proposal potentially ties the Konveyor project to the release functionality
 
 ## Alternatives
 
-Implement a Konveyor-specific hook image builder.
+Implement a Forklift-specific hook image builder.
 
