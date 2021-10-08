@@ -153,8 +153,9 @@ Must-gather itself needs ```cluster-admin``` role since it could provide sensiti
 - Must-gather API requires ```oauth bearer``` token
 - The oc adm must-gather command execution uses the provided bearer token to autheticate against OpenShift cluster
 - No ServiceAccount or other secret is used
+- Each request to the API performs bearer token verification before processing the request
 
-To ensure that the must-gather result archive is provided to the right user, a hash of the provided bearer token is stored for each must-gather execution and API filters must-gather results by the bearer token hash.
+The way must-gather API checks the provided token is SubjectAccessReview with "* on *" to ensure the token belongs to cluster-admin.
 
 #### Resources consumption and limits
 
