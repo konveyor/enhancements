@@ -57,33 +57,10 @@ _Storage Conversion_ will allow users to convert underlying storage of PVCs. The
 > Propose controller changes for storage conversion
 
 ## Proposal
-### Approach 1: Introducing MigPlan API field to specify type of migration
 
-* _Storage conversion_ is already possible in MTC 1.6 but it doesn't have a guided experience. The users need to set the right namespace and PV mappings in the Migration Plan, set the source & destination clusters to the same cluster, map storage classes and then perform a _State Migration_ to achieve storage conversion. For end users, this is hard to figure out without reading detailed supporting documentation. If we could mark a _MigPlan_ to be exclusively used for storage conversion, we can automatically choose the source, destination _MigCluster_ resources. We can also choose the namespace mappings correctly without the user having to provide it. Additionally, we can implement specific validations based on the type of the _MigPlan_. This wouldn't be possible if we don't know which type of migration the current plan will be used for.
+### Introducing MigMigration API field to specify type of Migration
 
-* If the users perform a _State Migration_ by selecting a subset of PVCs in the plan, those settings are persisted on the plan itself. However, that _MigPlan_ is still available for normal migrations. This presents with some edge cases that are hard to guard against. For instance, if a PVC is skipped from a state migration, it remains skipped during a final migration as well. But if a workload is using that PVC, it would fail to come up in the destination cluster. It would be hard for a user to reach the root cause of the issue if they do not know the details. On the other hand, if we could use the _MigPlan_ exclusively for _State Migration_ we can disable its use for normal migrations and vice versa. Based on the `IncludedResources` API field, we can generate helpful warnings on _MigPlan_ beforehand.
-
-* Based on the type of the migration, we can also enable/disable indirect migration and hooks options. Also, for _State Migration_ we can provide users with further options for configuring permission/SCC information which wouldn't be available for normal migrations. The details of permission handling will be covered in a different enhancement.
-
-_MigPlan_ API will introduce a new field to indicate the type of the plan:
-
-```yaml
-// MigPlanSpec defines the desired state of MigPlan
-type MigPlanSpec struct {
-	[...]
-	
-	// Specifies type of the migration plan
-	PlanType  *PlanType `json:"planType,omitempty"`
-}
-
-type PlanType string
-```
-
-These fields will tie every plan to a specific type of migration. The plan cannot be used for a different type of migration once that field is set. The field can only be changed if there are no migrations assigned with it.
-
-### Approach 2: Introducing MigMigration API field to specify type of Migration
-
-This approach relies on changing the _MigMigration_ API instead of _MigPlan_ API. Existing API contains two different fields to specify whether its a Stage migration or a Rollback:
+This approach relies on changing the _MigMigration_ API. Existing API contains two different fields to specify whether its a Stage migration or a Rollback:
 
 ```golang
 type MigMigrationSpec struct {
@@ -107,29 +84,6 @@ type MigMigrationSpec struct {
 ```
 
 We will add logic to validate co-existence of _Rollback_, _Stage_, and _State_ options. 
-
-### Alternative: Change booleans to a typed field
-
-Out of the above, field `Stage` is required while `Rollback` is optional. The problem with the two booleans is that there are no validations in place when both of these fields co-exist. If we were to follow the same approach to introduce one new field for _Storage Conversion_ and _State Transfer_, we would need additional logic to validate the co-existence of 3 fields instead of just two. We can use this as an opportunity to clean this up and introduce 1 typed field to indicate the type of migration:
-
-```golang
-type MigMigrationSpec struct {
-	Type *MigrationType `json:"storageConversion,omitempty"`
-}
-
-type MigrationType string
-```
-
-MigrationType has four possible values: `Final`, `Stage`, `StateTransfer`, `StorageConversion`, `RollBack`.
-
-This will present some problems with existing _MigMigrations_. Since migrations are supposed to reach to completion, these problems are relatively easier to solve. 
-
-Existing CRs will not have the type field set, instead they will have the old booleans. In 1.7, we can deprecate the booleans and add controller logic to correctly set the Type field based on the old booleans. Then in later versions, we can remove the booleans altogether. Downgrades will be only possible from 1.7 to lower versions. 
-#### Pros and Cons
-
-> When users explicitely specify a type of Migration Plan, the controller can automatically change the validations based on the type and indicate users if they make mistakes specifying the fields. The validations will occur when creating a Migration Plan. For the latter approach, the same validations will happen at the time of creating a migration. The Migration Plan will still be created as usual.
-
-> Changing _MigPlan_ API introduces more upgrade/downgrade issues than changing _MigMigration_ API. Adding a new field on _MigPlan_ to identify its type will make it harder to associate existing _MigPlans_ with their types as these fields never existed in old API. On the other hand, since _MigMigrations_ are supposed to reach a terminal state, the surface area of upgrade/downgrade issues is much smaller than that of the former approach. 
 
 ### User Stories [optional]
 
@@ -162,6 +116,53 @@ General validations:
 2. Appropriate conditions should be set on the _MigPlan_ CR based on associated migrations
 
   - durable conditions should stop users from switching to a migration type that will fail due to wrong selections
+
+### Alternatives
+
+### Introducing MigPlan API field to specify type of migration
+
+* _Storage conversion_ is already possible in MTC 1.6 but it doesn't have a guided experience. The users need to set the right namespace and PV mappings in the Migration Plan, set the source & destination clusters to the same cluster, map storage classes and then perform a _State Migration_ to achieve storage conversion. For end users, this is hard to figure out without reading detailed supporting documentation. If we could mark a _MigPlan_ to be exclusively used for storage conversion, we can automatically choose the source, destination _MigCluster_ resources. We can also choose the namespace mappings correctly without the user having to provide it. Additionally, we can implement specific validations based on the type of the _MigPlan_. This wouldn't be possible if we don't know which type of migration the current plan will be used for.
+
+* If the users perform a _State Migration_ by selecting a subset of PVCs in the plan, those settings are persisted on the plan itself. However, that _MigPlan_ is still available for normal migrations. This presents with some edge cases that are hard to guard against. For instance, if a PVC is skipped from a state migration, it remains skipped during a final migration as well. But if a workload is using that PVC, it would fail to come up in the destination cluster. It would be hard for a user to reach the root cause of the issue if they do not know the details. On the other hand, if we could use the _MigPlan_ exclusively for _State Migration_ we can disable its use for normal migrations and vice versa. Based on the `IncludedResources` API field, we can generate helpful warnings on _MigPlan_ beforehand.
+
+* Based on the type of the migration, we can also enable/disable indirect migration and hooks options. Also, for _State Migration_ we can provide users with further options for configuring permission/SCC information which wouldn't be available for normal migrations. The details of permission handling will be covered in a different enhancement.
+
+_MigPlan_ API will introduce a new field to indicate the type of the plan:
+
+```yaml
+// MigPlanSpec defines the desired state of MigPlan
+type MigPlanSpec struct {
+	[...]
+	
+	// Specifies type of the migration plan
+	PlanType  *PlanType `json:"planType,omitempty"`
+}
+
+type PlanType string
+```
+
+These fields will tie every plan to a specific type of migration. The plan cannot be used for a different type of migration once that field is set. The field can only be changed if there are no migrations assigned with it.
+
+This approach makes upgrades/downgrades very hard to handle. We will revisit this approach later when we will upgrade our API from v1alpha1 to a newer version.
+
+### Change booleans to a typed field
+
+Out of the above, field `Stage` is required while `Rollback` is optional. The problem with the two booleans is that there are no validations in place when both of these fields co-exist. If we were to follow the same approach to introduce one new field for _Storage Conversion_ and _State Transfer_, we would need additional logic to validate the co-existence of 3 fields instead of just two. We can use this as an opportunity to clean this up and introduce 1 typed field to indicate the type of migration:
+
+```golang
+type MigMigrationSpec struct {
+	Type *MigrationType `json:"storageConversion,omitempty"`
+}
+
+type MigrationType string
+```
+
+MigrationType has four possible values: `Final`, `Stage`, `StateTransfer`, `StorageConversion`, `RollBack`.
+
+This will present some problems with existing _MigMigrations_. Since migrations are supposed to reach to completion, these problems are relatively easier to solve. 
+
+Existing CRs will not have the type field set, instead they will have the old booleans. In 1.7, we can deprecate the booleans and add controller logic to correctly set the Type field based on the old booleans. Then in later versions, we can remove the booleans altogether. Downgrades will be only possible from 1.7 to lower versions.
+
 ### Upgrade / Downgrade Strategy
 
 #### MigPlan approach
