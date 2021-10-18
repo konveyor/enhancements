@@ -27,9 +27,9 @@ MTC 1.6 introduces state migration which allows migrating PVCs within the same c
 
 ## Release Signoff Checklist
 
-- [ ] Enhancement is `implementable`
+- [x] Enhancement is `implementable`
 - [x] Design details are appropriately documented from clear requirements
-- [ ] Test plan is defined
+- [x] Test plan is defined
 - [ ] User-facing documentation is created
 
 ## Open Questions [optional]
@@ -62,7 +62,56 @@ The _MigMigration_ controller will choose any one of the below approaches to res
 
 4. Un-quiesce the workloads
 
-### Approach 2: Use Indirect Volume Migration
+### User Stories [optional]
+
+#### Story 1
+
+As a user, I would like to use _State Migration_ to migrate PVCs in the same namespace so that I can leverage MTC's storage class conversion capabilities to move my PVCs to a different storage provider.   
+
+## Design Details
+
+### Test Plan
+
+Storage Conversion from Portworx to OCS 4 will be tested in following scenarios:
+
+- If workloads are associated with PVCs, PVCs will be migrated to new storage class and the workloads are automatically updated to use the new PVCs
+
+- If workloads are not associated with PVCs, PVCs will be migrated to new storage class and the message with names of PVCs will be added to Migration to indicate the new PVCs
+### Upgrade / Downgrade Strategy
+
+The only API change needed is the switch that disables the automatic update of PVC references. Currently, I have not put much thought on where to keep it. It could be a _Spec_ field on _MigMigration_ CR or an annotation or a _MigrationController_ variable passed as environment variable through the configmap. 
+
+If it were to be a _Spec_ field on _MigMigration_, it will be an additive _optional_ field added to _MigMigration_ API: 
+
+```golang
+type MigMigrationSpec struct {
+	[...]
+	
+	AutoUpdatePVCRefs bool `json:"autoupdatepvcrefs,omitempty"`
+}
+```
+
+The default behavior is to turn the functionality OFF. The UI will set this value when creating MigMigrations whenever PVCs are migrated within the same namespace using _State Transfer_. 
+
+When upgrading from 1.7- versions, to 1.7 versions this field will be absent on all _MigMigration_ resources. However, _MigMigration_ resources are supposed to go to completion. The users ideally shouldn't have _Running_ migrations during an upgrade. But there could be blocked migrations waiting on perhaps a plan to become Ready. All such blocked migrations will automatically enable this functionality upon upgrade without the user noticing.
+
+When downgrading from 1.7+ versions to an older version, this feature will simply be absent. The extra _spec_ field present in _MigMigration_ CRs wont make any difference on the behavior of the controller.
+
+Alternatively, an annotation on _MigMigration_ CR would indicate the controller to auto update the PVC references:
+
+```golang
+apiVersion: migration.openshift.io/v1alpha1
+kind: MigMigration
+metadata:
+  annotations:
+    migration.openshift.io/auto-update-pvc-refs: "true"
+```
+
+Any existing resources from previous versions would not have the above annotation set. Thus, the functionality will be turned off for _MigMigration_ resources created in older versions of MTC.
+
+### Alternatives considered
+
+### Use Indirect Volume Migration
 
 1. Quiesce the workloads
 
@@ -72,7 +121,7 @@ The _MigMigration_ controller will choose any one of the below approaches to res
 
 4. Restore PVCs in the same namespace and restore data using Restic
 
-### Approach 3: Update PVs inplace without changing the user workloads
+### Update PVs inplace without changing the user workloads
 
 1. Quiesce the workloads
 
@@ -118,50 +167,4 @@ _Approach 1 and 3_ require additional storage of equal capacity created in the n
 
 _Approach 2_ uses Restic and thus, a replication repository for intermediate storage. Therefore, during the migration, the source namespace wouldn't require additional storage. The storage needs are delegated to the replication repository instead.
 
-### User Stories [optional]
-
-#### Story 1
-
-As a user, I would like to use _State Migration_ to migrate PVCs in the same namespace so that I can leverage MTC's storage class conversion capabilities to move my PVCs to a different storage provider.   
-
-### Implementation Details/Notes/Constraints [optional]
-
-In progress...
-
-## Design Details
-
-### Test Plan (TBD)
-
-In progress...
-
-### Upgrade / Downgrade Strategy
-
-The only API change needed is the switch that disables the automatic update of PVC references. Currently, I have not put much thought on where to keep it. It could be a _Spec_ field on _MigMigration_ CR or an annotation or a _MigrationController_ variable passed as environment variable through the configmap. 
-
-If it were to be a _Spec_ field on _MigMigration_, it will be an additive _optional_ field added to _MigMigration_ API: 
-
-```golang
-type MigMigrationSpec struct {
-	[...]
-	
-	AutoUpdatePVCRefs bool `json:"autoupdatepvcrefs,omitempty"`
-}
-```
-
-The default behavior is to turn the functionality on whenever PVCs are migrated within the same namespace using _State Transfer_. 
-
-When upgrading from 1.7- versions, to 1.7 versions this field will be absent on all _MigMigration_ resources. However, _MigMigration_ resources are supposed to go to completion. The users ideally shouldn't have _Running_ migrations during an upgrade. But there could be blocked migrations waiting on perhaps a plan to become Ready. All such blocked migrations will automatically enable this functionality upon upgrade without the user noticing.
-
-When downgrading from 1.7+ versions to an older version, this feature will simply be absent. The extra _spec_ field present in _MigMigration_ CRs wont make any difference on the behavior of the controller.
-
-Alternatively, an annotation on _MigMigration_ CR would indicate the controller to auto update the PVC references:
-
-```golang
-apiVersion: migration.openshift.io/v1alpha1
-kind: MigMigration
-metadata:
-  annotations:
-    migration.openshift.io/auto-update-pvc-refs: "true"
-```
-
-Any existing resources from previous versions would not have the above annotation set. Thus, the functionality will be turned off for _MigMigration_ resources created in older versions of MTC.
+For the above reasons, alternative approaches were discarded.
