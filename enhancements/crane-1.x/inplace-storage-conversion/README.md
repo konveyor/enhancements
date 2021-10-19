@@ -44,7 +44,9 @@ In MTC 1.6, the users can leverage _State Migration_ to migrate their PVCs to a 
 
 ### Goals
 
-> Allow storage class conversion within the same namespace when source and target PVC names are different 
+> Automate the process of re-attaching PVCs to workloads post a storage class conversion as doing it manually is not practical for bulk conversions
+
+> Ensure that the data is not lost during the re-attaching process
 
 ## Proposal
 During a state migration, the _MigPlan_ controller will determine whether any of the PVCs are being migrated within the same cluster and in the same namespace. If that's the case, it will raise a _Warning_ notifying the user about the problem. The _MigMigration_ controller will use this information to enable the automatic PVC update procedure. The default behavior would be to update the PVCs if such case arises. The users can disable the automatic updates either through a _Spec_ field, an annotation or a _MigrationController_ flag (to be decided).
