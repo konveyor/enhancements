@@ -29,7 +29,7 @@ This enhancement proposes API changes to build a full end-to-end UX around _Stor
 
 ## Release Signoff Checklist
 
-- [ ] Enhancement is `implementable`
+- [x] Enhancement is `implementable`
 - [x] Design details are appropriately documented from clear requirements
 - [x] Test plan is defined
 - [ ] User-facing documentation is created
