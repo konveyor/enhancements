@@ -110,11 +110,13 @@ What are the caveats to the implementation? What are some important details that
 didn't come across above. Go in to as much detail as necessary here. This might
 be a good place to talk about core concepts and how they relate.
 
-### Risks and Mitigations
+### Security, Risks, and Mitigations
 
-What are the risks of this proposal and how do we mitigate. Think broadly. For
-example, consider both security and how this will impact the larger OKD
-ecosystem.
+**Carefully think through the security implications for this change**
+
+What are the risks of this proposal and how do we mitigate. Think broadly. How
+will this impact the broader OKD ecosystem? Does this work in a managed services
+environment that has many tenants?
 
 How will security be reviewed and by whom? How will UX be reviewed and by whom?
 
