@@ -121,7 +121,7 @@ my application.*
 ##### AC006
 
 *As an Architect/Migrator I want to be able to specify the packages to be analyzed.
-If no packages are specified, all packages must be included in the analysis.*
+If no packages are specified, then all packages identified as 'application packages' will be analyzed.*
 
 ##### AC007
 
