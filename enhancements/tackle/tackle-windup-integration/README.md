@@ -105,7 +105,7 @@ source code or binary.*
 
 ##### AC003
 
-*As an Architect/Migrator I want to be able to use Git repositories or as input
+*As an Architect/Migrator I want to be able to use Git, SVN and Maven repositories as input
 for an analysis.*
 
 ##### AC004
