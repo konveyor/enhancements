@@ -110,8 +110,18 @@ for an analysis.*
 
 ##### AC004
 
-*As an Architect/Migrator I want to be able to upload binaries from my workstation
-as input for an analysis.*
+*As an Architect/Migrator I want to be able to upload one binary from my workstation
+as input for the analysis of a single application.*
+
+**Acceptance criteria**
+
+- the dialog to upload appears if the persona selects the `Upload a local binary` in the `Source for analysis` drop-down list
+- the dialog to upload must state the maximum allowed size in MB
+- the dialog to upload must give an error message if the binary exceeds the maximum size
+- the dialog to upload must distill down the set of extensions to the one allowed (jar, war, ear)
+- the dialog to upload must have a progress bar to let the user how the uploading is progressing
+- the dialog to upload must have the cancel icon to stop an upload
+- the dialog to upload must have the delete icon for deleting an already uploaded binary
 
 ##### AC005
 
