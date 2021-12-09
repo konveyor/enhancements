@@ -122,6 +122,7 @@ as input for the analysis of a single application.*
 - the dialog to upload must have a progress bar to let the user how the uploading is progressing
 - the dialog to upload must have the cancel icon to stop an upload
 - the dialog to upload must have the delete icon for deleting an already uploaded binary
+- the upload of binary is a mandatory step for each analysis execution. They will not be persisted within the Application Inventory (in iteration #1) for re-use in subsequent analyses.
 
 ##### AC005
 
