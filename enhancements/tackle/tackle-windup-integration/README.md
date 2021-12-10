@@ -147,6 +147,14 @@ An analysis can not be invoked unless at least one target is selected.
 
 *As an Architect/Migrator I want to be able to specify the packages to be analyzed.
 If no packages are specified, then all packages identified as 'application packages' will be analyzed.*
+Acceptance criteria:
+The user can navigate to the next or previous step in the analysis configuration without entering any package details.
+The user can manually add packages.
+The user can delete packages.
+The package/subpackage names must only contain alphanumeric characters and the period character. 
+There will be no validation of overlap, so for example the user could legitimately enter 
+mypackage.persistence
+mypackage.persistence.jdbc 
 
 ##### AC007
 
