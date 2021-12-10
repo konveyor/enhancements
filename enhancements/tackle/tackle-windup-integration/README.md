@@ -168,7 +168,13 @@ The dropdown list will be presented in alphabetical order.
 ##### AC008
 
 *As an Architect/Migrator I want to be able to 
-explicitly define which rules get executed during the analysis*
+see the summary of the analysis configuration before triggering the analysis execution
+
+Acceptance criteria:
+It must be possible to see all of the application(s) selected for analysis.
+It must be possible to see all of the analysis configuration parameters (target(s), source(s), etc.)
+It must be possible to invoke the analysis, cancel or return to editing the analysis configuration. 
+
 
 ##### AC009
 
