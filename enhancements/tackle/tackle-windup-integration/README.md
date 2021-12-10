@@ -173,6 +173,12 @@ explicitly define which rules get executed during the analysis*
 ##### AC009
 
 *As an Architect/Migrator I want to be able to provide custom rules for the analysis.*
+#### AC010
+As an Architect/Migrator I want to be able to select an application(s) for analysis
+
+Acceptance criteria:
+It must be possible to select an application for analysis.
+It will not be possible to select an application that has an analysis status of In progress.
 
 #### Analysis Output
 
