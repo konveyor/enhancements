@@ -207,6 +207,11 @@ Validation will ensure that any excluded tags are not specified in the included 
 
 *As a Architect/Migrator I want to get access to the result of the analysis (analysis report)
 of each individual application.*
+Acceptance criteria:
+For any application within the Application Inventory with an analysis status of Completed it must be possible to invoke an action to access the analysis static reports.
+The action is unavailable if the analysis status is not Completed.
+The reports will be opened in a separate tab of the browser.
+If a new analysis is invoked for a particular application then the static reports for an earlier analysis execution will no longer be accessible.  
 
 ##### AO002
 
