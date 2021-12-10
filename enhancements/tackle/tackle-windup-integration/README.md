@@ -186,6 +186,21 @@ Acceptance criteria:
 It must be possible to select an application for analysis.
 It will not be possible to select an application that has an analysis status of In progress.
 
+#### AC011
+As an Architect/Migrator I want to be able to specify which rule tags to be included in an analysis
+
+Acceptance criteria:
+It must be possible to select 0, 1 or many rules tags from the drop down list.
+The shipped collection of rules tags will be presented in alphabetical order.
+
+#### AC012
+As an Architect/Migrator I want to be able to specify which rule tags to be excluded in an analysis
+Acceptance criteria:
+It must be possible to select 0, 1 or many rules tags from the drop down list.
+The shipped collection of rules tags will be presented in alphabetical order.
+Validation will ensure that any excluded tags are not specified in the included list (above). 
+
+
 #### Analysis Output
 
 ##### AO001
