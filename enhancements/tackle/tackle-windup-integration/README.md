@@ -167,7 +167,7 @@ The dropdown list will be presented in alphabetical order.
 
 ##### AC008
 
-*As an Architect/Migrator I want to be able to include or exclude rules tags to
+*As an Architect/Migrator I want to be able to 
 explicitly define which rules get executed during the analysis*
 
 ##### AC009
