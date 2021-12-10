@@ -160,6 +160,10 @@ mypackage.persistence.jdbc
 
 *As an Architect/Migrator I want to be able to select the migration source for
 my application.*
+Acceptance criteria:
+The source field is optional. 
+The user can enter source(s) from the drop down list of shipped (predefined) sources  (a consolidated list of all of the sources used within the shipped rulesets).
+The dropdown list will be presented in alphabetical order.
 
 ##### AC008
 
