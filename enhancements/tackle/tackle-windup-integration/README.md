@@ -128,6 +128,20 @@ as input for the analysis of a single application.*
 
 *As an Architect/Migrator I want to be able to select the migration target for
 my application.*
+Set transformation path acceptance criteria:
+The primary list of targets will be presented as a series of buttons (panels) that the user can interact with (EAP, Containerization, Jakarta EE, Linux,OpenJDK, Camel, Quarkus, EAP, Spring Boot on RHR).
+The EAP target (version 7) will be selected by default with version 6 as the only other selectable value.
+Targets can be selected/deselected by clicking on the appropriate button. 
+The target button border will show which targets are selected (i.e. which buttons have been pressed).
+The icon for each target must be intuitive to understand (the ideal being that for targets that represent upstream projects the official project icon is used) and legal for use within an upstream project.
+This list of icons will not include any downstream product icons. 
+An analysis can not be invoked unless at least one target is selected. However the user is free to select target(s) via this screen and/or the advanced options.
+
+Target selection via advanced options acceptance criteria:
+The Target field will be pre-populated with the target(s) selected via the ‘Set transformation path’. 
+The user can enter an additional target(s) from the drop down list of shipped (predefined) targets (a consolidated list of all of the targets used within the shipped rulesets).
+The dropdown list will be presented in alphabetical order.
+An analysis can not be invoked unless at least one target is selected.
 
 ##### AC006
 
