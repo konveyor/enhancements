@@ -219,6 +219,12 @@ that has been analyzed.*
 summary level in terms of number of issues, story points, analysis configuration
 (source, target and options), for each analysis execution*
 
+Acceptance criteria:
+For each analysis execution that completes successfully a collection of data will be returned by the analysis process that will be persisted and exposed to the user via the Application Inventory. That data includes the analysis Id, analysis configuration parameters (target(s), source(s), etc.),  total number of story points and number of incidents by category (migration mandatory, migration optional, etc.).
+It must be possible to view the analysis history data for any application that has been analyzed. The data will be presented in Analysis Id sequence descending (so most recent to earliest sequence).
+The action to view the analysis history will only be available for applications that have at least 1 completed analysis.
+Analyses in progress, or failed executions will not be included in the analysis history. 
+
 
 ### Implementation Details/Notes/Constraints
 
