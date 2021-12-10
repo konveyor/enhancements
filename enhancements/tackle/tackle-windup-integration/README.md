@@ -230,6 +230,18 @@ It must be possible to view the analysis history data for any application that h
 The action to view the analysis history will only be available for applications that have at least 1 completed analysis.
 Analyses in progress, or failed executions will not be included in the analysis history. 
 
+#### AE001
+As an Architect/Migrator I want to be aware of the status of the most recent analyses execution for each application.
+
+Acceptance criteria:
+The analysis status for each application is visible in the Application Inventory.
+From the Application Inventory the user can see the status of the last analysis invoked for each application (the relationship between Application to Analysis is 
+1 : 0,1).
+An analysis can not be triggered if the analysis status is In progress.
+An analysis that is In progress can be cancelled.
+The cancel action is not available for Analyses that have a status of Completed.
+For an In progress analysis the user can find out the number of analysis steps completed and the total number of steps.
+To be very clear the visibility of the data will not be limited to the analyses that have been invoked by a particular user. Rather ALL analyses invoked by ALL users.
 
 ### Implementation Details/Notes/Constraints
 
