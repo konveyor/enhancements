@@ -115,31 +115,32 @@ as input for the analysis of a single application.*
 
 **Acceptance criteria**
 
-- the dialog to upload appears if the persona selects the `Upload a local binary` in the `Source for analysis` drop-down list
-- the dialog to upload must state the maximum allowed size in MB
-- the dialog to upload must give an error message if the binary exceeds the maximum size
-- the dialog to upload must distill down the set of extensions to the one allowed (jar, war, ear)
-- the dialog to upload must have a progress bar to let the user how the uploading is progressing
-- the dialog to upload must have the cancel icon to stop an upload
-- the dialog to upload must have the delete icon for deleting an already uploaded binary
-- the upload of binary is a mandatory step for each analysis execution. They will not be persisted within the Application Inventory (in iteration #1) for re-use in subsequent analyses.
+- The dialog to upload appears if the persona selects the `Upload a local binary` in the `Source for analysis` drop-down list
+- The dialog to upload must state the maximum allowed size in MB
+- The dialog to upload must give an error message if the binary exceeds the maximum size
+- The dialog to upload must distill down the set of extensions to the one allowed (jar, war, ear)
+- The dialog to upload must have a progress bar to let the user how the uploading is progressing
+- The dialog to upload must have the cancel icon to stop an upload
+- The dialog to upload must have the delete icon for deleting an already uploaded binary
+- The upload of binary is a mandatory step for each analysis execution. They will not be persisted within the Application Inventory (in iteration #1) for re-use in subsequent analyses.
 
 ##### AC005
 
 *As an Architect/Migrator I want to be able to select the migration target for
 my application.*
+
 **Set transformation path acceptance criteria:**
 
 - The primary list of targets will be presented as a series of buttons (panels) that the user can interact with (EAP, Containerization, Jakarta EE, Linux,OpenJDK, Camel, Quarkus, EAP, Spring Boot on RHR).
 - The EAP target (version 7) will be selected by default with version 6 as the only other selectable value.
-- Targets can be selected/deselected by clicking on the appropriate button. 
+- Targets can be selected/deselected by clicking on the appropriate button.
 - The target button border will show which targets are selected (i.e. which buttons have been pressed).
 - The icon for each target must be intuitive to understand (the ideal being that for targets that represent upstream projects the official project icon is used) and legal for use within an upstream project.
-- This list of icons will not include any downstream product icons. 
+- This list of icons will not include any downstream product icons.
 - An analysis can not be invoked unless at least one target is selected. However the user is free to select target(s) via this screen and/or the advanced options.
 
 **Target selection via advanced options acceptance criteria:**
-- The Target field will be pre-populated with the target(s) selected via the ‘Set transformation path’. 
+- The Target field will be pre-populated with the target(s) selected via the ‘Set transformation path’.
 - The user can enter an additional target(s) from the drop down list of shipped (predefined) targets (a consolidated list of all of the targets used within the shipped rulesets).
 - The dropdown list will be presented in alphabetical order.
 - An analysis can not be invoked unless at least one target is selected.
@@ -148,58 +149,66 @@ my application.*
 
 *As an Architect/Migrator I want to be able to specify the packages to be analyzed.
 If no packages are specified, then all packages identified as 'application packages' will be analyzed.*
-Acceptance criteria:
-The user can navigate to the next or previous step in the analysis configuration without entering any package details.
-The user can manually add packages.
-The user can delete packages.
-The package/subpackage names must only contain alphanumeric characters and the period character. 
-There will be no validation of overlap, so for example the user could legitimately enter 
-mypackage.persistence
-mypackage.persistence.jdbc 
+
+**Acceptance criteria:**
+
+- The user can navigate to the next or previous step in the analysis configuration without entering any package details.
+- The user can manually add packages.
+- The user can delete packages.
+- The package/subpackage names must only contain alphanumeric characters and the period character.
+- There will be no validation of overlap, so for example the user could legitimately enter mypackage.persistence mypackage.persistence.jdbc
 
 ##### AC007
 
 *As an Architect/Migrator I want to be able to select the migration source for
 my application.*
-Acceptance criteria:
-The source field is optional. 
-The user can enter source(s) from the drop down list of shipped (predefined) sources  (a consolidated list of all of the sources used within the shipped rulesets).
-The dropdown list will be presented in alphabetical order.
+
+**Acceptance criteria:**
+
+- The source field is optional.
+- The user can enter source(s) from the drop down list of shipped (predefined) sources  (a consolidated list of all of the sources used within the shipped rulesets).
+- The dropdown list will be presented in alphabetical order.
 
 ##### AC008
 
-*As an Architect/Migrator I want to be able to 
-see the summary of the analysis configuration before triggering the analysis execution
+*As an Architect/Migrator I want to be able to
+see the summary of the analysis configuration before triggering the analysis execution*
 
-Acceptance criteria:
-It must be possible to see all of the application(s) selected for analysis.
-It must be possible to see all of the analysis configuration parameters (target(s), source(s), etc.)
-It must be possible to invoke the analysis, cancel or return to editing the analysis configuration. 
+**Acceptance criteria:**
+
+- It must be possible to see all of the application(s) selected for analysis.
+- It must be possible to see all of the analysis configuration parameters (target(s), source(s), etc.)
+- It must be possible to invoke the analysis, cancel or return to editing the analysis configuration.
 
 
 ##### AC009
 
 *As an Architect/Migrator I want to be able to provide custom rules for the analysis.*
-#### AC010
-As an Architect/Migrator I want to be able to select an application(s) for analysis
 
-Acceptance criteria:
-It must be possible to select an application for analysis.
-It will not be possible to select an application that has an analysis status of In progress.
+#### AC010
+*As an Architect/Migrator I want to be able to select an application(s) for analysis.*
+
+**Acceptance criteria:**
+
+- It must be possible to select an application for analysis.
+- It will not be possible to select an application that has an analysis status of In progress.
 
 #### AC011
-As an Architect/Migrator I want to be able to specify which rule tags to be included in an analysis
+*As an Architect/Migrator I want to be able to specify which rule tags to be included in an analysis.*
 
-Acceptance criteria:
-It must be possible to select 0, 1 or many rules tags from the drop down list.
-The shipped collection of rules tags will be presented in alphabetical order.
+**Acceptance criteria:**
+
+- It must be possible to select 0, 1 or many rules tags from the drop down list.
+- The shipped collection of rules tags will be presented in alphabetical order.
 
 #### AC012
-As an Architect/Migrator I want to be able to specify which rule tags to be excluded in an analysis
-Acceptance criteria:
-It must be possible to select 0, 1 or many rules tags from the drop down list.
-The shipped collection of rules tags will be presented in alphabetical order.
-Validation will ensure that any excluded tags are not specified in the included list (above). 
+*As an Architect/Migrator I want to be able to specify which rule tags to be excluded in an analysis*
+
+**Acceptance criteria:**
+
+- It must be possible to select 0, 1 or many rules tags from the drop down list.
+- The shipped collection of rules tags will be presented in alphabetical order.
+- Validation will ensure that any excluded tags are not specified in the included list (above).
 
 
 #### Analysis Output
@@ -208,11 +217,13 @@ Validation will ensure that any excluded tags are not specified in the included 
 
 *As a Architect/Migrator I want to get access to the result of the analysis (analysis report)
 of each individual application.*
-Acceptance criteria:
-For any application within the Application Inventory with an analysis status of Completed it must be possible to invoke an action to access the analysis static reports.
-The action is unavailable if the analysis status is not Completed.
-The reports will be opened in a separate tab of the browser.
-If a new analysis is invoked for a particular application then the static reports for an earlier analysis execution will no longer be accessible.  
+
+**Acceptance criteria:**
+
+- For any application within the Application Inventory with an analysis status of Completed it must be possible to invoke an action to access the analysis static reports.
+- The action is unavailable if the analysis status is not Completed.
+- The reports will be opened in a separate tab of the browser.
+- If a new analysis is invoked for a particular application then the static reports for an earlier analysis execution will no longer be accessible.  
 
 ##### AO002
 
@@ -225,24 +236,26 @@ that has been analyzed.*
 summary level in terms of number of issues, story points, analysis configuration
 (source, target and options), for each analysis execution*
 
-Acceptance criteria:
-For each analysis execution that completes successfully a collection of data will be returned by the analysis process that will be persisted and exposed to the user via the Application Inventory. That data includes the analysis Id, analysis configuration parameters (target(s), source(s), etc.),  total number of story points and number of incidents by category (migration mandatory, migration optional, etc.).
-It must be possible to view the analysis history data for any application that has been analyzed. The data will be presented in Analysis Id sequence descending (so most recent to earliest sequence).
-The action to view the analysis history will only be available for applications that have at least 1 completed analysis.
-Analyses in progress, or failed executions will not be included in the analysis history. 
+**Acceptance criteria:**
+
+- For each analysis execution that completes successfully a collection of data will be returned by the analysis process that will be persisted and exposed to the user via the Application Inventory. That data includes the analysis Id, analysis configuration parameters (target(s), source(s), etc.),  total number of story points and number of incidents by category (migration mandatory, migration optional, etc.).
+- It must be possible to view the analysis history data for any application that has been analyzed. The data will be presented in Analysis Id sequence descending (so most recent to earliest sequence).
+- The action to view the analysis history will only be available for applications that have at least 1 completed analysis.
+Analyses in progress, or failed executions will not be included in the analysis history.
 
 #### AE001
-As an Architect/Migrator I want to be aware of the status of the most recent analyses execution for each application.
+*As an Architect/Migrator I want to be aware of the status of the most recent analyses execution for each application.*
 
-Acceptance criteria:
-The analysis status for each application is visible in the Application Inventory.
-From the Application Inventory the user can see the status of the last analysis invoked for each application (the relationship between Application to Analysis is 
+**Acceptance criteria:**
+
+- The analysis status for each application is visible in the Application Inventory.
+- From the Application Inventory the user can see the status of the last analysis invoked for each application (the relationship between Application to Analysis is
 1 : 0,1).
-An analysis can not be triggered if the analysis status is In progress.
-An analysis that is In progress can be cancelled.
-The cancel action is not available for Analyses that have a status of Completed.
-For an In progress analysis the user can find out the number of analysis steps completed and the total number of steps.
-To be very clear the visibility of the data will not be limited to the analyses that have been invoked by a particular user. Rather ALL analyses invoked by ALL users.
+- An analysis can not be triggered if the analysis status is In progress.
+- An analysis that is In progress can be cancelled.
+- The cancel action is not available for Analyses that have a status of Completed.
+- For an In progress analysis the user can find out the number of analysis steps completed and the total number of steps.
+- To be very clear the visibility of the data will not be limited to the analyses that have been invoked by a particular user. Rather ALL analyses invoked by ALL users.
 
 ### Implementation Details/Notes/Constraints
 
