@@ -62,6 +62,8 @@ informed decisions and guidance for migrators about the adaptations that might
 be required on applications. This helps reducing risks and making the migration
 and modernization process measurable and predictable.
 
+It is important to note that in most cases, analyzing the dependencies an application might have is more important than the application source itself, as these dependencies often include corporate frameworks that are common to many applications and can be used to classify them in application types. Almost in all scenarios the key to large scale migrations resides in migrating the corporate frameworks first during the pilot phase to have a common ground to industrialize the process for the rest of the application portfolio. Because of this, it is essential to include the analysis of dependencies even when dealing with just source code instead of binaries that might have these dependencies embedded.
+
 ### Goals
 
 - Bring application analysis capabilities into the Tackle project.
