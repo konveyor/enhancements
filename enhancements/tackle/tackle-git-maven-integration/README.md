@@ -114,6 +114,11 @@ A member of the operations or security team of the organization undergoing the a
 
 ##### CM006
 
+*As an Administrator I want to be able to manage Proxy User/Password credentials.*
+
+
+##### CM007
+
 *As an Architect I want to be able to assign existing credentials to applications on a per application or bulk basis.*
 
 
@@ -123,21 +128,17 @@ A member of the operations or security team of the organization undergoing the a
 
 ##### GC001
 
-*As an Architect I want to be able to define per application or at bulk whether new changes in a repository are acquired via a pull or by performing a full clone on each analysis.*
+*As an Administrator I want to be able to manage global Git configuration.*
 
 ##### GC002
 
-*As an Administrator I want to be able to manage global Git configuration.*
+*As an Administrator I want to be able to define the default behavior for whether new changes in a repository are acquired via a pull or by performing a full clone on each analysis.*
 
 ##### GC003
 
-*As an Administrator I want to be able to define the default behavior for whether new changes in a repository are acquired via a pull or by performing a full clone on each analysis.*
-
-##### GC004
-
 *As an Administrator I want to be able to configure if insecure Git repositories can be consumed.*
 
-##### GC005
+##### GC004
 
 *As an Architect I want to be able to associate a Git repository to an application.*
 
@@ -145,55 +146,77 @@ A member of the operations or security team of the organization undergoing the a
 
 #### Subversion Configuration
 
+
 ##### SC001
-
-*As an Architect I want to be able to define per application or at bulk whether new changes in a repository are acquired via an update or by performing a full checkout on each analysis.*
-
-##### SC002
 
 *As an Administrator I want to be able to manage Global Subversion configuration.*
 
-##### SC003
+##### SC002
 
 *As an Administrator I want to be able to define the default behavior for whether new changes in a repository are acquired via an update or by performing a full checkout on each analysis.*
 
-##### SC004
+##### SC003
 
 *As an Administrator I want to be able to configure if insecure Subversion repositories can be consumed.*
 
-##### SC005
+##### SC004
 
 *As an Architect I want to be able to associate a Subversion repository to an application.*
 
 #### Maven Configuration
 
+
 ##### MC001
-
-*As an Architect I want to be able to define per application or at bulk if an update should be forced for artifacts and dependencies on each analysis.*
-
-##### MC002
 
 *As an Administrator I want to be able to manage global Maven configuration.*
 
-##### MC003
+##### MC002
 
 *As an Administrator I want to be able to configure the default behavior for forced updates for artifacts and dependencies on each analysis.*
 
-##### MC004
+##### MC003
 
 *As an Administrator I want to be able to configure if insecure Artifact Repositories can be consumed.*
 
-##### MC005
+##### MC004
 
 *As an Administrator I want to be able to know the size of the local artifact repository.*
 
-##### MC006
+##### MC005
 
 *As an Administrator I want to be able to purge the local artifact repository.*
 
-##### MC007
+##### MC006
 
 *As an Architect I want to be able to associate an artifact with an application.*
+
+
+#### Proxy Configuration
+
+##### PC001
+
+*As an Administrator I want to be able to manage global Proxy configuration.*
+
+##### PC002
+
+*As an Administrator I want to be able to configure a HTTP proxy host including host and port*
+
+##### PC003
+
+*As an Administrator I want to be able to assign credentials to a HTTP proxy*
+
+##### PC004
+
+*As an Administrator I want to be able to configure a HTTPS proxy host including host and port*
+
+##### PC005
+
+*As an Administrator I want to be able to assign credentials to a HTTPS proxy*
+
+##### PC006
+
+*As an Administrator I want to be able to configure a list of hosts to exclude from HTTP/HTTPS proxy*
+
 
 ### Functional Specification
 
@@ -203,9 +226,10 @@ A member of the operations or security team of the organization undergoing the a
 
 - [GLC001](#GLC001)
 - [CM001](#CM001)
-- [GC002](#GC002)
-- [SC002](#SC002)
-- [MC002](#MC002)
+- [GC001](#GC001)
+- [SC001](#SC001)
+- [MC001](#MC001)
+- [PC001](#PC001)
 
 ##### Involved Personas
 
@@ -231,10 +255,14 @@ The Control Menu on the left will display the following options under the Admini
   - Maven
 - Proxy
 
+Organization Administrators will have access to the Administrator perspective, but only the "Credentials" option will be available on the left menu.
+
 For the Developer perspective, the same options from previous releases remain:
 - Application Inventory
 - Reports
 - Controls
+
+
 
 #### Credentials Management
 
@@ -249,6 +277,7 @@ For the Developer perspective, the same options from previous releases remain:
 ##### Involved Personas
 
 - [Administrator](#administrator)
+- [Organization Administrator](#organization-administrator)
 
 
 ##### Description
@@ -274,6 +303,7 @@ By clicking on the “Create new” button, the system will open a modal window 
 - Type: Dropdown, single selection. Values:
   - Source Control
   - Maven Settings File
+  - Proxy
 
 ![Create credentials](images/credentials-create-main.png?raw=true "Create credentials")
 
@@ -285,7 +315,7 @@ If the user selects “Source Control” in the Type field, the following fields
 ![Create credentials](images/credentials-create-sc.png?raw=true "Create credentials")
 
 
-If the user selects "Username/Password" in the "User credentials" dropdown, the following fields will load dinamically:
+If the user selects "Username/Password" in the "User credentials" dropdown, the following fields will load dynamically:
 
 - Username: String
 - Password: String (Hidden)
@@ -293,7 +323,7 @@ If the user selects "Username/Password" in the "User credentials" dropdown, the 
 ![Create credentials](images/credentials-create-sc-up.png?raw=true "Create credentials")
 
 
-If the user selects "SCM Private Key/Passphrase" in the "User credentials" dropdown, the following fields will load dinamically:
+If the user selects "SCM Private Key/Passphrase" in the "User credentials" dropdown, the following fields will load dynamically:
 
 - SCM Private Key: String.
 - Private Key Passphrase: String (Hidden)
@@ -309,6 +339,11 @@ In case the user selects "Maven Settings File" in the "Type" dropdown, the follo
 ![Create credentials](images/credentials-create-maven.png?raw=true "Create credentials")
 
 As in the SCM Private Key field, the user should be able to paste the Key content directly or drag and drop the settings.xml file. Again, if the user goes for the second approach, the file will be uploaded to the system and displayed on the field afterwards.
+
+Finally, if the user selects "Proxy", the following fields will load dynamically:
+
+- Username: String
+- Password: String (Hidden)
 
 There will be two buttons at the bottom of the modal window:
 - **Save**: Validates the input and creates a new credential. SCM keys and Maven settings.xml files must be parsed and checked for validity. If the validation fails, an error message displaying “not a valid key/XML file” should be displayed.
@@ -330,13 +365,165 @@ Finally, for source credentials using SCM Private Key/Passphrase, the approach w
 
 ![Edit credentials](images/credentials-edit-sc-spkp.png?raw=true "Edit credentials")
 
-The SCM Private Key field will display "Encypted" as well, with the Private Key Passphrase field displaying a hidden value.
+The SCM Private Key field will display "Encrypted" as well, with the Private Key Passphrase field displaying a hidden value.
 
 ###### Delete Credentials
 
 The delete button on a credential from the list available on the main view will delete a set of credentials after user confirmation. If the credentials have been associated with any application, the system will ask for additional confirmation with the following message:
 
 ![Delete credentials](images/credentials-delete.png?raw=true "Delete credentials")
+
+#### Git Configuration
+
+##### Related Use Cases
+
+- [GC001](#GC001)
+- [GC002](#GC002)
+- [GC003](#GC003)
+
+
+##### Involved Personas
+
+- [Administrator](#administrator)
+
+
+##### Description
+
+Clicking on the "Git" suboption under the "Repositories" option on the left menu from the Administrator perspective will open the Git configuration view. This view will include the following fields:
+
+- Acquiring new changes: Radio, single option. Values:
+  - Acquire via a pull.
+  - Acquire by performing a full clone on each analysis.
+- Consume insecure Git repositories: Switch.
+
+#### Subversion Configuration
+
+##### Related Use Cases
+
+- [SC001](#SC001)
+- [SC002](#SC002)
+- [SC003](#SC003)
+
+
+##### Involved Personas
+
+- [Administrator](#administrator)
+
+
+##### Description
+
+Clicking on the "Subversion" suboption under the "Repositories" option on the left menu from the Administrator perspective will open the Subversion configuration view. This view will include the following fields:
+
+- Acquiring new changes: Radio, single option. Values:
+  - Acquire via an update.
+  - Acquire by performing a full checkout on each analysis.
+- Consume insecure Subversion repositories: Switch.
+
+
+#### Maven Configuration
+
+##### Related Use Cases
+
+- [MC001](#MC001)
+- [MC002](#MC002)
+- [MC003](#MC003)
+- [MC004](#MC004)
+- [MC005](#MC005)
+
+
+##### Involved Personas
+
+- [Administrator](#administrator)
+
+
+##### Description
+
+Clicking on the "Maven" suboption under the "Repositories" option on the left menu from the Administrator perspective will open the Maven configuration view. This view will include the following fields:
+
+- Repository size: Read only. Must include used size out of the available size for Maven dependencies.
+- Force update of dependencies: Switch. Disabled by default.
+- Consume insecure artifact repositories: Switch. Disabled by default.
+
+The view must include a button "Clear repository" to purge the local Maven repository. Clicking on it will open a confirmation window with the following message: *This will clear the local Maven repository and considerably slow down builds until dependencies are collected again. Do you wish to continue?*.
+
+
+#### Proxy Configuration
+
+##### Related Use Cases
+
+- [PC001](#PC001)
+- [PC002](#PC002)
+- [PC003](#PC003)
+- [PC004](#PC004)
+- [PC005](#PC005)
+- [PC006](#PC006)
+
+
+##### Involved Personas
+
+- [Administrator](#administrator)
+
+
+##### Description
+
+The Proxy configuration view can be reached by clicking on the “Proxy” option from the Control Menu from the Administrator Perspective. It will display the following fields:
+
+- HTTP proxy: Switch, disabled by default.
+- HTTPS proxy: Switch, disabled by default.
+
+Enabling the "HTTP proxy" switch will dynamically load the following nested fields:
+
+- HTTP proxy host: String
+- HTTP proxy port: Numeric
+- Authentication: Switch, disabled by default.
+
+If the user enables the "Authentication" switch, the following nested field will load dynamically:
+
+- HTTP proxy credentials: Dropdown, single selection. Values are populated from available Proxy credentials.
+
+Similarly, if the user enables the "HTTPS proxy" switch, the following nested fields will be loaded dynamically:
+
+- HTTPS proxy host: String
+- HTTPS proxy port: Numeric
+- Authentication: Switch, disabled by default.
+
+In the same fashion as before, if the user enables the "Authentication" switch, the following nested field will load dynamically:
+
+- HTTPS proxy credentials: Dropdown, single selection. Values are populated from available Proxy credentials.
+
+Enabling any of the "HTTP proxy" or "HTTPS proxy" switches will dynamically load the following field at the bottom of the screen:
+
+- Hosts to exclude from HTTP/HTTPS proxy: Textbox.
+
+This field should not look nested to either of the switches, as it applies to both proxy configurations. The list of hosts to exclude should be comma separated.
+
+
+#### Assign Credentials to Applications
+
+##### Related Use Cases
+
+- [CM007](#CM007)
+
+##### Involved Personas
+
+- [Architect](#architect)
+
+
+##### Description
+
+
+#### Assign Credentials to Applications
+
+##### Related Use Cases
+
+- [CM006](#CM006)
+
+##### Involved Personas
+
+- [Architect](#architect)
+
+
+##### Description
 
 
 ### Implementation Details/Notes/Constraints
@@ -372,8 +559,8 @@ TBD
 
 ## Alternatives
 
-TBD
+None.
 
 ## Infrastructure Needed
 
-TBD
+No additional infrastructure is required for this enhancement.
