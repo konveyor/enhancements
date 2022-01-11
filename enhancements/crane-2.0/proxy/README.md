@@ -33,8 +33,10 @@ source clusters.
 
 ## Motivation
 
-The primary motivation is to prevent CORS issues. We must also store user
-credentials so we can act on behalf of a user.
+The primary motivation is to prevent CORS issues when showing users information
+in the UI. We don't expect this to be used with any other piece of crane 2.0.
+  
+We must also store user credentials so we can act on behalf of a user.
 
 ## Non-goals
 - Though storing user credentials plays a part in this Enhancement we do not
