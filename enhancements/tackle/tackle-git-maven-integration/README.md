@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2021-11-20
-last-updated: 2022-01-50
+last-updated: 2022-01-12
 status: provisional
 see-also:
   -   
@@ -29,7 +29,7 @@ superseded-by:
 
 ## Open Questions
 
-
+None so far.
 
 
 ## Summary
@@ -121,7 +121,9 @@ A member of the operations or security team of the organization undergoing the a
 
 *As an Architect I want to be able to assign existing credentials to applications on a per application or bulk basis.*
 
+##### CM008
 
+*As a Migrator or an Architect I want to be able to filter applications by the type of credentials assigned to it*
 
 #### Git Configuration
 
@@ -141,6 +143,10 @@ A member of the operations or security team of the organization undergoing the a
 ##### GC004
 
 *As an Architect I want to be able to associate a Git repository to an application.*
+
+##### GC005
+
+*As a Migrator or an Architect I want to be able to filter applications by having a Git repository assigned*
 
 
 
@@ -162,6 +168,10 @@ A member of the operations or security team of the organization undergoing the a
 ##### SC004
 
 *As an Architect I want to be able to associate a Subversion repository to an application.*
+
+##### SC005
+
+*As a Migrator or an Architect I want to be able to filter applications by having a Subversion repository assigned*
 
 #### Maven Configuration
 
@@ -189,6 +199,10 @@ A member of the operations or security team of the organization undergoing the a
 ##### MC006
 
 *As an Architect I want to be able to associate an artifact with an application.*
+
+##### MC007
+
+*As a Migrator or an Architect I want to be able to filter applications by having a Maven artifact assigned*
 
 
 #### Proxy Configuration
@@ -396,6 +410,8 @@ Clicking on the "Git" suboption under the "Repositories" option on the left menu
   - Acquire by performing a full clone on each analysis.
 - Consume insecure Git repositories: Switch.
 
+![Git Configuration](images/git-config.png?raw=true "Git Configuration")
+
 #### Subversion Configuration
 
 ##### Related Use Cases
@@ -418,6 +434,8 @@ Clicking on the "Subversion" suboption under the "Repositories" option on the le
   - Acquire via an update.
   - Acquire by performing a full checkout on each analysis.
 - Consume insecure Subversion repositories: Switch.
+
+![Subversion Configuration](images/svn-config.png?raw=true "Subversion Configuration")
 
 
 #### Maven Configuration
@@ -444,7 +462,13 @@ Clicking on the "Maven" suboption under the "Repositories" option on the left me
 - Force update of dependencies: Switch. Disabled by default.
 - Consume insecure artifact repositories: Switch. Disabled by default.
 
+![Maven Configuration](images/maven-config.png?raw=true "Maven Configuration")
+
 The view must include a button "Clear repository" to purge the local Maven repository. Clicking on it will open a confirmation window with the following message: *This will clear the local Maven repository and considerably slow down builds until dependencies are collected again. Do you wish to continue?*.
+
+It would be advisable to include tooltips to explain fields:
+
+![Maven Configuration](images/maven-config-onhover.png?raw=true "Maven Configuration")
 
 
 #### Proxy Configuration
@@ -471,15 +495,21 @@ The Proxy configuration view can be reached by clicking on the “Proxy” optio
 - HTTP proxy: Switch, disabled by default.
 - HTTPS proxy: Switch, disabled by default.
 
+![Proxy Configuration](images/proxy-config.png?raw=true "Proxy Configuration")
+
 Enabling the "HTTP proxy" switch will dynamically load the following nested fields:
 
 - HTTP proxy host: String
 - HTTP proxy port: Numeric
 - Authentication: Switch, disabled by default.
 
+![Proxy Configuration](images/proxy-config-http.png?raw=true "Proxy Configuration")
+
 If the user enables the "Authentication" switch, the following nested field will load dynamically:
 
 - HTTP proxy credentials: Dropdown, single selection. Values are populated from available Proxy credentials.
+
+![Proxy Configuration](images/proxy-config-http-auth.png?raw=true "Proxy Configuration")
 
 Similarly, if the user enables the "HTTPS proxy" switch, the following nested fields will be loaded dynamically:
 
@@ -487,9 +517,13 @@ Similarly, if the user enables the "HTTPS proxy" switch, the following nested fi
 - HTTPS proxy port: Numeric
 - Authentication: Switch, disabled by default.
 
+![Proxy Configuration](images/proxy-config-https.png?raw=true "Proxy Configuration")
+
 In the same fashion as before, if the user enables the "Authentication" switch, the following nested field will load dynamically:
 
 - HTTPS proxy credentials: Dropdown, single selection. Values are populated from available Proxy credentials.
+
+![Proxy Configuration](images/proxy-config-https-auth.png?raw=true "Proxy Configuration")
 
 Enabling any of the "HTTP proxy" or "HTTPS proxy" switches will dynamically load the following field at the bottom of the screen:
 
@@ -511,12 +545,62 @@ This field should not look nested to either of the switches, as it applies to bo
 
 ##### Description
 
+###### Bulk Assignment
 
-#### Assign Credentials to Applications
+The Application Inventory view will include a new button “Manage Credentials” in the kebab menu of the main table. This button will be enabled only if at least one application has been selected on the table below.
+
+
+![Bulk Assignment](images/assign-credentials-bulk.png?raw=true "Bulk Assignment")
+
+
+Clicking on the button will open a modal window with the following fields:
+
+
+- Selected applications: List of the selected applications. Non-editable.
+- Source credentials: Dropdown
+- Maven settings: Dropdown
+
+![Bulk Assignment](images/assign-credentials-bulk-modal.png?raw=true "Bulk Assignment")
+
+If all the applications selected happen to have the same values for a field, it will appear selected. If not, the field will appear with no selection. The values for each field will come from the list of credentials already available in the system:
+
+- The Source credentials dropdown will display a list with all Source credentials available on the system.
+- The Maven credentials dropdown will display a list of all Maven Settings file credentials available on the system.
+
+![Bulk Assignment](images/assign-credentials-bulk-modal-filled.png?raw=true "Bulk Assignment")
+
+If any of the applications already has any credentials assigned, a warning should be displayed on the modal window.
+
+Clicking on Save will assign the credentials to the selected applications. After the assignment is done, credentials type should appear on the expandable section for each application details:
+
+![Bulk Assignment](images/assign-credentials-bulk-result.png?raw=true "Bulk Assignment")
+
+Possible values will be Source and Source & Maven.
+
+
+###### Individual Assignment
+
+Credentials can also be assigned on a per application basis. The kebab menu on each application row will include a new option "Manage credentials".
+
+![Individual Assignment](images/assign-credentials-single.png?raw=true "Individual Assignment")
+
+This will open a modal window with the following fields:
+
+- Application: Selected application. Non-editable.
+- Source credentials: Dropdown
+- Maven settings: Dropdown
+
+![Individual Assignment](images/assign-credentials-single-modal.png?raw=true "Individual Assignment")
+
+The Save button won't be enabled unless changes are made on any of the editable fields.
+
+#### Repository configuration at Application level
 
 ##### Related Use Cases
 
-- [CM006](#CM006)
+- [GC004](#GC004)
+- [SC004](#SC004)
+- [MC006](#MC006)
 
 ##### Involved Personas
 
@@ -525,6 +609,70 @@ This field should not look nested to either of the switches, as it applies to bo
 
 ##### Description
 
+Application creation and edition modal windows will be rearranged to accommodate repository information. The windows will be divided in three expandable sections, with different field on each one of them:
+
+-  Basic Information:
+  - Name: String. Required.
+  - Description: Textbox.
+  - Business service: Dropdown. Multiple selection. Values are populated from the list of available Business Services.
+  - Tags: Dropdown. Multiple selection. Values are populated from the list of available Tags.
+  - Comments: Textbox.
+
+![Repository configuration](images/new-app-basic.png?raw=true "Repository configuration")
+
+- Source code:
+  - Source repository: String. Required if either Branch or Root path have any value.
+  - Branch: String.
+  - Root path: String.
+
+![Repository configuration](images/new-app-source.png?raw=true "Repository configuration")
+
+- Binary:
+  - Group: String. Required if any other field from the Binary section has a value.
+  - Artifact: String. Required if any other field from the Binary section has a value.
+  - Version: String. Required if any other field from the Binary section has a value.
+  - Repository URL: String. Required if any other field from the Binary section has a value.
+
+![Repository configuration](images/new-app-binary.png?raw=true "Repository configuration")
+
+Some validations rules will be required, as source and binary fields are not mandatory but partially filling them shouldn't be allowed. If the user enters partial values on the Source or Binary sections, validation will be executed when clicking the "Create" button. For example, if the user only enters the Group for a binary:
+
+![Repository configuration](images/new-app-binary-validation1.png?raw=true "Repository configuration")
+
+Validation will be executed when clicking on the create button, indicating the missing fields:
+
+![Repository configuration](images/new-app-binary-validation2.png?raw=true "Repository configuration")
+
+The same applies for fields in the Source section when Branch or Root path values are entered without a repository.
+
+Based on the Source repository URL, the system should be able to determine the repository kind (Git or Subversion) and store it accordingly.
+
+#### Additional filtering
+
+##### Related Use Cases
+
+- [CM008](#CM008)
+- [GC005](#GC005)
+- [SC005](#SC005)
+- [MC007](#MC007)
+
+##### Involved Personas
+
+- [Architect](#architect)
+- [Migrator](#migrator)
+
+
+##### Description
+
+New filters should be implemented to allow filtering based on criteria related to the new information available on the application profile:
+
+- **Credentials**: Kind of credentials assigned to a given application. Values:
+  - Source
+  - Maven
+  - None
+- **Git repository**: Applications that have an associated Git repository.
+- **Subversion repository**: Applications that have an associated Subversion repository.
+- **Maven artifact**: Applications that have an associated Maven artifact.
 
 ### Implementation Details/Notes/Constraints
 
