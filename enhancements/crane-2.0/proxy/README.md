@@ -46,20 +46,16 @@ data returned by clusters.
 
 ## Proposal
 
-- Store a list of proxies in a CR. This can be a shared CR for other components
-to assist looking up credentials.
-- Within the CR we will store a cluster/namespace/secret combination
-- Create a proxy service using go httputil
-- A ReverseProxy will be created for each cluster
-- When setting up the ReverseProxy we will get the destination URL from a secret
-- The secret will be stored in the namespace specified on the CR
-- The secret will also contain credentials for requests
+- Store a list of proxies in a Configmap.
+- The list will be a namespace/name combination for each connection to be proxied
+- This will essentially be a Ref to a secret containing the URL and credentials
 - Credentials will not be used directly by the proxy
+- Create a proxy service using go httputil
 - We will use gin-gonic to mux connections based on request path
-- Each request will take the form of `/cluster/namespace/secret/*request`
+- Each request will take the form of `/namespace/name/*proxyPath`
 - We will remove the prefix before passing it on to the cluster.
-- Communication with the pod can be acheived by running it within the same pod
-- If necessary we can expose the proxy as a service.
+- The proxy will be exposed via a route to enable client communication.
+- SSL will be provided by edge termination for the route
 
 ## Links
 [httputil](https://pkg.go.dev/net/http/httputil)  
