@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2021-11-19
-last-updated: 2021-12-15
+last-updated: 2022-01-26
 status: provisional
 see-also:
   -   
@@ -31,6 +31,7 @@ superseded-by:
 
 - **What would be the integration mechanism between the Application Inventory/Tackle
 Hub and Windup?**
+
   - *Tackle Analysis API*
     - Tackle Analysis is deployed as a service by the Tackle Operator.
     - The analysis is triggered by Tackle Hub via the Tackle Analysis API.
@@ -42,6 +43,8 @@ Hub and Windup?**
     - Expose the resulting HTML report to be uploaded to Tackle Hub. The wrapper is
     running in a pod that is deleted when complete. The HTML report can be displayed
     by the UI directly from Tackle Hub.
+
+Tackle 2.0 will use the Windup CLI wrapper approach, leveraging the new addon architecture. Once the Tackle Analysis API is mature enough, two flavors of this integration will be made available for users to decide the most suitable approach considering their potential resources constraints.
 
 
 ## Summary
@@ -261,7 +264,61 @@ Analyses in progress, or failed executions will not be included in the analysis 
 
 ### Implementation Details/Notes/Constraints
 
-TBD
+#### Maven and Windup CLI commands to be executed by the addon
+
+[AC001](#AC001) and [AC002](#AC002) effectively define three analysis modes: Source, Source + Dependencies and Binary. Each one of these modes will require a different set of Maven and Windup commands. The following points will provide examples of how these commands could potentially look like.
+
+>**Note** - The mta-cli command is likely to be replaced with a windup-cli command instead for the upstream Windup release. This is yet to be confirmed.
+
+##### Source mode
+
+Potentially the most straightforward mode of the three. Once the repository has been cloned, and provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
+
+```shell
+mta-cli --input $HOME/<repo_root>/<path> --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --sourceMode --output <bucket>
+```
+
+If no custom rules are provided in the request, the --userRulesDirectory flag should be skipped.
+
+##### Source + Dependencies mode
+
+The approach for this will be to download all project dependencies in a directory leveraging the Maven dependencies plugin and setting that directory as an additional input for the source analysis. First of all, provided the settings.xml file has been sent in the request and is stored in the $HOME directory:
+
+```shell
+mvn -f $HOME/<repo_root>/<path>/pom.xml -s $HOME/settings.xml dependency:copy-dependencies -DoutputDirectory=$HOME/dependencies
+```
+
+If no settings file was provided in the request, the "-s" part of the command should be skipped.
+
+Once all dependencies have been downloaded, we will use the following command, provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
+
+```shell
+mta-cli --input $HOME/<repo_root>/<path> --input $HOME/dependencies/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --sourceMode --output <bucket>
+```
+
+If no custom rules are provided in the request, the --userRulesDirectory flag should be skipped.
+
+##### Binary Mode
+
+For the binary mode we will leverage the Maven dependencies plugin to retrieve the artifact to be analyzed using its GAV coordinates (potentially adding packaging as well for EAR and WAR artifacts). For that, provided the settings.xml file has been sent in the request and is stored in the $HOME directory:
+
+```shell
+mvn -s $HOME/settings.xml dependency:copy -Dmdep.useBaseVersion=true -DoutputDirectory=$HOME/binaries -Dartifact=<group>:<artifact>:<version>:<packaging>
+```
+
+If no settings file was provided in the request, the "-s" part of the command should be skipped. Also, if no packaging is provided in the request, the format for the -Dartifact flag should be \<group>:\<artifact>:\<version>.
+
+Now, with the artifact available in $HOME/binaries, we can execute the analysis, provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
+
+```shell
+mta-cli --input $HOME/binaries/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
+```
+
+If no custom rules are provided in the request, the --userRulesDirectory flag should be skipped.
+
+#### Purging the local Maven repository
+
+Since no Maven builds are going to be executed by the addon, it should be safe to delete the local Maven repository located in *$HOME/.m2*. None of the analysis directly consume that directory, as dependencies are copied to the $HOME/dependencies on the Source + Dependencies mode for each analysis.  
 
 ### Security, Risks, and Mitigations
 
