@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2021-11-20
-last-updated: 2022-01-12
+last-updated: 2022-01-26
 status: provisional
 see-also:
   -   
@@ -132,19 +132,16 @@ A member of the operations or security team of the organization undergoing the a
 
 *As an Administrator I want to be able to manage global Git configuration.*
 
+
 ##### GC002
 
-*As an Administrator I want to be able to define the default behavior for whether new changes in a repository are acquired via a pull or by performing a full clone on each analysis.*
+*As an Administrator I want to be able to configure if insecure Git repositories (no SSL or self signed certificate) can be consumed.*
 
 ##### GC003
 
-*As an Administrator I want to be able to configure if insecure Git repositories can be consumed.*
-
-##### GC004
-
 *As an Architect I want to be able to associate a Git repository to an application.*
 
-##### GC005
+##### GC004
 
 *As a Migrator or an Architect I want to be able to filter applications by having a Git repository assigned*
 
@@ -157,19 +154,16 @@ A member of the operations or security team of the organization undergoing the a
 
 *As an Administrator I want to be able to manage Global Subversion configuration.*
 
+
 ##### SC002
 
-*As an Administrator I want to be able to define the default behavior for whether new changes in a repository are acquired via an update or by performing a full checkout on each analysis.*
+*As an Administrator I want to be able to configure if insecure Subversion repositories (no SSL or self signed certificate) can be consumed.*
 
 ##### SC003
 
-*As an Administrator I want to be able to configure if insecure Subversion repositories can be consumed.*
-
-##### SC004
-
 *As an Architect I want to be able to associate a Subversion repository to an application.*
 
-##### SC005
+##### SC004
 
 *As a Migrator or an Architect I want to be able to filter applications by having a Subversion repository assigned*
 
@@ -186,7 +180,7 @@ A member of the operations or security team of the organization undergoing the a
 
 ##### MC003
 
-*As an Administrator I want to be able to configure if insecure Artifact Repositories can be consumed.*
+*As an Administrator I want to be able to configure if insecure Artifact Repositories (no SSL or self signed certificate) can be consumed.*
 
 ##### MC004
 
@@ -393,7 +387,6 @@ The delete button on a credential from the list available on the main view will 
 
 - [GC001](#GC001)
 - [GC002](#GC002)
-- [GC003](#GC003)
 
 
 ##### Involved Personas
@@ -405,9 +398,6 @@ The delete button on a credential from the list available on the main view will 
 
 Clicking on the "Git" suboption under the "Repositories" option on the left menu from the Administrator perspective will open the Git configuration view. This view will include the following fields:
 
-- Acquiring new changes: Radio, single option. Values:
-  - Acquire via a pull.
-  - Acquire by performing a full clone on each analysis.
 - Consume insecure Git repositories: Switch.
 
 ![Git Configuration](images/git-config.png?raw=true "Git Configuration")
@@ -418,7 +408,6 @@ Clicking on the "Git" suboption under the "Repositories" option on the left menu
 
 - [SC001](#SC001)
 - [SC002](#SC002)
-- [SC003](#SC003)
 
 
 ##### Involved Personas
@@ -430,9 +419,6 @@ Clicking on the "Git" suboption under the "Repositories" option on the left menu
 
 Clicking on the "Subversion" suboption under the "Repositories" option on the left menu from the Administrator perspective will open the Subversion configuration view. This view will include the following fields:
 
-- Acquiring new changes: Radio, single option. Values:
-  - Acquire via an update.
-  - Acquire by performing a full checkout on each analysis.
 - Consume insecure Subversion repositories: Switch.
 
 ![Subversion Configuration](images/svn-config.png?raw=true "Subversion Configuration")
@@ -598,8 +584,8 @@ The Save button won't be enabled unless changes are made on any of the editable 
 
 ##### Related Use Cases
 
-- [GC004](#GC004)
-- [SC004](#SC004)
+- [GC003](#GC004)
+- [SC003](#SC004)
 - [MC006](#MC006)
 
 ##### Involved Personas
@@ -631,7 +617,7 @@ Application creation and edition modal windows will be rearranged to accommodate
   - Group: String. Required if any other field from the Binary section has a value.
   - Artifact: String. Required if any other field from the Binary section has a value.
   - Version: String. Required if any other field from the Binary section has a value.
-  - Repository URL: String. Required if any other field from the Binary section has a value.
+  - Packaging: String. Optional (defaults to jar).
 
 ![Repository configuration](images/new-app-binary.png?raw=true "Repository configuration")
 
@@ -652,8 +638,8 @@ Based on the Source repository URL, the system should be able to determine the r
 ##### Related Use Cases
 
 - [CM008](#CM008)
-- [GC005](#GC005)
-- [SC005](#SC005)
+- [GC004](#GC005)
+- [SC004](#SC005)
 - [MC007](#MC007)
 
 ##### Involved Personas
