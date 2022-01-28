@@ -1,0 +1,1080 @@
+---
+title: tekton-ui-integration
+authors:
+  - "@djzager"
+reviewers:
+  - "@alaypatel107"
+  - "@mturley"
+  - "@shawn-hurley"
+approvers:
+  - "@mturley"
+  - "@shawn-hurley"
+creation-date: 2022-01-18
+last-updated: 2022-01-18
+status: implementable
+see-also:
+  - "N/A" 
+replaces:
+  - "N/A"
+superseded-by:
+  - "N/A"
+---
+
+# Crane UI Integration with Tekton for Excution of Crane Workflows
+
+## Release Signoff Checklist
+
+- [x] Enhancement is `implementable`
+- [ ] Design details are appropriately documented from clear requirements
+- [ ] Test plan is defined
+- [ ] User-facing documentation is created
+
+## Open Questions
+
+1. How will the Crane Workflows, specifically the TaskRuns responsible for
+   applying the users manifests onto the destination cluster, impersonate the
+   user making the request? A non-exhaustive list of options:
+   * We could rely on Tekton's default behavior that is to bind Pods
+       (synonymous with TaskRuns) to the `default` serviceAccount.
+   * The UI could bind the appropriate ClusterTasks in the generated Pipeline
+       to the `admin` serviceAccount in the destination namespace. **This
+       approach is assumed in this enhancement**
+   * The UI could generate a Kubeconfig impersonating the current user but
+       it's not clear how the UI would have access to the cluster's
+       coordinates.
+1. Getting the operator to override the Crane Runner container image specified
+   in ClusterTask Steps. Right now ClusterTasks all reference a
+   `quay.io/konveyor/crane-runner:latest` image.
+1. Do we want to to execute the `crane-transfer-pvc` ClusterTask for each PVC to
+   be migrated or should `crane transfer-pvc` support handling all the PVCs in a
+   namespace?
+1. Is it possible that OpenShift's Pipelines UI will be updated to handle moving
+   a PipelineRun out of "PipelineRunPending"?
+
+## Glossary/References
+
+* [Step](https://github.com/tektoncd/pipeline/blob/main/docs/tasks.md#defining-steps) -
+    a reference to a container image that executes a specific tool on a specific
+    input and produces a specific output.
+* [Task](https://github.com/tektoncd/pipeline/blob/main/docs/tasks.md) -
+    a collection of steps executed in order. Tasks, when executed as a TaskRun,
+    are run as a Pod in the cluster. Tasks are the smallest building blocks in
+    Tekton.
+* [ClusterTask](https://github.com/tektoncd/pipeline/blob/main/docs/tasks.md#task-vs-clustertask) - 
+    a cluster-scoped Task. It behaves identically to a Task. The only difference
+    is that ClusterTasks can be referenced by (Task|Pipeline)Runs in any
+    namespace.
+* [TaskRun](https://github.com/tektoncd/pipeline/blob/main/docs/taskruns.md) -
+    an instantiation and execution of a Task.
+* [Pipeline](https://github.com/tektoncd/pipeline/blob/main/docs/pipelines.md) -
+    define a collection of Tasks.
+* [PipelineRun](https://github.com/tektoncd/pipeline/blob/main/docs/pipelineruns.md) -
+    an instantiation and execution of a Pipeline. One important thing to know
+    about PipelineRuns (this is also true for TaskRuns) is that it is possible
+    to embed the Pipeline into the
+    [PipelineRun directly](https://github.com/tektoncd/pipeline/blob/main/docs/pipelineruns.md#specifying-the-target-pipeline).
+    PipelineRun executions can be deferred by [specifying on PipelineRun.Spec.Status "PipelineRunPending"](https://tekton.dev/docs/pipelines/pipelineruns/#pending-pipelineruns).
+* Parameters - can be specified on [Tasks](https://github.com/tektoncd/pipeline/blob/main/docs/tasks.md#specifying-parameters)
+    or on [Pipelines](https://github.com/tektoncd/pipeline/blob/main/docs/pipelines.md#specifying-parameters).
+    Flags to be set on crane (like the namespace to export) are good examples of
+    parameters to be exposed. Parameters can have default values.
+* [Workspaces](https://github.com/tektoncd/pipeline/blob/main/docs/workspaces.md) -
+    allow Tasks to declare parts of the filesystem that need to be provided at
+    runtime by TaskRuns. A TaskRun can make these parts of the filesystem
+    available in many ways: using a read-only ConfigMap or Secret, an existing
+    PersistentVolumeClaim shared with other Tasks, create a
+    PersistentVolumeClaim from a provided VolumeClaimTemplate, or simply an
+    emptyDir that is discarded when the TaskRun completes.
+    Workspaces can be declared as
+    [optional](https://github.com/tektoncd/pipeline/blob/main/docs/workspaces.md#optional-workspaces).
+
+## Summary
+
+The purpose of this enhancement is to ensure integration of the Crane UI
+component with Tekton ClusterTasks supported by Crane Runner.
+[Crane Runner](https://github.com/konveyor/crane-runner/tree/742883ce69861510ab80f1c6c253cc759d7091b1)
+currently publishes a container image that includes the `crane` binary.
+This container image is referenced
+by Crane Runner's supported ClusterTasks representing different `crane`
+workflows like
+[crane export](https://github.com/konveyor/crane-runner/blob/742883ce69861510ab80f1c6c253cc759d7091b1/manifests/clustertasks/crane-export.yaml).
+
+## Motivation
+
+The UI component of "Crane 2.0" must integrate seemlessly with what is being
+delievered by Crane Runner. Once a user completes Crane UI's migration wizard,
+we want to hand off the workflow to Tekton and the Pipelines UI to allow the
+user to run the workflow at their discretion. This work will allow a seemless
+experience for Crane UI and command-line users alike.
+
+### Goals
+
+* The UI component outputs a Tekton Pipeline that can be executed at the users'
+    discretion.
+* The Tekton Pipeline can be modified and re-used by the end user.
+* The ClusterTasks provided by Crane Runner should still be consumable via
+    Pipelines and PipelineRuns that are not generated via the UI.
+
+### Non-Goals
+
+* Replace Tekton
+
+## Proposal
+
+### Crane Runner Container Image
+
+Crane Runner will publish and support a container image including the following
+binaries:
+
+* crane - for executing crane commands
+* oc & kubectl - for interacting with cluster resources and/or managing cluster
+    configuration.
+* kustomize - for customizing the manifests after `crane apply`.
+
+### Crane Runner ClusterTasks
+
+Crane Runner will support, at a minimum, the ClusterTasks described in this
+section. These are the primary integration between Crane's UI component and Tekton.
+The UI must know about each of these ClusterTasks, the parameters and workspaces
+they require, and how they are to be ordered in Pipelines.
+
+#### crane-kubeconfig-generator
+
+The `crane-kubeconfig-generator` ClusterTask is responsible for taking a secret
+holding an API Server URL + Token and generating a kubeconfig. Saving the
+kubeconfig in a workspace will allow it to be shared with follow-up tasks.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: crane-kubeconfig-generator
+spec:
+  params:
+    - name: cluster-secret
+      type: string
+      description: |
+        The name of the secret holding cluster API Server URL and Token.
+    - name: context-name
+      type: string
+      description: |
+        The name to give the context.
+  steps:
+    - name: crane-export
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        export KUBECONFIG=$(workspaces.kubeconfig.path)/kubeconfig
+
+        set +x
+        oc login --server=$CLUSTER_URL --token=$CLUSTER_TOKEN
+        set -x
+
+        kubectl config rename-context "$(kubectl config current-context)" "$(params.context-name)"
+      env:
+      - name: CLUSTER_URL
+        valueFrom:
+          secretKeyRef:
+            name: $(params.cluster-secret)
+            key: url
+      - name: CLUSTER_TOKEN
+        valueFrom:
+          secretKeyRef:
+            name: $(params.cluster-secret)
+            key: token 
+  workspaces:
+    - name: kubeconfig
+      readOnly: false
+      description: |
+        Where the generated kubeconfig will be saved.
+```
+
+#### crane-export
+
+The `crane-export` is responsible for exporting resources from the source
+cluster.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: crane-export
+spec:
+  params:
+    - name: context
+      type: string
+      description: |
+        The name of the context from kubeconfig representing the source
+        cluster.
+
+        You can get this information in your current environment using
+        `kubectl config get-contexts` to describe your one or many
+        contexts.
+      default: ""
+    - name: namespace
+      type: string
+      description: |
+        The namespace from which to export resources.
+      default: ""
+  steps:
+    - name: crane-export
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        /crane export \
+          --context="$(params.context)" \
+          --namespace="$(params.namespace)" \
+          --export-dir="$(workspaces.export.path)"
+
+        find $(workspaces.export.path)
+      env:
+        - name: KUBECONFIG
+          value: $(workspaces.kubeconfig.path)/kubeconfig
+  workspaces:
+    - name: export
+      description: |
+        Directory where results of crane export will be stored for future use
+        in other tasks.
+      mountPath: /var/crane/export
+    - name: kubeconfig
+      description: |
+        The kubeconfig for accessing the cluster.
+```
+
+#### crane-transform
+
+The `crane-transform` ClusterTask is responsible for generating JSON patches.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: crane-transform
+spec:
+  params:
+    - name: opitonal-flags
+      type: string
+      description: |
+        Comma separated list of `flag-name=value` pairs. These flags with values
+        will be passed into all pluins that are executed in the transform
+        operation.
+      default: ""
+  steps:
+    - name: crane-transform
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        /crane transform \
+          --ignored-patches-dir="$(workspaces.ignored-patches.path)" \
+          --flags-file="$(workspaces.craneconfig.path)" \
+          --optional-flags="$(params.optional-flags)" \
+          --export-dir="$(workspaces.export.path)" \
+          --transform-dir=$(workspaces.transform.path)
+
+        find $(workspaces.transform.path)
+        if [ "$(workspaces.ignored-patches.bound)" == "true" ]; then
+          find $(workspaces.ignored-patches.path)
+        fi
+  # https://github.com/tektoncd/pipeline/blob/main/docs/workspaces.md#using-workspaces-in-tasks
+  workspaces:
+    - name: export
+      description: |
+        This is the folder where the results of crane export were stored.
+      mountPath: /var/crane/export
+    - name: transform
+      description: |
+        This is the folder where we will store the results of crane transform.
+      mountPath: /var/crane/transform
+    - name: ignored-patches
+      description: |
+        This is the folder where the results of crane ignored-patches were stored.
+      mountPath: /var/crane/ignored-patches
+      optional: true
+    - name: craneconfig
+      description: |
+        This is where we hold the configuration file for crane.
+      mountPath: /var/crane/config
+      optional: true
+```
+
+#### crane-apply
+
+The `crane-apply` ClusterTask is responsible for taking the resources form
+export and applying the JSON patches generated in transform to create new
+manifests ready to be installed on any cluster.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: crane-apply
+spec:
+  steps:
+    - name: crane-apply
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        /crane apply \
+          --export-dir=$(workspaces.export.path) \
+          --transform-dir=$(workspaces.transform.path) \
+          --output-dir=$(workspaces.apply.path)
+        find $(workspaces.apply.path)
+  workspaces:
+    - name: export
+      description: |
+        This is the folder where the results of crane export were stored.
+      mountPath: /var/crane/export
+    - name: transform
+      description: |
+        This is the folder where we will store the results of crane transform.
+      mountPath: /var/crane/transform
+    - name: apply
+      description: |
+        This is the folder where we will store the results of crane apply.
+      mountPath: /var/crane/apply
+```
+
+#### crane-transfer-pvc
+
+The `crane-transfer-pvc` ClusterTask is responsible for syncing a single PVC
+from source to destination cluster.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: crane-transfer-pvc
+spec:
+  params:
+    - name: source-context
+      type: string
+      description: |
+        The name of the context from kubeconfig representing the source
+        cluster.
+
+        You can get this information in your current environment using
+        `kubectl config get-contexts` to describe your one or many
+        contexts.
+    - name: src-namespace
+      type: string
+      description: |
+        The source cluster namespace in which pvc is synced.
+    - name: pvc-name
+      type: string
+      description: |
+        The name of the pvc to be synced.
+    - name: endpoint-type
+      type: string
+      description: |
+        The name of the networking endpoint to be used for ingress traffic in the destination cluster
+  steps:
+    - name: crane-transfer-pvc
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        # Configure internal cluster
+        kubectl config set-cluster internal \
+          --server=https://kubernetes.default.svc:443 \
+          --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+        kubectl config set-credentials internal \
+          --token="$(</var/run/secrets/kubernetes.io/serviceaccount/token)"
+        kubectl config set-context internal \
+          --cluster=internal \
+          --user=internal \
+          --namespace="$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
+
+        /crane transfer-pvc \
+          --source-context=$(params.source-context) \
+          --destination-context=internal \
+          --pvc-name $(params.pvc-name) \
+          --pvc-namespace $(params.src-namespace) \
+          --endpoint $(params.endpoint-type)
+      env:
+        - name: KUBECONFIG
+          value: $(workspaces.kubeconfig.path)/kubeconfig
+  workspaces:
+    - name: kubeconfig
+      description: |
+        The kubeconfig for accessing the source cluster.
+```
+
+#### crane-kubectl-scale-down
+
+The `kubectl-scale-down` ClusterTask is responsible for scaling down the
+resources in a namespace.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: kubectl-scale-down
+spec:
+  params:
+    - name: context
+      type: string
+      description: |
+        Context to use when scaling down resources
+      default: ""
+    - name: namespace
+      type: string
+      description: |
+        Namespace to use when scaling down resources
+      default: ""
+    - name: type-name-resource
+      type: string
+      description: |
+        The resource to be scaled down in type/name format (ie. deployment/mysql or rc/foo)
+  steps:
+    - name: kubectl-scale-down
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        kubectl scale --context "$(params.context)" --namespace "$(params.namespace)" --replicas=0 "$(params.type-name-resource)"
+      env:
+        - name: KUBECONFIG
+          value: $(workspaces.kubeconfig.path)/kubeconfig
+  workspaces:
+    - name: kubeconfig
+      description: |
+        The kubeconfig for accessing the source cluster.
+```
+
+#### crane-kustomize-init
+
+The `crane-kustomize-init` ClusterTask is responsible for packaging the
+manifests created in `crane apply` for use in Kustomize. This is necessary to
+customize the namespace.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: crane-kustomize-init
+spec:
+  params:
+    - name: sourceNamespace
+      type: string
+      description: Source namespace from export.
+    - name: labels
+      type: string
+      description: Add one or more labels
+      default: ""
+    - name: namePrefix
+      type: string
+      description: Set the namePrefix field in the kustomization file.
+      default: ""
+    - name: namespace
+      type: string
+      description: Sets the value of the namespace field in the kustomization file.
+      default: ""
+    - name: nameSuffix
+      type: string
+      description: Set the nameSuffix field in the kustomization file.
+      default: ""
+  steps:
+    - name: kustomize-namespace
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        # Copy apply resources into kustomize workspace
+        cp -r "$(workspaces.apply.path)/resources/$(params.sourceNamespace)/." "$(workspaces.kustomize.path)"
+
+        pushd "$(workspaces.kustomize.path)"
+        kustomize init --autodetect --labels "$(params.labels)" --nameprefix "$(params.namePrefix)" --namespace "$(params.namespace)" --nameSuffix "$(params.nameSuffix)"
+        kustomize build
+        popd
+        tree "$(workspaces.kustomize.path)"
+  # https://github.com/tektoncd/pipeline/blob/main/docs/workspaces.md#using-workspaces-in-tasks
+  workspaces:
+    - name: apply
+      description: |
+        This is the folder where the results from crane-apply are stored.
+      mountPath: /var/crane/apply
+    - name: kustomize
+      description: |
+        This is where the kustomize related manifests will be saved.
+```
+
+#### kubectl-apply-kustomize
+
+The `kubectl-apply-kustomize` ClusterTask is responsible for applying the
+resources defined in a `kustomization.yaml` at the root of the provided
+`kustomize` workspace.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
+metadata:
+  name: kubectl-apply-kustomize
+spec:
+  params:
+    - name: context
+      type: string
+      description: The context from the kubeconfig that represents the destination cluster.
+      default: ""
+  steps:
+    - name: kubectl-apply
+      image: quay.io/konveyor/crane-runner:latest
+      script: |
+        if [ "$(workspaces.kubeconfig.bound)" == "true" ] ; then
+          export KUBECONFIG="$(workspaces.kubeconfig.path)/kubeconfig"
+        fi
+
+        kubectl --context="$(params.context)" apply -k "$(workspaces.kustomize.path)"
+  workspaces:
+    - name: kustomize
+      description: |
+        This is the folder storing a kustomization.yaml file to be applied.
+    - name: kubeconfig
+      description: |
+        The user's kubeconfig. Otherwise, will just rely on serviceaccount.
+      optional: true
+```
+
+### UI Integration with ClusterTasks
+
+With knowledge of the supported ClusterTasks, the UI will instantiate Pipelines and
+PipelineRuns based on a user's wizard responses. The source cluster's
+credentials will be saved as a secret, for example:
+
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: example-cluster-credentials
+  namespace: placeholder
+data:
+  url: ... (base64-encoded)
+  token: ... (base64-encoded)
+type: Opaque
+```
+
+[Interacting with Pipelines using the developer perspective in OpenShift](https://docs.openshift.com/container-platform/4.9/cicd/pipelines/working-with-pipelines-using-the-developer-perspective.html#op-interacting-with-pipelines-using-the-developer-perspective_working-with-pipelines-using-the-developer-perspective)
+centers around the Pipelines, for this reason the UI will **not** be
+instantiating PipelineRuns with embeded Pipeline specifications. After the user
+completes the wizard, the responses will be used to instantiate Pipeline(s) and
+PipelineRun(s). Examples of the different Pipelines and PipelineRuns are
+presented in the [User Stories](###user-stories) section.
+
+When the user decides to defer execution of the generated
+PipelineRun it will be given a `.spec.status` of "PipelineRunPending". Later,
+when the user wants to execute the PipelineRun, all the user must do is remove
+the `.spec.status` from the PipelineRun or managed via the Pipelines UI in
+OpenShift. 
+
+### User Stories
+
+#### Stateless Application Migration
+
+As an application owner, I want to migrate my stateless application from a
+source to destination cluster. 
+
+For simplicity, we will say the source cluster's API Server URL and Token have
+been stored in a secret named `source-cluster-creds` and the user wishes to
+migrate everything from namespace `guestbook` where no PVCs exist (or where PVCs
+exist but none were selected).
+
+The generated Pipeline:
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: guestbook-migration
+spec:
+  params:
+    - name: cluster-secret
+      type: string
+    - name: source-namespace
+      type: string
+    - name: optional-flags
+      type: string
+  workspaces:
+    - name: shared-data
+    - name: kubeconfig
+  tasks:
+    - name: generate-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.cluster-secret)"
+        - name: context-name
+          value: internal
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: export
+      runAfter:
+        - generate-kubeconfig
+      params:
+        - name: namespace
+          value: "$(params.source-namespace)"
+      taskRef:
+        name: crane-export
+        kind: ClusterTask
+      workspaces:
+        - name: export
+          workspace: shared-data
+          subPath: export
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: transform
+      runAfter:
+        - export
+      params:
+        - name: optional-flags
+          value: "$(params.optional-flags)"
+      taskRef:
+        name: crane-transform
+        kind: ClusterTask
+      workspaces:
+        - name: export
+          workspace: shared-data
+          subPath: export
+        - name: transform
+          workspace: shared-data
+          subPath: transform
+    - name: apply
+      runAfter:
+        - transform
+      taskRef:
+        name: crane-apply
+        kind: ClusterTask
+      workspaces:
+        - name: export
+          workspace: shared-data
+          subPath: export
+        - name: transform
+          workspace: shared-data
+          subPath: transform
+        - name: apply
+          workspace: shared-data
+          subPath: apply
+    - name: kustomize-init
+      runAfter:
+        - apply
+      params:
+        - name: sourceNamespace
+          value: "$(params.source-namespace)"
+        - name: namespace
+          value: "$(context.taskRun.namespace)"
+      taskRef:
+        name: crane-kustomize-init
+        kind: ClusterTask
+      workspaces:
+        - name: apply
+          workspace: shared-data
+          subPath: apply
+        - name: kustomize
+          workspace: shared-data
+    - name: kubectl-apply-kustomize
+      runAfter:
+        - kustomize-init
+      taskRef:
+        name: kubectl-apply-kustomize
+        kind: ClusterTask
+      workspaces:
+        - name: kustomize
+          workspace: shared-data
+```
+
+The generated PipelineRun:
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: guestbook-migration
+spec:
+  serviceAccountNames:
+    - taskName: kubectl-apply-kustomize
+      serviceAccountName: admin
+  params:
+    - name: cluster-secret
+      value: source-cluster-creds
+    - name: source-namespace
+      value: guestbook
+    - name: optional-flags
+      value: ""
+  workspaces:
+    - name: shared-data
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Mi
+    - name: kubeconfig
+      emptyDir: {}
+  pipelineRef:
+    name: guestbook-migration
+```
+
+#### State Migration
+
+As an application owner, I want to migrate the state of my application from a
+source to destination cluster.
+
+For this example, we'll assume that the user's cluster API Server URL and Token
+have been stored in a secret named `source-cluster-creds` and the user wishes to
+migrate the state from namespace `guestbook` where two PVCs exist and are
+selected for migration: `redis-data01` and `redis-data02`.
+
+The generated Pipeline:
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: guestbook-state-transfer
+spec:
+  params:
+    - name: cluster-secret
+      type: string
+    - name: source-namespace
+      type: string
+  workspaces:
+    - name: shared-data
+    - name: kubeconfig
+  tasks:
+    - name: generate-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.cluster-secret)"
+        - name: context-name
+          value: internal
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: redis-data01
+      runAfter:
+        - generate-kubeconfig
+      params:
+        - name: source-context
+          value: internal
+        - name: source-namespace
+          value: "$(params.source-namespace)"
+        - name: pvc-name
+          value: redis-data01
+        - name: endpoint-type
+          value: route
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: redis-data02
+      runAfter:
+        - generate-kubeconfig
+      params:
+        - name: source-context
+          value: internal
+        - name: source-namespace
+          value: "$(params.source-namespace)"
+        - name: pvc-name
+          value: redis-data02
+        - name: endpoint-type
+          value: route
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+```
+
+The generated PipelineRun:
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: guestbook-state-transfer
+spec:
+  params:
+    - name: cluster-secret
+      value: source-cluster-creds
+    - name: source-namespace
+      value: guestbook
+  workspaces:
+    - name: kubeconfig
+      emptyDir: {}
+  tasks:
+    - name: generate-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.cluster-secret)"
+        - name: cluster-secret
+          value: internal
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+  workspaces:
+    - name: kubeconfig
+      emptyDir: {}
+  pipelineRef:
+    name: guestbook-state-transfer
+```
+
+#### Stage and Migrate
+
+As an application owner, I want to migrate my application and it's state from
+a source to destination cluster.
+
+For this example, we'll assume that the user's cluster API Server URL and Token
+have been stored in a secret named `source-cluster-creds` and the user wishes to
+migrate their applicaiton **and** state from namespace `guestbook` where two
+PVCs exist and are selected for migration: `redis-data01` and `redis-data02`.
+
+For this use case, the UI will generate two Pipelines and two PipelineRuns. The
+first Pipeline and PipelineRun will be equivalent to the [State Migration](####state-migration).
+The second Pipeline and PipelineRun will be responsible for quiescing the
+application before syncing the state and migrating the workloads.
+
+The generated Pipeline:
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: Pipeline
+metadata:
+  name: guestbook-cutover-migration
+spec:
+  params:
+    - name: cluster-secret
+      type: string
+    - name: source-namespace
+      type: string
+    - name: optional-flags
+      type: string
+  workspaces:
+    - name: shared-data
+    - name: kubeconfig
+  tasks:
+    - name: generate-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.cluster-secret)"
+        - name: context-name
+          value: internal
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: export
+      runAfter:
+        - generate-kubeconfig
+      params:
+        - name: namespace
+          value: "$(params.source-namespace)"
+      taskRef:
+        name: crane-export
+        kind: ClusterTask
+      workspaces:
+        - name: export
+          workspace: shared-data
+          subPath: export
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: redis-data01
+      runAfter:
+        - generate-kubeconfig
+        - export
+      params:
+        - name: source-context
+          value: internal
+        - name: source-namespace
+          value: "$(params.source-namespace)"
+        - name: pvc-name
+          value: redis-data01
+        - name: endpoint-type
+          value: route
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: redis-data02
+      runAfter:
+        - generate-kubeconfig
+        - export
+      params:
+        - name: source-context
+          value: internal
+        - name: source-namespace
+          value: "$(params.source-namespace)"
+        - name: pvc-name
+          value: redis-data02
+        - name: endpoint-type
+          value: route
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: transform
+      runAfter:
+        - redis-data01
+        - redis-data02
+      params:
+        - name: optional-flags
+          value: "$(params.optional-flags)"
+      taskRef:
+        name: crane-transform
+        kind: ClusterTask
+      workspaces:
+        - name: export
+          workspace: shared-data
+          subPath: export
+        - name: transform
+          workspace: shared-data
+          subPath: transform
+    - name: apply
+      runAfter:
+        - transform
+      taskRef:
+        name: crane-apply
+        kind: ClusterTask
+      workspaces:
+        - name: export
+          workspace: shared-data
+          subPath: export
+        - name: transform
+          workspace: shared-data
+          subPath: transform
+        - name: apply
+          workspace: shared-data
+          subPath: apply
+    - name: kustomize-init
+      runAfter:
+        - apply
+      params:
+        - name: sourceNamespace
+          value: "$(params.source-namespace)"
+        - name: namespace
+          value: "$(context.taskRun.namespace)"
+      taskRef:
+        name: crane-kustomize-init
+        kind: ClusterTask
+      workspaces:
+        - name: apply
+          workspace: shared-data
+          subPath: apply
+        - name: kustomize
+          workspace: shared-data
+    - name: kubectl-apply-kustomize
+      runAfter:
+        - kustomize-init
+      taskRef:
+        name: kubectl-apply-kustomize
+        kind: ClusterTask
+      workspaces:
+        - name: kustomize
+          workspace: shared-data
+```
+
+The generated PipelineRun:
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: PipelineRun
+metadata:
+  generateName: guestbook-cutover-migration
+spec:
+  params:
+    - name: cluster-secret
+      value: source-cluster-creds
+    - name: source-namespace
+      value: guestbook
+  workspaces:
+    - name: kubeconfig
+      emptyDir: {}
+  tasks:
+    - name: generate-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.cluster-secret)"
+        - name: cluster-secret
+          value: internal
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+  workspaces:
+    - name: kubeconfig
+      emptyDir: {}
+  pipelineRef:
+    name: guestbook-cutover-migration
+```
+
+### Security, Risks, and Mitigations
+
+The greatest security risks come from our handling of cluster access and
+authorization -- both the source and destination clusters. We have ClusterTasks
+that login (ie. `crane-kubeconfig-generator`), some more that rely on the
+generated Kubeconfig (ie. `crane-export` and `crane-transfer-pvc`), and
+others that interact with the
+[mounted secrets to access Kubernetes API from inside the Pod](https://kubernetes.io/docs/tasks/run-application/access-api-from-pod/#directly-accessing-the-rest-api)
+(ie. `crane-transfer-pvc` and `kubectl-apply-kustomize`).
+
+We must be careful not to expose credentials when performing the `oc login`
+using the API server URL and token. The plan is to mitigate this using `set +x`
+to prevent the login line from being included in Pod logs.
+
+For ClusterTasks that require access to the destination cluster, we will use the
+`admin` serviceAccount in the namespace where the PipelineRun is instantiated.
+This should sufficiently limit the scope of the TaskRuns to one namespace.
+
+## Design Details
+
+### Upgrade / Downgrade Strategy
+
+It is important that we treat the ClusterTasks supported by Crane Runner **as
+our API contract**, we are not able to version our ClusterTasks via OCI layering
+and will need to be careful to keep the UI in sync with the ClusterTasks. The
+greatest probably of API incompatibilities are from adding/removing parameters
+or workspaces from ClusterTasks.
+
+## Alternatives
+
+### Variable File
+
+One alternative that was explored revolved around storing the results of the
+Crane UI wizard in a "variable file" ConfigMap. Additionally, the UI would
+generate a Pipeline that when run the first Task would consume the "variable file" ConfigMap
+containing all of the relevant information (ie. source namespace, cluster
+coordinates and credentials, and workspaces).
+
+The main problem with this approach is there is no mechanism for a TaskRuns in a
+Pipeline to map parameters or workspaces into subsequent TaskRuns. Pipelines
+are responsible for handling parameters + workspaces and mapping those onto the
+Tasks contained therein. Valid PipelineRuns must specify the parameters +
+workspaces expected by the Pipeline.
+
+### UI Generated PipelineRuns from Typed Config
+
+Another alternative that was considered was developing a typed config that could
+be stored as a ConfigMap and Crane UI would use these ConfigMaps to generate
+PipelineRuns at the user's discretion.
+
+The problem with this approach is that the Crane UI's focus is on the wizard and
+creating a whole new user experience around generating PipelineRuns from the
+Crane UI is out of scope for GA. The currently proposed solution of creating
+PipelineRuns directly does not prevent us from pursuing this option in the
+future.
+
+### Releasing ClusterTasks in OCI Bundle Format
+
+[Tekton Bundle Contract v0.1](https://tekton.dev/docs/pipelines/tekton-bundle-contracts/)
+
+Research was done into whether or not we could leverage Tekton Bundles. The
+benefit of Tekton Bundles is that the Tasks **and Pipelines** included can be
+used across the cluster which could have allowed the UI to only be concerned
+with referencing the correct Pipeline for a PipelineRun.
+
+The limitations of these Tekton Bundles (only 10 Pipelines|Tasks) and the
+inability to handle this in downstream pipelines made it an unsuitable option to
+pursue. It is worth noting that the Tekton community appears to be pushing the
+Tekton Bundle (see [Add Cluster scope pipeline support](https://github.com/tektoncd/pipeline/issues/1876) and [Versioning on Tasks/Pipelines](https://github.com/tektoncd/pipeline/issues/1839).
