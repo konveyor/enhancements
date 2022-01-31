@@ -758,7 +758,7 @@ spec:
         - name: endpoint-type
           value: route
       taskRef:
-        name: crane-kubeconfig-generator
+        name: crane-transfer-pvc
         kind: ClusterTask
       workspaces:
         - name: kubeconfig
@@ -776,7 +776,7 @@ spec:
         - name: endpoint-type
           value: route
       taskRef:
-        name: crane-kubeconfig-generator
+        name: crane-transfer-pvc
         kind: ClusterTask
       workspaces:
         - name: kubeconfig
