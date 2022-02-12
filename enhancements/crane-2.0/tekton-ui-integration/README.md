@@ -33,21 +33,23 @@ superseded-by:
 
 1. How will the Crane Workflows, specifically the TaskRuns responsible for
    applying the users manifests onto the destination cluster, impersonate the
-   user making the request? A non-exhaustive list of options:
-   * We could rely on Tekton's default behavior that is to bind Pods
-       (synonymous with TaskRuns) to the `default` serviceAccount.
-   * The UI could bind the appropriate ClusterTasks in the generated Pipeline
-       to the `admin` serviceAccount in the destination namespace. **This
-       approach is assumed in this enhancement**
-   * The UI could generate a Kubeconfig impersonating the current user but
-       it's not clear how the UI would have access to the cluster's
-       coordinates.
+   user making the request? 
+   * **ANSWER** This will be covered in a follow-up enhancement. See [MIG-1076](https://issues.redhat.com/browse/MIG-1076).
+       Until superceded, the UI will create a Secret for the credentials to
+       access the destination cluster and these will be consumed the same way
+       source cluster credentials are consumed.
 1. Getting the operator to override the Crane Runner container image specified
    in ClusterTask Steps. Right now ClusterTasks all reference a
    `quay.io/konveyor/crane-runner:latest` image.
+   * **ANSWER** In the same way operators use environment variables defined on
+       operator deployments in ClusterServiceVersions (or overridden via
+       Subscription Configs), the operator will override the image specified in
+       the deployed ClusterTasks.
 1. Do we want to to execute the `crane-transfer-pvc` ClusterTask for each PVC to
    be migrated or should `crane transfer-pvc` support handling all the PVCs in a
    namespace?
+   * **ANSWER** We are going to run the `crane-transfer-pvc` for each PVC to be
+       migrated.
 1. Is it possible that OpenShift's Pipelines UI will be updated to handle moving
    a PipelineRun out of "PipelineRunPending"?
 
@@ -351,38 +353,59 @@ spec:
         You can get this information in your current environment using
         `kubectl config get-contexts` to describe your one or many
         contexts.
-    - name: src-namespace
+    - name: source-namespace
       type: string
       description: |
         The source cluster namespace in which pvc is synced.
-    - name: pvc-name
+    - name: source-pvc-name
       type: string
       description: |
-        The name of the pvc to be synced.
+        The name of the pvc to be synced from source cluster.
+    - name: destination-context
+      type: string
+      description: |
+        The name of the context from kubeconfig representing the destination
+        cluster.
+
+        You can get this information in your current environment using
+        `kubectl config get-contexts` to describe your one or many
+        contexts.
+    - name: destination-pvc-name
+      type: string
+      description: |
+        The name to give pvc in destination cluster.
+      default: ""
+    - name: destination-namespace
+      type: string
+      description: |
+        The source cluster namespace in which pvc is synced.
+      default: ""
+    - name: pvc-storage-class-name
+      type: string
+      description: |
+        The name of the storage class to use in the destination cluster.
+      default: ""
+    - name: pvc-requests-storage
+      type: string
+      description: |
+        The source cluster namespace in which pvc is synced.
+      default: ""
     - name: endpoint-type
       type: string
       description: |
         The name of the networking endpoint to be used for ingress traffic in the destination cluster
+      default: ""
   steps:
     - name: crane-transfer-pvc
       image: quay.io/konveyor/crane-runner:latest
       script: |
-        # Configure internal cluster
-        kubectl config set-cluster internal \
-          --server=https://kubernetes.default.svc:443 \
-          --certificate-authority=/var/run/secrets/kubernetes.io/serviceaccount/ca.crt
-        kubectl config set-credentials internal \
-          --token="$(</var/run/secrets/kubernetes.io/serviceaccount/token)"
-        kubectl config set-context internal \
-          --cluster=internal \
-          --user=internal \
-          --namespace="$(</var/run/secrets/kubernetes.io/serviceaccount/namespace)"
-
         /crane transfer-pvc \
           --source-context=$(params.source-context) \
-          --destination-context=internal \
-          --pvc-name $(params.pvc-name) \
-          --pvc-namespace $(params.src-namespace) \
+          --destination-context=$(params.destination-context) \
+          --pvc-name $(params.source-pvc-name):$(params.destination-pvc-name) \
+          --pvc-namespace $(params.source-namespace):$(params.destination-namespace) \
+          --pvc-storage-class-name $(params.pvc-storage-class-name) \
+          --pvc-requests-storage $(params.pvc-requests-storage) \
           --endpoint $(params.endpoint-type)
       env:
         - name: KUBECONFIG
@@ -415,15 +438,15 @@ spec:
       description: |
         Namespace to use when scaling down resources
       default: ""
-    - name: type-name-resource
+    - name: resource-type
       type: string
       description: |
-        The resource to be scaled down in type/name format (ie. deployment/mysql or rc/foo)
+        The resource type to be scaled down.
   steps:
     - name: kubectl-scale-down
       image: quay.io/konveyor/crane-runner:latest
       script: |
-        kubectl scale --context "$(params.context)" --namespace "$(params.namespace)" --replicas=0 "$(params.type-name-resource)"
+        kubectl scale --context "$(params.context)" --namespace "$(params.namespace)" --replicas=0 "$(params.resource-type)" --all
       env:
         - name: KUBECONFIG
           value: $(workspaces.kubeconfig.path)/kubeconfig
@@ -446,14 +469,14 @@ metadata:
   name: crane-kustomize-init
 spec:
   params:
-    - name: sourceNamespace
+    - name: source-namespace
       type: string
       description: Source namespace from export.
     - name: labels
       type: string
       description: Add one or more labels
       default: ""
-    - name: namePrefix
+    - name: name-prefix
       type: string
       description: Set the namePrefix field in the kustomization file.
       default: ""
@@ -461,7 +484,7 @@ spec:
       type: string
       description: Sets the value of the namespace field in the kustomization file.
       default: ""
-    - name: nameSuffix
+    - name: name-suffix
       type: string
       description: Set the nameSuffix field in the kustomization file.
       default: ""
@@ -470,10 +493,10 @@ spec:
       image: quay.io/konveyor/crane-runner:latest
       script: |
         # Copy apply resources into kustomize workspace
-        cp -r "$(workspaces.apply.path)/resources/$(params.sourceNamespace)/." "$(workspaces.kustomize.path)"
+        cp -r "$(workspaces.apply.path)/resources/$(params.source-namespace)/." "$(workspaces.kustomize.path)"
 
         pushd "$(workspaces.kustomize.path)"
-        kustomize init --autodetect --labels "$(params.labels)" --nameprefix "$(params.namePrefix)" --namespace "$(params.namespace)" --nameSuffix "$(params.nameSuffix)"
+        kustomize init --autodetect --labels "$(params.labels)" --nameprefix "$(params.name-prefix)" --namespace "$(params.namespace)" --nameSuffix "$(params.name-suffix)"
         kustomize build
         popd
         tree "$(workspaces.kustomize.path)"
@@ -527,15 +550,14 @@ spec:
 ### UI Integration with ClusterTasks
 
 With knowledge of the supported ClusterTasks, the UI will instantiate Pipelines and
-PipelineRuns based on a user's wizard responses. The source cluster's
+PipelineRuns based on a user's wizard responses. The source and destination cluster's
 credentials will be saved as a secret, for example:
 
 ```yaml
 apiVersion: v1
 kind: Secret
 metadata:
-  name: example-cluster-credentials
-  namespace: placeholder
+  generateName: source-cluster-
 data:
   url: ... (base64-encoded)
   token: ... (base64-encoded)
@@ -557,15 +579,16 @@ OpenShift.
 
 ### User Stories
 
-#### Stateless Application Migration
+#### Application Migration
 
 As an application owner, I want to migrate my stateless application from a
-source to destination cluster. 
+source to destination cluster.
 
-For simplicity, we will say the source cluster's API Server URL and Token have
-been stored in a secret named `source-cluster-creds` and the user wishes to
-migrate everything from namespace `guestbook` where no PVCs exist (or where PVCs
-exist but none were selected).
+Through completion of the wizard, the UI will store source and destination
+cluster's API Server URL and Token in secrets named `source-cluster-1234` and
+`destination-cluster-1234` respectively and the `guestbook` namespace was
+selected for migration where no PVCs exist (or where PVCs exist but none were
+chosen).
 
 The generated Pipeline:
 
@@ -576,9 +599,11 @@ metadata:
   name: guestbook-migration
 spec:
   params:
-    - name: cluster-secret
+    - name: source-cluster-secret
       type: string
     - name: source-namespace
+      type: string
+    - name: destination-cluster-secret
       type: string
     - name: optional-flags
       type: string
@@ -586,12 +611,24 @@ spec:
     - name: shared-data
     - name: kubeconfig
   tasks:
-    - name: generate-kubeconfig
+    - name: generate-source-kubeconfig
       params:
         - name: cluster-secret
-          value: "$(params.cluster-secret)"
+          value: "$(params.source-cluster-secret)"
         - name: context-name
-          value: internal
+          value: source
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: generate-destination-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.source-cluster-secret)"
+        - name: context-name
+          value: destination
       taskRef:
         name: crane-kubeconfig-generator
         kind: ClusterTask
@@ -600,8 +637,11 @@ spec:
           workspace: kubeconfig
     - name: export
       runAfter:
-        - generate-kubeconfig
+        - generate-source-kubeconfig
+        - generate-destination-kubeconfig
       params:
+        - name: context
+          value: source
         - name: namespace
           value: "$(params.source-namespace)"
       taskRef:
@@ -649,7 +689,7 @@ spec:
       runAfter:
         - apply
       params:
-        - name: sourceNamespace
+        - name: source-namespace
           value: "$(params.source-namespace)"
         - name: namespace
           value: "$(context.taskRun.namespace)"
@@ -665,6 +705,9 @@ spec:
     - name: kubectl-apply-kustomize
       runAfter:
         - kustomize-init
+      params:
+        - name: context
+          value: destination
       taskRef:
         name: kubectl-apply-kustomize
         kind: ClusterTask
@@ -679,14 +722,13 @@ The generated PipelineRun:
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: guestbook-migration
+  generateName: guestbook-migration-
 spec:
-  serviceAccountNames:
-    - taskName: kubectl-apply-kustomize
-      serviceAccountName: admin
   params:
-    - name: cluster-secret
-      value: source-cluster-creds
+    - name: source-cluster-secret
+      value: source-cluster-1234
+    - name: destination-cluster-secret
+      value: destination-cluster-1234
     - name: source-namespace
       value: guestbook
     - name: optional-flags
@@ -706,15 +748,29 @@ spec:
     name: guestbook-migration
 ```
 
-#### State Migration
+#### Application and State Migration
 
-As an application owner, I want to migrate the state of my application from a
+As an application owner, I want to migrate my application with state from a
 source to destination cluster.
 
-For this example, we'll assume that the user's cluster API Server URL and Token
-have been stored in a secret named `source-cluster-creds` and the user wishes to
-migrate the state from namespace `guestbook` where two PVCs exist and are
-selected for migration: `redis-data01` and `redis-data02`.
+Through completion of the wizard, the UI will store source and destination
+cluster's API Server URL and Token in secrets named `source-cluster-1234` and
+`destination-cluster-1234` respectively and the `guestbook` namespace where
+two PVCs exist and are selected for migration named `redis-data01` and
+`redis-data02`.
+
+For this use case, the UI will generate two Pipelines and PipelineRuns:
+
+* State Transfer
+* Application and Migration
+
+##### State Transfer Pipeline and PipelineRun
+
+This Pipeline and PipelineRun is responsible for migrating the state of the
+application from the source to destination cluster. It's important to note that
+these don't quiesce the application before transferring state which makes it
+suitable for running to limit how long a State and Application Migration will
+take.
 
 The generated Pipeline:
 
@@ -725,20 +781,33 @@ metadata:
   name: guestbook-state-transfer
 spec:
   params:
-    - name: cluster-secret
+    - name: source-cluster-secret
       type: string
     - name: source-namespace
       type: string
+    - name: destination-cluster-secret
+      type: string
   workspaces:
-    - name: shared-data
     - name: kubeconfig
   tasks:
-    - name: generate-kubeconfig
+    - name: generate-source-kubeconfig
       params:
         - name: cluster-secret
-          value: "$(params.cluster-secret)"
+          value: "$(params.source-cluster-secret)"
         - name: context-name
-          value: internal
+          value: source
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: generate-destination-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.source-cluster-secret)"
+        - name: context-name
+          value: destination
       taskRef:
         name: crane-kubeconfig-generator
         kind: ClusterTask
@@ -747,14 +816,17 @@ spec:
           workspace: kubeconfig
     - name: redis-data01
       runAfter:
-        - generate-kubeconfig
+        - generate-source-kubeconfig
+        - generate-destination-kubeconfig
       params:
         - name: source-context
-          value: internal
+          value: source
         - name: source-namespace
           value: "$(params.source-namespace)"
-        - name: pvc-name
+        - name: source-pvc-name
           value: redis-data01
+        - name: destination-context
+          value: destination
         - name: endpoint-type
           value: route
       taskRef:
@@ -765,14 +837,17 @@ spec:
           workspace: kubeconfig
     - name: redis-data02
       runAfter:
-        - generate-kubeconfig
+        - generate-source-kubeconfig
+        - generate-destination-kubeconfig
       params:
         - name: source-context
-          value: internal
+          value: source
         - name: source-namespace
           value: "$(params.source-namespace)"
-        - name: pvc-name
+        - name: source-pvc-name
           value: redis-data02
+        - name: source-context
+          value: destination
         - name: endpoint-type
           value: route
       taskRef:
@@ -792,23 +867,12 @@ metadata:
   generateName: guestbook-state-transfer
 spec:
   params:
-    - name: cluster-secret
-      value: source-cluster-creds
+    - name: source-cluster-secret
+      value: source-cluster-1234
     - name: source-namespace
       value: guestbook
-  workspaces:
-    - name: kubeconfig
-      emptyDir: {}
-  tasks:
-    - name: generate-kubeconfig
-      params:
-        - name: cluster-secret
-          value: "$(params.cluster-secret)"
-        - name: cluster-secret
-          value: internal
-      taskRef:
-        name: crane-kubeconfig-generator
-        kind: ClusterTask
+    - name: destination-cluster-secret
+      value: destination-cluster-1234
   workspaces:
     - name: kubeconfig
       emptyDir: {}
@@ -816,20 +880,12 @@ spec:
     name: guestbook-state-transfer
 ```
 
-#### Stage and Migrate
+##### Application and State Pipeline and PipelineRun
 
-As an application owner, I want to migrate my application and it's state from
-a source to destination cluster.
-
-For this example, we'll assume that the user's cluster API Server URL and Token
-have been stored in a secret named `source-cluster-creds` and the user wishes to
-migrate their applicaiton **and** state from namespace `guestbook` where two
-PVCs exist and are selected for migration: `redis-data01` and `redis-data02`.
-
-For this use case, the UI will generate two Pipelines and two PipelineRuns. The
-first Pipeline and PipelineRun will be equivalent to the [State Migration](####state-migration).
-The second Pipeline and PipelineRun will be responsible for quiescing the
-application before syncing the state and migrating the workloads.
+The purpose of this Pipeline and PipelineRun is to "completely" migrate the
+application and it's state to the destination cluster from the source. An
+important piece of this workflow is that it will quiesce the application on the
+source cluster before performing a state transfer and migrating the application.
 
 The generated Pipeline:
 
@@ -837,12 +893,14 @@ The generated Pipeline:
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: guestbook-cutover-migration
+  name: guestbook-app-state-migration
 spec:
   params:
-    - name: cluster-secret
+    - name: source-cluster-secret
       type: string
     - name: source-namespace
+      type: string
+    - name: destination-cluster-secret
       type: string
     - name: optional-flags
       type: string
@@ -850,12 +908,24 @@ spec:
     - name: shared-data
     - name: kubeconfig
   tasks:
-    - name: generate-kubeconfig
+    - name: generate-source-kubeconfig
       params:
         - name: cluster-secret
-          value: "$(params.cluster-secret)"
+          value: "$(params.source-cluster-secret)"
         - name: context-name
-          value: internal
+          value: source
+      taskRef:
+        name: crane-kubeconfig-generator
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: generate-destination-kubeconfig
+      params:
+        - name: cluster-secret
+          value: "$(params.source-cluster-secret)"
+        - name: context-name
+          value: destination
       taskRef:
         name: crane-kubeconfig-generator
         kind: ClusterTask
@@ -864,8 +934,11 @@ spec:
           workspace: kubeconfig
     - name: export
       runAfter:
-        - generate-kubeconfig
+        - generate-source-kubeconfig
+        - generate-destination-kubeconfig
       params:
+        - name: context
+          value: source
         - name: namespace
           value: "$(params.source-namespace)"
       taskRef:
@@ -877,40 +950,58 @@ spec:
           subPath: export
         - name: kubeconfig
           workspace: kubeconfig
-    - name: redis-data01
+    - name: kubectl-scale-down
       runAfter:
-        - generate-kubeconfig
         - export
       params:
+        - name: context
+          value: source
+        - name: namespace
+          value: "$(params.source-namespace)"
+        - name: resource-type
+          value: deployments,statefulesets
+      taskRef:
+        name: crane-kubectl-scale-down
+        kind: ClusterTask
+      workspaces:
+        - name: kubeconfig
+          workspace: kubeconfig
+    - name: redis-data01
+      runAfter:
+        - kubectl-scale-down
+      params:
         - name: source-context
-          value: internal
+          value: source
         - name: source-namespace
           value: "$(params.source-namespace)"
-        - name: pvc-name
+        - name: source-pvc-name
           value: redis-data01
+        - name: destination-context
+          value: destination
         - name: endpoint-type
           value: route
       taskRef:
-        name: crane-kubeconfig-generator
+        name: crane-transfer-pvc
         kind: ClusterTask
       workspaces:
         - name: kubeconfig
           workspace: kubeconfig
     - name: redis-data02
       runAfter:
-        - generate-kubeconfig
-        - export
+        - kubectl-scale-down
       params:
         - name: source-context
-          value: internal
+          value: source
         - name: source-namespace
           value: "$(params.source-namespace)"
-        - name: pvc-name
+        - name: source-pvc-name
           value: redis-data02
+        - name: destination-context
+          value: destination
         - name: endpoint-type
           value: route
       taskRef:
-        name: crane-kubeconfig-generator
+        name: crane-transfer-pvc
         kind: ClusterTask
       workspaces:
         - name: kubeconfig
@@ -952,7 +1043,7 @@ spec:
       runAfter:
         - apply
       params:
-        - name: sourceNamespace
+        - name: source-namespace
           value: "$(params.source-namespace)"
         - name: namespace
           value: "$(context.taskRun.namespace)"
@@ -968,6 +1059,9 @@ spec:
     - name: kubectl-apply-kustomize
       runAfter:
         - kustomize-init
+      params:
+        - name: context
+          value: destination
       taskRef:
         name: kubectl-apply-kustomize
         kind: ClusterTask
@@ -982,7 +1076,7 @@ The generated PipelineRun:
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: guestbook-cutover-migration
+  generateName: guestbook-app-state-migration-
 spec:
   params:
     - name: cluster-secret
@@ -990,19 +1084,14 @@ spec:
     - name: source-namespace
       value: guestbook
   workspaces:
-    - name: kubeconfig
-      emptyDir: {}
-  tasks:
-    - name: generate-kubeconfig
-      params:
-        - name: cluster-secret
-          value: "$(params.cluster-secret)"
-        - name: cluster-secret
-          value: internal
-      taskRef:
-        name: crane-kubeconfig-generator
-        kind: ClusterTask
-  workspaces:
+    - name: shared-data
+      volumeClaimTemplate:
+        spec:
+          accessModes:
+            - ReadWriteOnce
+          resources:
+            requests:
+              storage: 10Mi
     - name: kubeconfig
       emptyDir: {}
   pipelineRef:
@@ -1036,6 +1125,17 @@ our API contract**, we are not able to version our ClusterTasks via OCI layering
 and will need to be careful to keep the UI in sync with the ClusterTasks. The
 greatest probably of API incompatibilities are from adding/removing parameters
 or workspaces from ClusterTasks.
+
+To help mitigate these risks, whatever container image specified for Crane
+Runner in the operator's environment (ie. `CRANE_RUNNER_IMAGE` from the
+ClusterServiceVersion on the operator's deployment) will be used to retrieve the
+ClusterTasks via an [initContainer](https://kubernetes.io/docs/concepts/workloads/pods/init-containers/)
+and those ClusterTasks will have the image overridden as well as have
+build annotations added. This way, we will have the ability to build compatibility
+matrixes of which versions of Crane Runner + Crane UI + Crane Proxy go together
+and can be managed by the operator (probably encoded in the form of a
+ClusterServiceVersion published to https://operatorhub.io/ ) and we'll be able
+to inspect these things when debugging by checking the ClusterTasks.
 
 ## Alternatives
 
@@ -1077,4 +1177,5 @@ with referencing the correct Pipeline for a PipelineRun.
 The limitations of these Tekton Bundles (only 10 Pipelines|Tasks) and the
 inability to handle this in downstream pipelines made it an unsuitable option to
 pursue. It is worth noting that the Tekton community appears to be pushing the
-Tekton Bundle (see [Add Cluster scope pipeline support](https://github.com/tektoncd/pipeline/issues/1876) and [Versioning on Tasks/Pipelines](https://github.com/tektoncd/pipeline/issues/1839).
+Tekton Bundle (see [Add Cluster scope pipeline support](https://github.com/tektoncd/pipeline/issues/1876)
+and [Versioning on Tasks/Pipelines](https://github.com/tektoncd/pipeline/issues/1839).
