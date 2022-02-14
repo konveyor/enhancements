@@ -44,7 +44,10 @@ superseded-by:
    * **ANSWER** In the same way operators use environment variables defined on
        operator deployments in ClusterServiceVersions (or overridden via
        Subscription Configs), the operator will override the image specified in
-       the deployed ClusterTasks.
+       the deployed ClusterTasks. There is precedence for this in
+       [mig-operator](https://github.com/konveyor/mig-operator/blob/master/deploy/olm-catalog/bundle/manifests/crane-operator.v99.0.0.clusterserviceversion.yaml#L673-L724)
+       and should allow us to handle network restricted scenarios without
+       additional effort.
 1. Do we want to to execute the `crane-transfer-pvc` ClusterTask for each PVC to
    be migrated or should `crane transfer-pvc` support handling all the PVCs in a
    namespace?
@@ -116,10 +119,17 @@ experience for Crane UI and command-line users alike.
 * The Tekton Pipeline can be modified and re-used by the end user.
 * The ClusterTasks provided by Crane Runner should still be consumable via
     Pipelines and PipelineRuns that are not generated via the UI.
+* Avoid reimplementing functionality that Tekton already provides. Tekton
+    provides a robust foundation on which we can build with Tasks and TaskRuns,
+    Pipeline and PipelineRuns, Parameters, Workspaces, and even a UI for
+    managing Pipelines/PipelineRuns in OpenShift. This enhancement is deliberate
+    in it's intent to rely on work already done in Tekton.
 
 ### Non-Goals
 
-* Replace Tekton
+* User impersonation. It is desirable for the ClusterTasks that interact with
+    the destination cluster to do so as the user who submitted the request. This
+    is a difficult problem that requires it's own enhancement. See [Open Questions](##open-questions).
 
 ## Proposal
 
@@ -131,14 +141,21 @@ binaries:
 * crane - for executing crane commands
 * oc & kubectl - for interacting with cluster resources and/or managing cluster
     configuration.
-* kustomize - for customizing the manifests after `crane apply`.
+* kustomize - for customizing the manifests after `crane apply`. We require this
+    binary in order to "initialize" a kustomize base layer from YAML. This
+    allows us to perform some basic "destination" cluster preparation like
+    changing the namespace where resources will be installed, adding labels, or
+    configuring resource prefix + suffix.
 
 ### Crane Runner ClusterTasks
 
 Crane Runner will support, at a minimum, the ClusterTasks described in this
 section. These are the primary integration between Crane's UI component and Tekton.
 The UI must know about each of these ClusterTasks, the parameters and workspaces
-they require, and how they are to be ordered in Pipelines.
+they require, and how they are to be ordered in Pipelines. This is to facilitate
+the UI generating Pipelines and PipelineRuns (more details provided in
+[UI Integration with ClusterTasks](###ui-integration-with-clustertasks))
+allowing a seamless transition from Crane's UI to the Pipeline's UI.
 
 #### crane-kubeconfig-generator
 
@@ -162,7 +179,7 @@ spec:
       description: |
         The name to give the context.
   steps:
-    - name: crane-export
+    - name: crane-kubeconfig-generator
       image: quay.io/konveyor/crane-runner:latest
       script: |
         export KUBECONFIG=$(workspaces.kubeconfig.path)/kubeconfig
@@ -215,7 +232,8 @@ spec:
     - name: namespace
       type: string
       description: |
-        The namespace from which to export resources.
+        The namespace in the specified cluster, via kubeconfig workspace and/or
+        context parameter, from which to export resources.
       default: ""
   steps:
     - name: crane-export
@@ -380,7 +398,7 @@ spec:
       description: |
         The source cluster namespace in which pvc is synced.
       default: ""
-    - name: pvc-storage-class-name
+    - name: dest-pvc-storage-class-name
       type: string
       description: |
         The name of the storage class to use in the destination cluster.
@@ -404,7 +422,7 @@ spec:
           --destination-context=$(params.destination-context) \
           --pvc-name $(params.source-pvc-name):$(params.destination-pvc-name) \
           --pvc-namespace $(params.source-namespace):$(params.destination-namespace) \
-          --pvc-storage-class-name $(params.pvc-storage-class-name) \
+          --dest-pvc-storage-class-name $(params.dest-pvc-storage-class-name) \
           --pvc-requests-storage $(params.pvc-requests-storage) \
           --endpoint $(params.endpoint-type)
       env:
@@ -565,11 +583,13 @@ type: Opaque
 ```
 
 [Interacting with Pipelines using the developer perspective in OpenShift](https://docs.openshift.com/container-platform/4.9/cicd/pipelines/working-with-pipelines-using-the-developer-perspective.html#op-interacting-with-pipelines-using-the-developer-perspective_working-with-pipelines-using-the-developer-perspective)
-centers around the Pipelines, for this reason the UI will **not** be
-instantiating PipelineRuns with embeded Pipeline specifications. After the user
-completes the wizard, the responses will be used to instantiate Pipeline(s) and
-PipelineRun(s). Examples of the different Pipelines and PipelineRuns are
-presented in the [User Stories](###user-stories) section.
+centers around the Pipelines -- PipelineRuns that aren't associated with a
+PipelineRun are very difficult to discover or manage -- for this reason the
+UI will **NOT** be instantiating PipelineRuns with embeded Pipeline
+specifications. After the user completes the wizard, the responses will be
+used to instantiate Pipeline(s) and PipelineRun(s). Examples of the different
+Pipelines and PipelineRuns are presented in the [User Stories](###user-stories)
+section.
 
 When the user decides to defer execution of the generated
 PipelineRun it will be given a `.spec.status` of "PipelineRunPending". Later,
@@ -579,7 +599,7 @@ OpenShift.
 
 ### User Stories
 
-#### Application Migration
+#### Stateless Application Migration
 
 As an application owner, I want to migrate my stateless application from a
 source to destination cluster.
@@ -748,7 +768,7 @@ spec:
     name: guestbook-migration
 ```
 
-#### Application and State Migration
+#### Stateful Applicaiton Migration
 
 As an application owner, I want to migrate my application with state from a
 source to destination cluster.
@@ -761,16 +781,15 @@ two PVCs exist and are selected for migration named `redis-data01` and
 
 For this use case, the UI will generate two Pipelines and PipelineRuns:
 
-* State Transfer
-* Application and Migration
+* Stage
+* Cutover
 
-##### State Transfer Pipeline and PipelineRun
+##### Stage Pipeline and PipelineRun
 
 This Pipeline and PipelineRun is responsible for migrating the state of the
 application from the source to destination cluster. It's important to note that
 these don't quiesce the application before transferring state which makes it
-suitable for running to limit how long a State and Application Migration will
-take.
+suitable for running to limit how long the cutover will take.
 
 The generated Pipeline:
 
@@ -778,7 +797,7 @@ The generated Pipeline:
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: guestbook-state-transfer
+  name: guestbook-stage
 spec:
   params:
     - name: source-cluster-secret
@@ -864,7 +883,7 @@ The generated PipelineRun:
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: guestbook-state-transfer
+  generateName: guestbook-stage-
 spec:
   params:
     - name: source-cluster-secret
@@ -877,10 +896,10 @@ spec:
     - name: kubeconfig
       emptyDir: {}
   pipelineRef:
-    name: guestbook-state-transfer
+    name: guestbook-stage
 ```
 
-##### Application and State Pipeline and PipelineRun
+##### Cutover Pipeline and PipelineRun
 
 The purpose of this Pipeline and PipelineRun is to "completely" migrate the
 application and it's state to the destination cluster from the source. An
@@ -893,7 +912,7 @@ The generated Pipeline:
 apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
-  name: guestbook-app-state-migration
+  name: guestbook-cutover
 spec:
   params:
     - name: source-cluster-secret
@@ -1076,7 +1095,7 @@ The generated PipelineRun:
 apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
-  generateName: guestbook-app-state-migration-
+  generateName: guestbook-cutover-
 spec:
   params:
     - name: cluster-secret
