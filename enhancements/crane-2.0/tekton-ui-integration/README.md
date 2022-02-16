@@ -25,7 +25,7 @@ superseded-by:
 ## Release Signoff Checklist
 
 - [x] Enhancement is `implementable`
-- [ ] Design details are appropriately documented from clear requirements
+- [x] Design details are appropriately documented from clear requirements
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
 
@@ -38,6 +38,8 @@ superseded-by:
        Until superceded, the UI will create a Secret for the credentials to
        access the destination cluster and these will be consumed the same way
        source cluster credentials are consumed.
+   * Research into how Vault could help us handle user auth will be researched
+       in [MIG-1083](https://issues.redhat.com/browse/MIG-1083).
 1. Getting the operator to override the Crane Runner container image specified
    in ClusterTask Steps. Right now ClusterTasks all reference a
    `quay.io/konveyor/crane-runner:latest` image.
@@ -48,13 +50,19 @@ superseded-by:
        [mig-operator](https://github.com/konveyor/mig-operator/blob/master/deploy/olm-catalog/bundle/manifests/crane-operator.v99.0.0.clusterserviceversion.yaml#L673-L724)
        and should allow us to handle network restricted scenarios without
        additional effort.
+   * Labelling container images with build information sufficient for debugging
+       purposes is a task covered in https://github.com/konveyor/crane-runner/issues/33
 1. Do we want to to execute the `crane-transfer-pvc` ClusterTask for each PVC to
    be migrated or should `crane transfer-pvc` support handling all the PVCs in a
    namespace?
    * **ANSWER** We are going to run the `crane-transfer-pvc` for each PVC to be
        migrated.
+   * While, fixing a bug in `crane` will allow the UI to generate Pipelines that
+       parallelize `transfer-pvc`, handling of: throttling, quotas, retries,
+       etc. will be researched in [MIG-1082](https://issues.redhat.com/browse/MIG-1082).
 1. Is it possible that OpenShift's Pipelines UI will be updated to handle moving
    a PipelineRun out of "PipelineRunPending"?
+   * RFE submitted to [openshift/console#11060](https://github.com/openshift/console/issues/11060)
 
 ## Glossary/References
 
@@ -379,7 +387,7 @@ spec:
       type: string
       description: |
         The name of the pvc to be synced from source cluster.
-    - name: destination-context
+    - name: dest-context
       type: string
       description: |
         The name of the context from kubeconfig representing the destination
@@ -388,25 +396,25 @@ spec:
         You can get this information in your current environment using
         `kubectl config get-contexts` to describe your one or many
         contexts.
-    - name: destination-pvc-name
+    - name: dest-pvc-name
       type: string
       description: |
         The name to give pvc in destination cluster.
       default: ""
-    - name: destination-namespace
+    - name: dest-namespace
       type: string
       description: |
         The source cluster namespace in which pvc is synced.
       default: ""
-    - name: dest-pvc-storage-class-name
+    - name: dest-storage-class-name
       type: string
       description: |
         The name of the storage class to use in the destination cluster.
       default: ""
-    - name: pvc-requests-storage
+    - name: dest-pvc-capacity
       type: string
       description: |
-        The source cluster namespace in which pvc is synced.
+        Size of the destination volume to create.
       default: ""
     - name: endpoint-type
       type: string
@@ -419,11 +427,11 @@ spec:
       script: |
         /crane transfer-pvc \
           --source-context=$(params.source-context) \
-          --destination-context=$(params.destination-context) \
-          --pvc-name $(params.source-pvc-name):$(params.destination-pvc-name) \
-          --pvc-namespace $(params.source-namespace):$(params.destination-namespace) \
-          --dest-pvc-storage-class-name $(params.dest-pvc-storage-class-name) \
-          --pvc-requests-storage $(params.pvc-requests-storage) \
+          --destination-context=$(params.dest-context) \
+          --pvc-name $(params.source-pvc-name):$(params.dest-pvc-name) \
+          --pvc-namespace $(params.source-namespace):$(params.dest-namespace) \
+          --dest-pvc-storage-class-name $(params.dest-storage-class-name) \
+          --pvc-requests-storage $(params.dest-pvc-capacity) \
           --endpoint $(params.endpoint-type)
       env:
         - name: KUBECONFIG
@@ -584,7 +592,7 @@ type: Opaque
 
 [Interacting with Pipelines using the developer perspective in OpenShift](https://docs.openshift.com/container-platform/4.9/cicd/pipelines/working-with-pipelines-using-the-developer-perspective.html#op-interacting-with-pipelines-using-the-developer-perspective_working-with-pipelines-using-the-developer-perspective)
 centers around the Pipelines -- PipelineRuns that aren't associated with a
-PipelineRun are very difficult to discover or manage -- for this reason the
+Pipeline are very difficult to discover or manage -- for this reason the
 UI will **NOT** be instantiating PipelineRuns with embeded Pipeline
 specifications. After the user completes the wizard, the responses will be
 used to instantiate Pipeline(s) and PipelineRun(s). Examples of the different
@@ -844,8 +852,16 @@ spec:
           value: "$(params.source-namespace)"
         - name: source-pvc-name
           value: redis-data01
-        - name: destination-context
+        - name: dest-context
           value: destination
+        - name: dest-pvc-name
+          value: redis-data01
+        - name: dest-namespace
+          value: "$(context.taskRun.namespace)"
+        - name: dest-storage-class-name
+          value: ""
+        - name: dest-pvc-capacity
+          value: 10GiB
         - name: endpoint-type
           value: route
       taskRef:
@@ -865,8 +881,16 @@ spec:
           value: "$(params.source-namespace)"
         - name: source-pvc-name
           value: redis-data02
-        - name: source-context
+        - name: dest-context
           value: destination
+        - name: dest-pvc-name
+          value: redis-data02
+        - name: dest-namespace
+          value: "$(context.taskRun.namespace)"
+        - name: dest-storage-class-name
+          value: ""
+        - name: dest-pvc-capacity
+          value: 10GiB
         - name: endpoint-type
           value: route
       taskRef:
@@ -995,8 +1019,16 @@ spec:
           value: "$(params.source-namespace)"
         - name: source-pvc-name
           value: redis-data01
-        - name: destination-context
+        - name: dest-context
           value: destination
+        - name: dest-pvc-name
+          value: redis-data02
+        - name: dest-namespace
+          value: "$(context.taskRun.namespace)"
+        - name: dest-storage-class-name
+          value: ""
+        - name: dest-pvc-capacity
+          value: 10GiB
         - name: endpoint-type
           value: route
       taskRef:
@@ -1015,8 +1047,16 @@ spec:
           value: "$(params.source-namespace)"
         - name: source-pvc-name
           value: redis-data02
-        - name: destination-context
+        - name: dest-context
           value: destination
+        - name: dest-pvc-name
+          value: redis-data02
+        - name: dest-namespace
+          value: "$(context.taskRun.namespace)"
+        - name: dest-storage-class-name
+          value: ""
+        - name: dest-pvc-capacity
+          value: 10GiB
         - name: endpoint-type
           value: route
       taskRef:
