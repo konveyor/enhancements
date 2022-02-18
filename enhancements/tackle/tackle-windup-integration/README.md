@@ -280,7 +280,7 @@ Analyses in progress, or failed executions will not be included in the analysis 
 
 ##### Description
 
-The new analysis feature requires a reorganization of the main inventory view, as there would be to many significant fields to be displayed on each application row with the current layout. The proposed solution is based in arranging fields and actions relative to analysis and assessment in different tabs. The application list displayed on each of the tabs will be the same, based on the selected criteria on the filtering system, but the information displayed in each row and the application details will change depending on the selected tab. The same will happen with the list of actions available on the buttons on top of the main table. Some row fields will remain fixed for all tabs. These fields are the following:
+The new analysis feature requires a reorganization of the main inventory view, as there would be to many significant fields to be displayed on each application row with the current layout. The proposed solution is based in arranging fields and actions relative to analysis and assessment in different tabs. The application list displayed on each of the tabs will be the same, based on the selected criteria on the filtering system, but the information displayed in each row, the application details and the available actions on the kebab menu on each application row will change depending on the selected tab. The same will happen with the list of actions available on the buttons on top of the main table. Some row fields will remain fixed for all tabs. These fields are the following:
 
 - **Name**: Application name
 - **Description**: Application description
@@ -318,7 +318,13 @@ The list of assessment related fields in the application detail expandable secti
 
 The rendering and types for each field values will remain the same as they are now.
 
-The available actions for the Assessment tab are the following:
+Regarding the actions available in the kebab menu for each application row, the list would be the following:
+
+![Inventory Main View - Assessment Tab](images/inventory-tab-assessment-kebab.png?raw=true "Inventory Main View - Assessment Tab")
+
+This list of actions matches what is currently available in Tackle 1.x.
+
+The available actions on the top menu for the Assessment tab are the following:
 
 - **Assess**: Starts the assessment flow. It will only be enabled when a single application is selected, and disabled in any other case.
 - **Review**: Navigates to the review view. It will only be enabled when an application that has its assessment status as "Completed" is selected.
@@ -344,10 +350,19 @@ The list of analysis related fields in the application detail expandable section
 
 The analysis field will display an icon with a link to the HTML reports when the analysis status is "Completed". Otherwise, it will display "Not available".
 
-The available actions for the Analysis tab are the following:
+Regarding the actions available in the kebab menu for each application row, the list would be the following:
+
+![Inventory Main View - Analysis Tab](images/inventory-tab-analysis-kebab.png?raw=true "Inventory Main View - Analysis Tab")
+
+Manage dependencies and Delete will remain doing the same as in Tackle 1.x. "Cancel analysis" will cancel an analysis that hasn't finished yet, and should only be displayed for applications that have an Analysis with status "Scheduled" or "In progress".
+
+The available actions on the top menu for the Analysis tab are the following:
 
 - **Analyze**: Starts the analysis flow. Will be enabled when one or many applications that don't have their analysis status as "Scheduled" or "In progress" are selected.
 
+###### Additional filters
+
+A new filter should be added to allow users to filter the application list by their analysis source (Source code or Binary).
 
 #### Bulk Analysis configuration
 
@@ -374,6 +389,8 @@ The available actions for the Analysis tab are the following:
 ##### Description
 
 If the user selects one or many applications and clicks on "Analyze", the analysis configuration flow will start. This flow is mostly the same for the case of analyzing a single application or several of them. In this point, we will see the common points for both cases, to later on describe the particularities of the single application analysis flow.
+
+![Analysis mode](images/bulk_analysis.png?raw=true "Analysis mode")
 
 ###### Analysis mode
 
@@ -460,15 +477,187 @@ In the next step of the analysis configuration flow, the user will optionally ad
 
 At first, the table will appear empty. Adding custom rules is not mandatory, so the "Next" button should be enabled even if no rules have been added. If the user clicks on the "Add rule" button, and upload dialog will open:
 
-When the user uploads a file, validation should execute automatically once the file has been fully received. Validation will consist on the following:
+![Upload custom rules](images/ba-customrules-upload-empty.png?raw=true "Upload custom rules")
+
+
+After selecting the files to upload or dragging them to the component, the upload will begin and a component will be displayed to keep track of the upload progress:
+
+![Upload custom rules](images/ba-customrules-upload-uploading-collapsed.png?raw=true "Upload custom rules")
+
+Clicking on the arrow will expand a section with the upload details, including the list of files and a progress bar for each one of them. While the upload is in progress, the "Add" button will be disabled:
+
+![Upload custom rules](images/ba-customrules-upload-uploading-expanded.png?raw=true "Upload custom rules")
+
+When the user uploads one or several files, validation should execute automatically once the file has been fully received. Validation will consist on the following:
 
 - The file has a ".windup.xml" suffix. This is a requirement from the Windup CLI, so this validation is a way to make sure that any rules file that gets passed will not be ignored by the CLI.
 
 - The file is validated against the following XML Schema Definition: https://windup.jboss.org/schema/jboss-ruleset/windup-jboss-ruleset.xsd
 
-> **Note**: Tackle should be capable of running in disconnected Kubernetes instances, so the XSD file should be available locally for the validator, as downloading it from the Internet might not be an option.
+> **Note**: Tackle should be capable of running in disconnected Kubernetes instances, so the XSD file should be available locally for the validator, as downloading it might not be an option.
 
-If the file passes all validations, the green bar will be displayed, and the "Add" button will be enabled. If any problem with validation happens, the red bar will be displayed along with an error message, and the "Add" button will be disabled, with "Cancel" as the only available option.
+Once the validation is done, each file will have a green or red bar depending on the validation results for each one of them. The "Add" button will be enabled if at least one file is valid.
+
+![Upload custom rules](images/ba-customrules-upload-uploading-success.png?raw=true "Upload custom rules")
+
+If any of the files is not valid, the red bar and an error message will be displayed under the corresponding file:
+
+![Upload custom rules](images/ba-customrules-upload-uploading-failure.png?raw=true "Upload custom rules")
+
+If any of the files is not valid clicking on "Add" will result in only the valid files being added to the custom rules list:
+
+![Custom rules](images/ba-customrules-listfiles.png?raw=true "Custom rules")
+
+Once files are uploaded, they will be presented in a table with the following columns:
+
+- **File name**: Name of the XML rules file that was uploaded.
+- **Source/Target**: Source and Target for the ruleset defined in the XML rules file. These can be obtained parsing the id attribute from the ruleset.metadata.sourceTechnology and ruleset.metadata.targetTechnology tags. As this entries are optional, they could not appear in the XML file, so an empty value would be displayed then. For example, if the sourceTechnology tag is not defined and targetTechnology is defined with an id with value "cloud-readiness", the column would display "/cloud-readiness". If both tags are not defined under the metadata tag, the column would display "/".
+- **Number of rules**: Number or rules that the rules file contains. It can be calculated as the number of ruleset.rules.rule tags present in the rules file.
+
+Each row will display a trash can icon. Clicking on it will delete the file corresponding to its row.
+
+###### Options
+
+After optionally adding custom rules, the user can configure a series of advanced options for the analysis.
+
+![Advanced Options](images/ba-advanced-options.png?raw=true "Advanced Options")
+
+This screen presents the following fields:
+
+- **Target(s)**: List of targets configured for the analysis. It should be prepopulated with the values that were established in the transformation target screen. The field should be a dropdown with multiple selection. The selected values should be passed to the CLI with the --target flag separated by spaces. (eg. --target eap7 cloud-readiness) Values:
+  - camel
+	- cloud-readiness
+	- drools
+	- eap
+	- eap6
+	- eap7
+	- eapxp
+	- fsw
+	- fuse
+	- hibernate
+	- hibernate-search
+	- jakarta-ee
+	- java-ee
+	- jbpm
+	- linux
+	- openjdk
+	- quarkus
+	- quarkus1
+	- resteasy
+	- rhr
+- **Source**: List of sources configured for the analysis. This helps narrowing down the list of rules that should be executed during the analysis. The field should be a dropdown with multiple selection. The selected values should be passed to the CLI with the --source flag separated by spaces. (eg. --source eap eap6). Values:
+  - agroal
+	- amazon
+	- artemis
+	- avro
+	- camel
+	- config
+	- drools
+	- eap
+	- eap6
+	- eap7
+	- eapxp
+	- elytron
+	- glassfish
+	- hibernate
+	- hibernate-search
+	- java
+	- java-ee
+	- javaee
+	- jbpm
+	- jdbc
+	- jonas
+	- jrun
+	- jsonb
+	- jsonp
+	- kafka
+	- keycloak
+	- kubernetes
+	- log4j
+	- logging
+	- narayana
+	- openshift
+	- oraclejdk
+	- orion
+	- quarkus1
+	- resin
+	- resteasy
+	- rmi
+	- rpc
+	- seam
+	- soa
+	- soa-p
+	- sonic
+	- sonicesb
+	- springboot
+	- thorntail
+	- weblogic
+	- websphere
+- **Excluded rule tags**: The list of rule tags that should be excluded from the analysis. A text field will be displayed for the user to enter the desired tag to be excluded. Clicking on "Add" will add the tag to the list below. The selected values should be passed to the CLI with the --excludeTags flag separated by spaces. (eg. --excludeTags corporate-config-01000 corporate-config-01023).
+
+###### Review analysis details
+
+At the end of the analysis configuration flow, the user will be presented with a review screen with all the options that have been configured for the analysis:
+
+
+![Advanced Options](images/ba-review.png?raw=true "Advanced Options")
+
+The review screen will be informative only, and no inputs will be requested to the user. The information to be displayed is the following:
+
+- **Applications**: List of applications included in the analysis.
+- **Target(s)**: Target migration paths defined for the analysis.
+- **Scope**: Scope defined for the analysis.
+- **Included Packages**: List of packages defined for the analysis. This section will only be displayed if the "Select the list of packages to be analyzed manually" scope was defined.
+- **Custom rules**: List of custom rules defined for the analysis. "None" if no custom rules were defined.
+- **Advanced options**: List of Advanced options defined for the analysis. "None" if no advanced options were defined.
+
+
+#### Single Application Analysis configuration
+
+
+##### Related Use Cases
+
+- [AC001](#AC001)
+- [AC002](#AC002)
+- [AC003](#AC003)
+- [AC004](#AC004)
+- [AC005](#AC005)
+- [AC006](#AC006)
+- [AC007](#AC007)
+- [AC008](#AC008)
+- [AC009](#AC009)
+- [AC011](#AC011)
+
+
+##### Involved Personas
+
+- [Architect](#architect)
+- [Migrator](#migrator)
+
+
+##### Description
+
+The analysis configuration flow for a single application will be almost the same as the bulk analysis configuration flow defined in the previous point. It will start when the user selects a single application and clicks on "Analyze" under the Analysis tab in the Inventory view:
+
+![Single Application Analysis](images/single-analysis.png?raw=true "Single Application Analysis")
+
+The only change that differentiates the Single Application analysis configuration flow is that the in the Analysis Mode screen there will be an additional option to upload a binary for the selected application, emulating the previous behavior of the Web Console flavor of MTA:
+
+![Single Application Analysis](images/sa-analysis-mode-upload-binary.png?raw=true "Single Application Analysis")
+
+If the "Upload a local binary" option is selected, a new field will appear below the "Source for analysis" field:
+
+![Single Application Analysis](images/sa-analysis-mode-upload-binary-empty.png?raw=true "Single Application Analysis")
+
+The "Next" button will be disabled until a file is uploaded using the new field. Once the user drags a file or chooses one from its filesystem using the component, a validation will be fired to check if the file has a correct extension. Allowed extensions are: war, ear, jar, zip. If the file doesn't have an allowed extension, an error message will be displayed and the "Next" button will remain disabled:
+
+![Single Application Analysis](images/sa-analysis-mode-upload-binary-error.png?raw=true "Single Application Analysis")
+
+If the extension is correct, the "Next" button will become enabled and the user will be allowed to continue with the analysis configuration flow:
+
+![Single Application Analysis](images/sa-analysis-mode-upload-binary-uploaded.png?raw=true "Single Application Analysis")
+
+The rest of the analysis configuration flow will be exactly the same as described in the [Bulk Analysis configuration](bulk-analysis-configuration) specification.
 
 ### Implementation Details/Notes/Constraints
 
@@ -517,6 +706,16 @@ mvn -s $HOME/settings.xml dependency:copy -Dmdep.useBaseVersion=true -DoutputDir
 If no settings file was provided in the request, the "-s" part of the command should be skipped. Also, if no packaging is provided in the request, the format for the -Dartifact flag should be \<group>:\<artifact>:\<version>.
 
 Now, with the artifact available in $HOME/binaries, we can execute the analysis, provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
+
+```shell
+mta-cli --input $HOME/binaries/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
+```
+
+If no custom rules are provided in the request, the --userRulesDirectory flag should be skipped.
+
+##### Upload a local binary Mode
+
+When dealing with the analysis of a single application, users can upload a binary directly from their workstations. For that case, considering the artifact has been made available in $HOME/binaries, we can execute the analysis, provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
 
 ```shell
 mta-cli --input $HOME/binaries/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
