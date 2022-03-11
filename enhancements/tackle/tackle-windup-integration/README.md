@@ -3,12 +3,12 @@ title: tackle-windup-integration
 authors:
   - "rromannissen"
 reviewers:
-  - TBD
+  - "jortel"
 approvers:
-  - TBD
+  - "jortel"
 creation-date: 2021-11-19
-last-updated: 2022-01-26
-status: provisional
+last-updated: 2022-03-11
+status: implementable
 see-also:
   -   
 replaces:
@@ -22,8 +22,8 @@ superseded-by:
 
 ## Release Signoff Checklist
 
-- [ ] Enhancement is `implementable`
-- [ ] Design details are appropriately documented from clear requirements
+- [X] Enhancement is `implementable`
+- [X] Design details are appropriately documented from clear requirements
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
 
@@ -524,8 +524,8 @@ After optionally adding custom rules, the user can configure a series of advance
 
 This screen presents the following fields:
 
-- **Target(s)**: List of targets configured for the analysis. It should be prepopulated with the values that were established in the transformation target screen. The field should be a dropdown with multiple selection. The selected values should be passed to the CLI with the --target flag separated by spaces. (eg. --target eap7 cloud-readiness) Values:
-  - camel
+- **Target(s)**: List of targets configured for the analysis. It should be prepopulated with the values that were established in the transformation target screen. **If the user uploaded any custom rules on the previous screen, targets from these rules should appear selected as well**. The field should be a dropdown with multiple selection. The selected values should be passed to the CLI with the --target flag separated by spaces. (eg. --target eap7 cloud-readiness) Values should include the following fixed list **plus any custom target that might have been derived from the custom rules in the previous screen**. For example, if any custom rule in the previous screen had a target named *custom-target*, it should be added as well to the following list of available options and appear as selected in the list of selected targets:
+    - camel
 	- cloud-readiness
 	- drools
 	- eap
@@ -545,8 +545,8 @@ This screen presents the following fields:
 	- quarkus1
 	- resteasy
 	- rhr
-- **Source**: List of sources configured for the analysis. This helps narrowing down the list of rules that should be executed during the analysis. The field should be a dropdown with multiple selection. The selected values should be passed to the CLI with the --source flag separated by spaces. (eg. --source eap eap6). Values:
-  - agroal
+- **Source(s)**: List of sources configured for the analysis. This helps narrowing down the list of rules that should be executed during the analysis. The field should be a dropdown with multiple selection. It should be empty by default, but **if the user uploaded any custom rules on the previous screen, sources from these rules should appear selected as well** The selected values should be passed to the CLI with the --source flag separated by spaces. (eg. --source eap eap6). Values should include the following fixed list **plus any custom source that might have been derived from the custom rules in the previous screen**. For example, if any custom rule in the previous screen had a source named *custom-source*, it should be added as well to the following list of available options and appear as selected in the list of selected sources:
+    - agroal
 	- amazon
 	- artemis
 	- avro
@@ -600,12 +600,13 @@ This screen presents the following fields:
 At the end of the analysis configuration flow, the user will be presented with a review screen with all the options that have been configured for the analysis:
 
 
-![Advanced Options](images/ba-review.png?raw=true "Advanced Options")
+![Analysis Review](images/ba-review.png?raw=true "Analysis Review")
 
 The review screen will be informative only, and no inputs will be requested to the user. The information to be displayed is the following:
 
 - **Applications**: List of applications included in the analysis.
 - **Target(s)**: Target migration paths defined for the analysis.
+- **Source(s)**: Sources defined for the analysis.
 - **Scope**: Scope defined for the analysis.
 - **Included Packages**: List of packages defined for the analysis. This section will only be displayed if the "Select the list of packages to be analyzed manually" scope was defined.
 - **Custom rules**: List of custom rules defined for the analysis. "None" if no custom rules were defined.
@@ -649,7 +650,11 @@ If the "Upload a local binary" option is selected, a new field will appear below
 
 ![Single Application Analysis](images/sa-analysis-mode-upload-binary-empty.png?raw=true "Single Application Analysis")
 
-The "Next" button will be disabled until a file is uploaded using the new field. Once the user drags a file or chooses one from its filesystem using the component, a validation will be fired to check if the file has a correct extension. Allowed extensions are: war, ear, jar, zip. If the file doesn't have an allowed extension, an error message will be displayed and the "Next" button will remain disabled:
+The "Next" button will be disabled until a file is uploaded using the new field. Once the user drags a file or chooses one from its filesystem using the component a progress bar will be displayed and the upload will begin:
+
+![Single Application Analysis](images/sa-analysis-mode-upload-binary-uploading.png?raw=true "Single Application Analysis")
+
+A validation will be fired to check if the file has a correct extension. Allowed extensions are: war, ear, jar, zip. If the file doesn't have an allowed extension, an error message will be displayed and the "Next" button will remain disabled:
 
 ![Single Application Analysis](images/sa-analysis-mode-upload-binary-error.png?raw=true "Single Application Analysis")
 
