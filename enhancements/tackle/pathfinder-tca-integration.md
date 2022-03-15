@@ -36,9 +36,9 @@ None
 
 This enhancement proposes to have Tackle Application Inventory and Tackle Pathfinder integrate with Tackle Container Advisor for two purposes:
 
-1. The technology standardization of TCA can be used to take application descriptions and create consistent tags in the Application Inventory
+1. The standardization technology of Tackle Container Advisor can be used to take application descriptions and create consistent tags in the Application Inventory based on the technology used by the application.
 
-2. The output from TCA can be additional input to the report that Pathfinder generates to determine the disposition of a workload in the cloud by identifying if it is suitable for containerization and if so what container images to choose..
+2. The containerization recommendations from Tackle Container Advisor can be additional input to the report that Pathfinder generates to determine the disposition of a workload in the cloud by identifying if it is suitable for containerization and if so what container images to choose.
 
 ## Motivation
 
@@ -83,7 +83,7 @@ The Migration Architect is responsible for determining teh disposition of each a
 
 #### Tackle Pathfinder Implementation
 
-The proposed solution for Tackle Pathfinder integration is for TCA to create a Command Line Interface (CLI) that could be invoked as an Add-On to Pathfinder following it's add-on architecture. TCA is currently a Python microservice that runs as a service.
+The proposed solution for Tackle Pathfinder integration is for TCA to create a Command Line Interface (CLI) that could be invoked as an Add-On to Pathfinder following its add-on architecture. TCA is currently a Python microservice that runs as a service.
 
 #### Tackle Application Inventory Implementation
 
