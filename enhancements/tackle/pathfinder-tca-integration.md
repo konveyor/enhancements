@@ -32,11 +32,13 @@ None
 
 ## Summary
 
+This proposal is to integrate the capabilities of Tackle Container Advisor with both the Tackle Application Inventory and Tackle Pathfinder as outlined below.
+
 [Tackle Application Inventory](https://github.com/konveyor/tackle-application-inventory) is a tool for cataloging and tagging applications that are candidates for modernization / migration. [Tackle Pathfinder](https://github.com/konveyor/tackle-pathfinder) is a tool for determining what path to take to modernize workloads on Kubernetes. [Tackle Container Advisor](https://github.com/konveyor/tackle-container-advisor) (TCA) is a tool to help standardize technology descriptions and determine if a workload can be run in a container, and if so, what container should be used.
 
 This enhancement proposes to have Tackle Application Inventory and Tackle Pathfinder integrate with Tackle Container Advisor for two purposes:
 
-1. The standardization technology of Tackle Container Advisor can be used to take application descriptions and create consistent tags in the Application Inventory based on the technology used by the application.
+1. The standardization technology of Tackle Container Advisor can be used to take application technology descriptions and create consistent standardized tags in the Application Inventory, based on the technology used by the application.
 
 2. The containerization recommendations from Tackle Container Advisor can be additional input to the report that Pathfinder generates to determine the disposition of a workload in the cloud by identifying if it is suitable for containerization and if so what container images to choose.
 
@@ -81,13 +83,17 @@ The Migration Architect is responsible for determining teh disposition of each a
 
 ### Implementation Details/Notes/Constraints [optional]
 
-#### Tackle Pathfinder Implementation
-
-The proposed solution for Tackle Pathfinder integration is for TCA to create a Command Line Interface (CLI) that could be invoked as an Add-On to Pathfinder following its add-on architecture. TCA is currently a Python microservice that runs as a service.
-
 #### Tackle Application Inventory Implementation
 
-It is not clear how TCA would integrate with Tackle Application Inventory. I'm not sure if the Application Inventory has similar extensibility as Pathfinder. We will need to do more work in figuring this out.
+The proposed solution for Application Inventory integration is for TCA to create a Command Line Interface (CLI) that could be invoked as an Add-On to the Application Inventory following the Tackle Hub's add-on architecture. TCA is currently a Python microservice that runs as a service in Kubernetes so the easiest thing is for this new CLI to make a REST API call to the TCA service running in the cluster. Alternately we could investigate the CLI running TCA locally but start-up times may prohibit this from being a performant implementation.
+
+One proposal is that the standardization API for Tackle Container Advisor could be invoke during CSV import of application data to the Application Inventory. It would process the technology field and generate tags which would be stored in the Tackle Hub database. These tags could then be verified by the customer before using them to generate containerization recommendations, which would also be stored in the Tackle Hub database.
+
+It is not clear when or how the containerization recommendations would be generated from the Application Inventory, but it should be after the tags have been verified by the customer as being accurate.
+
+#### Tackle Pathfinder Implementation
+
+Pathfinder would use the containerization recommendation stored in te Tackle Hub database, in its report. This would require no changes from TCA. Only Pathfinder would need to modified to see if these recommendations have been generated and then include them in the report that it produces.
 
 ### Security, Risks, and Mitigations
 
