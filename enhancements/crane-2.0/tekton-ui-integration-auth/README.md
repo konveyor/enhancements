@@ -133,6 +133,17 @@ For ease of reference the alternatives are simply stated here:
 1. Map the user's permissions (via a `SelfSubjectRulesReview`) onto a Role and
    bind that to a generated Service Account.
 1. Allow the user to specify a Service Account to use in the migration.
+1. Create a separate namespace where the user can run the migration, call it
+   migration namespace for clarity. The idea is to create resources and secrets 
+   in the migration namespace so it is secure from other users in the user namespace. 
+   However, this does not solve the original problem because the template for
+   creating the namespace is specified by the cluster-admin at the cluster level,
+   more details
+   [here](https://docs.openshift.com/container-platform/4.10/applications/projects/configuring-project-creation.html#modifying-template-for-new-projects_configuring-project-creation). 
+   Because it is a cluster-wide configuration, the same user groups that have read
+   access in the namespace being migrated will continue to have the read access in
+   the migration namespace. Hence this is not any better than migrating in the existing 
+   namespace.
 
 ### Ask User for Their Token
 
