@@ -431,18 +431,27 @@ Each transformation target will be presented with a box that includes an icon an
 - **Linux**
   - Text: *Ensure there are no Microsoft Windows paths hard coded into your applications.*
   - Windup target value: **linux**
-- **OpenJDK**
-  - Text: *Rules to support the migration to OpenJDK from OracleJDK.*
+- **Oracle JDK to OpenJDK**
+  - Text: *Rules to support the migration to OpenJDK from Oracle JDK.*
   - Windup target value: **openjdk**
-- **Camel**
-  - Text: *A comprehensive set of rules for migration from Apache Camel 2 to Apache Camel 3.*
-  - Windup target value: **camel**
+- **OpenJDK 11**
+  - Text: *Rules to support the migration to OpenJDK 11 from OpenJDK 8.*
+  - Windup target value: **openjdk11**
+- **Jakarta EE 9**
+  - Text: *A collection of rules to support migrating applications from Java EE 8 to Jakarta EE 9. The rules cover project dependencies, package renaming, updating XML Schema namespaces, the renaming of application configuration properties and bootstrapping files.*
+  - Windup target value: **jakarta-ee**
 - **Quarkus**
   - Text: *Rules to support the migration of Spring Boot applications to Quarkus.*
   - Windup target value: **quarkus**
 - **Spring Boot on Red Hat Runtimes**
   - Text: *A set of rules for assessing the compatibility of applications against the versions of Spring Boot libraries supported by Red Hat Runtimes.*
   - Windup target value: **rhr**
+- **Open Liberty**
+  - Text: *A comprehensive set of rules for migrating traditional WebSphere applications to Open Liberty.*
+  - Windup target value: **openliberty**
+- **Camel**
+  - Text: *A comprehensive set of rules for migration from Apache Camel 2 to Apache Camel 3.*
+  - Windup target value: **camel**
 
 The "Windup target value" entry for each one of the transformation paths above will define the value that gets passes to the Windup CLI with the --target flag. Multiple boxes can be selected in this screen, and consequently, multiple --target flags can be passed to the Windup CLI.
 
