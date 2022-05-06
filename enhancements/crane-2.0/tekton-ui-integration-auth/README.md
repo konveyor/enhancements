@@ -78,11 +78,11 @@ Pipelines.
    an authenticated proxy.
 1. Prompt the user in the user that, continuing will result in their credentials
    being stored as a secret. This is our mechanism for getting informed consent.
-1. When the user decides to continue, the UI reaches out to the
-   `crane-secret-service` to create a Secret with a given name and namespace.
-   The service will combine the authorization headers with the name and
-   namespace parameters to create a Secret with the credentials needed to access
-   the cluster.
+1. When the user decides to continue, the UI submits the request to
+   `crane-secret-service` as if it were the API Server (ie.
+   `/api/v1/namespaces/:namespace/secrets`).
+1. `crane-secret-service` will inject the user's token in the Secret request
+   before proxying to the API Server.
 1. The UI can then use the Secret in the remainder of the flow as it did
    previously when the user was being asked for their token.
 
@@ -95,22 +95,6 @@ Pipelines.
       so is the user's credentials.
      * Additionally, this is the expected behavior in Kubernetes' clusters.
          User's given access to read Secrets should be trustworthy.
-
-<!---
-## Design Details
-
-### Upgrade / Downgrade Strategy
-
-If applicable, how will the component be upgraded and downgraded? Make sure this
-is in the test plan.
-
-Consider the following in developing an upgrade/downgrade strategy for this
-enhancement:
-- What changes (in invocations, configurations, API use, etc.) is an existing
-  cluster required to make on upgrade in order to...
-  -  keep previous behavior?
-  - make use of the enhancement?
--->
 
 ## Drawbacks
 
@@ -190,7 +174,9 @@ UI wizard.
 Although a significant increase in complexity versus some of the other options,
 this alternative solved many of our auth concerns. A significant driver of this
 option was the ability to prevent us from storing the user's credentials in a
-Secret. When it was determined
+Secret. When it was determined that the ability of certain users to READ secrets
+wasn't for us to work around, this alternative did not provide enough value add
+given it's complexity concerns.
 
 ### Generate SA and add to "admin" RoleBinding
 
