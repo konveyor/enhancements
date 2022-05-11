@@ -10,7 +10,7 @@ approvers:
   - "@mturley"
   - "@shawn-hurley"
 creation-date: 2022-01-18
-last-updated: 2022-01-18
+last-updated: 2022-05-06
 status: implementable
 see-also:
   - "N/A" 
@@ -1211,6 +1211,46 @@ Pipeline to map parameters or workspaces into subsequent TaskRuns. Pipelines
 are responsible for handling parameters + workspaces and mapping those onto the
 Tasks contained therein. Valid PipelineRuns must specify the parameters +
 workspaces expected by the Pipeline.
+
+### Generating Pipelines
+
+Similar to the [Variable File](###variable-file) alternative -- both mention
+creating a generic Pipeline -- the thrust of this alternative was to simply
+define a Pipeline such that the User could "Run" (create a PipelineRun) later.
+The goal would be to have all of the parameters defined as defaults to
+facilitate the user's execution without having to provide new information.
+Additionally, this would avoid some of the UI problems associated with starting
+a PipelineRun.
+
+There are several reasons why this route was not chosen but the single most
+important reason was from [Tekton Docs on PipelineRuns](https://tekton.dev/docs/pipelines/pipelineruns/#pending-pipelineruns).
+
+> A PipelineRun can be created as a “pending” PipelineRun meaning that it will not actually be started until the pending status is cleared.
+
+Second, the UI is creating an instance of a migration and `Pipeline`s are
+intentionally distinct from `PipelineRun`s in [Tekton's documentation](https://tekton.dev/docs/pipelines/pipelineruns/#overview).
+
+> A PipelineRun allows you to instantiate and execute a Pipeline on-cluster.
+> A Pipeline specifies one or more Tasks in the desired order of execution.
+> A PipelineRun executes the Tasks in the Pipeline in the order they are specified until all Tasks have executed successfully or a failure occurs.
+
+While we could potentially store all relevant information for a `PipelineRun`
+on a `Pipeline`, these resources are distinct and making one look like the other
+could cause us problems in the future.
+
+Lastly, and by far the biggest technical hurdle that prevented us from seriously
+considering this path was the handling Workspaces. Consider this section from
+Tekton's documentation about [Specifying `Workspaces`](https://tekton.dev/docs/pipelines/pipelineruns/#specifying-workspaces)
+with respect to `PipelineRun`s:
+
+> If your Pipeline specifies one or more Workspaces, you must map those Workspaces to the corresponding physical volumes in your PipelineRun definition.
+
+This opened a whole new set of open questions: do we create PVC(s) for the user?
+do we tell the user to use a claim template? Any way we approach this, the user
+would be required, at the time they decide to run the `Pipeline`, the correct
+mapping of `Volumes` to `Workspaces`. The purpose of our approach was to
+simplify this for users as much as possible and this was an unacceptable
+trade-off.
 
 ### UI Generated PipelineRuns from Typed Config
 
