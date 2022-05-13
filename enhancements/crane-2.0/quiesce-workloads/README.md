@@ -13,15 +13,17 @@ approvers:
   - "@jmontleon"
   - "@shawn-hurley"
 creation-date: 2022-05-05
-last-updated: 2022-05-09
-status: implementable
+last-updated: 2022-05-13
+status: rejected
 see-also:
   - "N/A"  
 replaces:
   - "N/A"
 superseded-by:
-  - "N/A"
+  - "../scale-workloads/README.md"
 ---
+
+> This is a rejected proposal. The reasons are captured in the PR comment [here](https://github.com/konveyor/enhancements/pull/68#issuecomment-1126050022). Please see the follow up PR mentioned in the comments for future developments on this topic.
 
 # Quiescing Workloads
 
