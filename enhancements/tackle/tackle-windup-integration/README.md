@@ -7,8 +7,8 @@ reviewers:
 approvers:
   - "jortel"
 creation-date: 2021-11-19
-last-updated: 2022-03-11
-status: implementable
+last-updated: 2022-06-14
+status: implemented
 see-also:
   -   
 replaces:
@@ -24,8 +24,8 @@ superseded-by:
 
 - [X] Enhancement is `implementable`
 - [X] Design details are appropriately documented from clear requirements
-- [ ] Test plan is defined
-- [ ] User-facing documentation is created
+- [X] Test plan is defined
+- [X] User-facing documentation is created
 
 ## Open Questions
 
@@ -95,8 +95,8 @@ have access to sensitive information, but can consume it.
 
 #### Migrator
 
-A developer that should be allowed to run assessments and analysis,
-but not to create or modify applications in the portfolio.
+A developer that should be allowed to run analysis,
+but not to assess, create or modify applications in the portfolio.
 
 
 ### User Stories
