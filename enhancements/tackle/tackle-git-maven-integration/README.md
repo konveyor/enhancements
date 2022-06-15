@@ -7,8 +7,8 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2021-11-20
-last-updated: 2022-01-26
-status: provisional
+last-updated: 2022-06-14
+status: implemented
 see-also:
   -   
 replaces:
@@ -23,9 +23,9 @@ superseded-by:
 ## Release Signoff Checklist
 
 - [X] Enhancement is `implementable`
-- [ ] Design details are appropriately documented from clear requirements
-- [ ] Test plan is defined
-- [ ] User-facing documentation is created
+- [X] Design details are appropriately documented from clear requirements
+- [X] Test plan is defined
+- [X] User-facing documentation is created
 
 ## Open Questions
 
@@ -70,7 +70,7 @@ A technical lead for the migration project that can create and modify applicatio
 
 #### Migrator
 
-A developer that should be allowed to run assessments and analysis, but not to create or modify applications in the portfolio.
+A developer that should be allowed to run assessments and analysis, but not to assess, create or modify applications in the portfolio.
 
 
 #### Organization Administrator
