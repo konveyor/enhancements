@@ -298,17 +298,7 @@ _Options_
 --global, -g :: Updates the global config, as opposed to the local one
 ```
 
-### Security, Risks, and Mitigations
-
-**Carefully think through the security implications for this change**
-
-What are the risks of this proposal and how do we mitigate. Think broadly. How
-will this impact the broader OKD ecosystem? Does this work in a managed services
-environment that has many tenants?
-
-How will security be reviewed and by whom? How will UX be reviewed and by whom?
-
-Consider including folks that also work outside your immediate sub-project.
+<!-- ### Security, Risks, and Mitigations -->
 
 ## Design Details
 
