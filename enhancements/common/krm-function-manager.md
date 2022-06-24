@@ -12,12 +12,32 @@ creation-date: 2022-06-22
 last-updated: 2022-06-23
 status: provisional
 see-also:
-  - "N/A"  
+  - "KEP-2906: Kustomize Function Catalog"  
 replaces:
   - "N/A"  
 superseded-by:
   - "N/A"  
 ---
+
+- [Kaffine: A KRM Function Manager](#kaffine-a-krm-function-manager)
+  - [Release Signoff Checklist](#release-signoff-checklist)
+  - [Open Questions](#open-questions)
+  - [Summary](#summary)
+  - [Motivation](#motivation)
+    - [Goals](#goals)
+    - [Non-Goals](#non-goals)
+  - [Design Details](#design-details)
+    - [Workflow](#workflow)
+  - [Proposal](#proposal)
+    - [User Stories](#user-stories)
+      - [Story 1: Creating a new application](#story-1-creating-a-new-application)
+      - [Story 2: Updating an existing application already using Kaffine](#story-2-updating-an-existing-application-already-using-kaffine)
+    - [Implementation Details/Notes/Constraints](#implementation-detailsnotesconstraints)
+      - [Notes](#notes)
+      - [CLI Commands](#cli-commands)
+  - [Implementation History](#implementation-history)
+  - [Drawbacks](#drawbacks)
+  - [Alternatives](#alternatives)
 
 # Kaffine: A KRM Function Manager
 
@@ -37,6 +57,8 @@ superseded-by:
 
 This enhancement proposes a new tool, called **Kaffine** to help manage the discovery, installation, removal, and updating of KRM functions. The tool acts as a buffer between the low-level management of different KRM function versions and the high-level usage of them in an application.
 
+This proposal utilizes [KEP-2906: Kustomize Function Catalog](https://github.com/kubernetes/enhancements/tree/master/keps/sig-cli/2906-kustomize-function-catalog#motivation) as a basis for its catalog system.
+
 ## Motivation
 
 Currently, when creating an application that utilizes KRM functions, there is no standardized way to manage the versioning these functions. While it is possible to manage the images of the functions manually, it is incredibly un-ergonomic to do so. The simplest solution to avoid managing versions is to use the `latest` tag when developing the application. Unfortunately, this produces three major undesirable effects:
@@ -52,12 +74,12 @@ The other option is to lock down every instance of the function's usage to a spe
 
 Additionally, as it currently stands there is no way to easily discover new KRM functions. While KPT has a [centralized function catalog](https://catalog.kpt.dev/), this severely limits the growth potential and adoption of KRM functions. 
 
-This enhancement proposes a new tool, Kaffine, to help rectify these issues. Much like how one can install system packages manually using tools like dpkg, it is the norm to let apt or dnf manage these installations instead. Additionally, one can add additional repositories to these tools to gain access to more functions, managed by the community.
+This enhancement proposes a new tool, Kaffine, to help rectify these issues. Much like how one can install system packages manually using tools like dpkg, it is the norm to let apt or dnf manage these installations instead. Additionally, one can add additional catalogs to these tools to gain access to more functions, managed by the community.
 
 ### Goals
 
-- Be able to add or remove repositories of KRM functions to the tool
-- Search the repositories for functions and install them
+- Be able to add or remove catalogs of KRM functions to the tool
+- Search the catalogs for functions and install them
 - Update the installed functions
 - Easily opt-in or opt-out of the system
 
@@ -65,7 +87,22 @@ This enhancement proposes a new tool, Kaffine, to help rectify these issues. Muc
 
 - Running KRM functions
 - Managing how applications use functions
-<!-- - Actually installing or uninstalling containers -->
+
+## Design Details
+
+A function catalog, going off of [KEP-2906](https://github.com/kubernetes/enhancements/tree/master/keps/sig-cli/2906-kustomize-function-catalog#motivation), is a YAML file listing one or more KRM functions, along with their associated versions. It can be a local file, a remote reference available from an HTTP(s) endpoint, or as an OCI artifact.
+
+<!-- Is this a good idea? -->
+Unless otherwise specified, all files are _project local_. All files and config will be stored in a local `.kaffine` directory. There is also a global config, which has a lower precedence than the local one.
+
+### Workflow
+
+<!-- Need to create an OpenAPI spec for config.yaml? -->
+First, a user makes Kaffine aware of a catalog via `kaffine config add catalog <catalog>`. The catalog is appended to the `catalogs` list in the `config.yaml` file. The catalog is then saved in the `catalogs/` folder, with a name corresponding to the hash of the location. (`"example.com/catalogs/one" -> catalogs/<SHA-256>`)
+
+Next, a user can search the catalogs for a function via `kaffine search <name>`.
+
+If at any point the user wants to check for updates to their functions, they can execute `kaffine update`. This will check if there is an updated version of each catalog, and download it if need be. Then, if there are any functions with higher versions than the ones selected by kaffine, it will prompt the user and ask if they want to update.
 
 ## Proposal
 
@@ -73,7 +110,7 @@ This enhancement proposes a new tool, Kaffine, to help rectify these issues. Muc
 
 #### Story 1: Creating a new application
 
-Alice has in mind some functions that she wants to use that are created by Group Alpha. She adds the repo their repo via `kaffine config add repo group-alpha.example.com`. Then she searches which functions are available in the repo.
+Alice has in mind some functions that she wants to use that are created by Group Alpha. She adds the catalog their catalog via `kaffine config add catalog group-alpha.example.com`. Then she searches which functions are available in the catalog.
 
 ```
 $ kaffine search -l group-alpha
@@ -99,7 +136,7 @@ apiVersion: config.kubernetes.io/v1alpha1
 kind: ResourceList
 items:
 - kind: KrmFunction
-  repo: group-alpha.example.com
+  catalog: group-alpha.example.com
   name: alpha-foo-er
   description: "A function that foos"
   versions:
@@ -110,7 +147,7 @@ items:
           image: images.example.com/functions/alpha-foo-er:v2.0.0
           sha256: a428de...
 - kind: KrmFunction
-  repo: group-alpha.example.com
+  catalog: group-alpha.example.com
   name: alpha-baz-er
   description: "A function that bazs"
   versions:
@@ -159,9 +196,9 @@ function  alpha-baz-er  A function that bazs  v2.1.0
 
 #### Notes
 
-A repo has 2 main parts: a URI and a name. The URI is the location of the repo. It can be a server somewhere or a path on the local filesystem. The name is a user-friendly name of the repo. If two repos conflict in naming, use the URI instead.
+A catalog has 2 main parts: a URI and a name. The URI is the location of the catalog. It can be a server somewhere or a path on the local filesystem. The name is a user-friendly name of the catalog. If two catalogs conflict in naming, use the URI instead.
 
-If you want to disambiguate between functions in different repos, you can prepend the name of the repo followed by a `/` character. Example: `repo-foo/function-bar`. If you do not provide a repo, it will search every repo you have for the specified function.
+If you want to disambiguate between functions in different catalogs, you can prepend the name of the catalog followed by a `/` character. Example: `catalog-foo/function-bar`. If you do not provide a catalog, it will search every catalog you have for the specified function.
 
 Additionally, if you want to install a specific version (such as `v1.1`, `latest-stable`, `nightly`, et cetera…) you can append a `:` character followed by the label. Example: `function-bar:nightly`. If you do not provide a version, it will default to `latest-stable`.
 
@@ -175,7 +212,7 @@ kaffine search
 kaffine search <function-name>
 ```
 
-Searches all repositories for the function with the specified name. If no name is provided, it’s functionally the same as: `kaffine search '*' -r`. If output is piped, `-o yaml` is automatically selected. Otherwise, `-o default` is the default.
+Searches all catalogs for the function with the specified name. If no name is provided, it’s functionally the same as: `kaffine search '*' -r`. If output is piped, `-o yaml` is automatically selected. Otherwise, `-o default` is the default.
 
 _Options_
 
@@ -183,13 +220,12 @@ _Options_
 --regex, -r :: Treats <function-name> as a regular expression
 --output, -o <format> :: Format to output, ex. yaml, default, etc...
 --location, -l <location> :: The location to search.
-    all :: (default) Searches all repos
-    repo <repo-name/uri> :: Only searches in the specified repo
+    all :: (default) Searches all catalogs
+    catalog <catalog-name/uri> :: Only searches in the specified catalog
 ```
 
-<!-- all :: (default) Searches installed functions and all repos
-repos :: Only searches in all repos
-repo <repo-name/uri> :: Only searches in the specified repo
+catalogs :: Only searches in all catalogs
+catalog <catalog-name/uri> :: Only searches in the specified catalog
 local :: Only searches installed functions -->
 
 <!-- NOTE: pipelines and collections are for the future, don’t worry about them right now -->
@@ -216,7 +252,7 @@ functionConfig:
    regex: false
 items:
 - kind: KrmFunction
-  repo: repo1.example.com
+  catalog: catalog1.example.com
   name: foo-function
   description: "Generic foo function"
   versions:
@@ -229,7 +265,7 @@ items:
     - name: v1.0
       ...
 - kind: KrmFunction
-  repo: repo2.example.com
+  catalog: catalog2.example.com
   name: foo-function-binary
   description: "Generic foo function, using a binary"
   versions:
@@ -237,7 +273,7 @@ items:
       tags: ['latest-stable']
       runtime:
         binary:
-          image: repo2.example.com/something/foo-function-binary-v1.tar.gz
+          image: catalog2.example.com/something/foo-function-binary-v1.tar.gz
           sha256: b539ef...
     - name: v2.0.0-nightly
       tags: ['nightly']
@@ -262,7 +298,7 @@ _Options_
 kaffine install <function-name>
 ```
 
-Tries to install the function with the given name. It searches the repos for the function with the given name. If it finds it, it installs it. If there are duplicates, it will return the duplicate functions.
+Tries to install the function with the given name. It searches the catalogs for the function with the given name. If it finds it, it installs it. If there are duplicates, it will return the duplicate functions.
 
 **Remove**
 ```
@@ -288,8 +324,8 @@ _Options_
 **Config**
 
 ```
-kaffine config add repo <URI>
-kaffine config remove repo <Name/URI>
+kaffine config add catalog <URI>
+kaffine config remove catalog <Name/URI>
 kaffine config view
 ```
 
@@ -300,7 +336,7 @@ _Options_
 
 <!-- ### Security, Risks, and Mitigations -->
 
-## Design Details
+
 
 <!-- ### Test Plan -->
 
