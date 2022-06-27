@@ -51,25 +51,33 @@ At present, we can not utilize the KRM functions in the crane. To leverage the b
  
 
 ## Proposal
-- We will add a subcommand in the crane cli that can run KRM functions with the arguments. The underlying functionality can be built on top of [kyaml](https://pkg.go.dev/sigs.k8s.io/kustomize/kyaml) package that provides libraries to run containerized function images. We'll also create a library which will perform the similar tasks as a subcommand. It might be helpful to automate the execution of functions as we don't need to depend on cli commands to execute functions.
+- We will add a subcommand in the crane cli that can run KRM functions with the arguments. The underlying functionality can be built on top of [kyaml](https://pkg.go.dev/sigs.k8s.io/kustomize/kyaml) package that provides libraries to run containerized function images. We'll also create a library which will parse the function configuration from a functionconfig file and invoke the functions with their respective arguments defined in the config file. It will help us to enhance the existing crane commands and to automate the execution of function pipeline.
 
 ### Command
 Crane subcommand will follow this synopsis:
 ```
-crane fn run [flags] [-- args]
+crane fn run [IMAGE] [flags] [-- args]
 ```
 > The above subcommand will be used for transforming resources in a directory using functions. If a function fails, the process is aborted and the resource files will be left unchanged.
  
 #### Args:
+  *IMAGE:*
+>	Container image of the function to execute e.g. quay.io/krm-fn/set-annotation:v3.1.
 	
   *args:*
 >	Arguments to pass to the function. The value can be in `key=value` format and come after the separator **'--'**
 
   *Flags:*
 >
-	  --image, i: (required)
-		Container image of the function to execute i.e. *quay.io/krm-fn/set-annotation:v3.1*. 
 
+	  --export-dir, e:
+	  	Path to the local directory containing resources. 
+		Defaults to the export directory.
+  	
+	  --transform-dir, t:
+		If specified, the output resources are written to provided location,
+		if not specified, resources are written to transform directory.
+		
 	  --as-current-user:
 		Use the uid and gid of the command executor to run the function in the container.
 		If the flag is not specified the container will run as `nobody`
@@ -84,42 +92,33 @@ crane fn run [flags] [-- args]
 	  --network:
 		If enabled, container functions are allowed to access network.
 		By default it is disabled.
-	
-	  --export-dir, e:
-	  	Path to the local directory containing resources. 
-		Defaults to the export directory.
-  	
-	  --transform-dir, t:
-		If specified, the output resources are written to provided location,
-		if not specified, resources are written to transform directory.
-    
 
 #### Examples:
 
 ```
-# apply function example-fn on the resources in DIR directory and write output back to DIR
-$ crane fn run --export-dir DIR -i quay.io/example.com/example-fn
+# apply function example-fn on the resources in export directory and write output back to DIR
+$ crane fn run quay.io/example.com/example-fn --export-dir export
 ```
 
 ```
 # apply function example-fn with an input ConfigMap containing `data: {foo: bar}`
-$ crane fn run -i gcr.io/example.com/example-fn -- foo=bar
+$ crane fn run gcr.io/example.com/example-fn -- foo=bar
 ```
 
 ```
-# apply function example-fn on the resources in DIR directory with network access
-$ crane fn run -e DIR -i gcr.io/example.com/example-fn:v2.6 --network
+# apply function example-fn on the resources in exportGuest directory with network access
+$ crane fn run -e exportGuest gcr.io/example.com/example-fn:v2.6 --network
 ```
 
 ```
 # apply function example-fn on the resource and export foo environment variable
-$ crane fn run -i gcr.io/example.com/example-fn --env foo=bar
+$ crane fn run gcr.io/example.com/example-fn --env foo=bar
 ```
 
 ```
 # apply function 'set-namespace' on the resources in current directory and write
   the output resources to dest directory
-$ crane fn run -i docker.io/example.com/set-namespace:v0.1 --transform-dir path/to/dest -- namespace=crane
+$ crane fn run docker.io/example.com/set-namespace:v0.1 --transform-dir path/to/dest -- namespace=crane
 ```
 
 ### User Stories
@@ -128,9 +127,9 @@ $ crane fn run -i docker.io/example.com/set-namespace:v0.1 --transform-dir path/
 As a crane user, I would like to run a single KRM function with crane subcommand using function image as an argument and other command-line flags, such that the function is applied against the input resources and produces the transformed output. 
 
 #### Story 2
-As a crane user, I would like to run KRM functions **without** the crane cli subcommand, such that the given function is applied against the input resources and produces the transformed output.
+As a crane user, I would like to run KRM functions with enhanched ```crane transform``` subcommand by passing a function config file, **without** explicitly using the ```crane fn run``` cli subcommand, such that the given function configuration is applied against the input resources and produces the transformed output.
 
-We will have a module where we pass in a configuration file containing the path to resource directory (default `export`), all the functions that we want to run, any additional arguments that are needed for each function to run, and path to transform directory (default `transform`) where the transformed resources will be saved.
+We will pass a configuration file containing all the functions we want to execute and any additional arguments needed for each function invocation.
 
 Example Config:
 ```
@@ -157,9 +156,19 @@ spec:
   output-resource-dir: testdata/transform/
 ```
 
-
 #### Story 3
 As a crane user, I would like to run multiple functions in a predefined manner such that they are applied to input resources and produces a transformed output.
 
+
 ## Alternatives
-- Alternative to creating an integrated solution to crane cli, we can leverage the already built solutions that provide similar functionality like [KPT](https://github.com/GoogleContainerTools/kpt) and [Kustomize](https://github.com/kubernetes-sigs/kustomize).
+Alternative to creating an integrated solution to crane cli, we can leverage the already built solutions that provide similar functionality like [KPT](https://github.com/GoogleContainerTools/kpt) and [Kustomize](https://github.com/kubernetes-sigs/kustomize).
+
+At present, user can perform the following steps to utilize KRM functions in crane:
+ 1. User export the resources using `crane export`, then 
+ 2. User transform the resources with `kpt | kustomize`  and store them in the transform directory, finally
+ 3. User applies the transformed resources to the target using `crane apply`
+  
+This approach is rejected for foloowing reasons:
+- In the future, we would like to expand the functionality of the runner provided by ```kpt | kustomize``` and therefore, we need our wrapper of conatiner runner, which will be integral to the crane.
+- We are also proposing a [KRM Function Manager](https://github.com/konveyor/enhancements/pull/73)(Kaffine) enhancement, which manages the KRM functions. An in-house wrapper of container runner gives us the flexibility to integrate features of ```kaffine``` to enhance the KRM function execution.
+- As we are also proposing to enhance the ```crane transform``` command to execute functions under the hood, we need to have function execution capability with the crane.
