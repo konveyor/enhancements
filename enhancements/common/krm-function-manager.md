@@ -61,7 +61,7 @@ This proposal utilizes [KEP-2906: Kustomize Function Catalog](https://github.com
 
 ## Motivation
 
-Currently, when creating an application that utilizes KRM functions, there is no standardized way to manage the versioning these functions. While it is possible to manage the images of the functions manually, it is incredibly un-ergonomic to do so. The simplest solution to avoid managing versions is to use the `latest` tag when developing the application. Unfortunately, this produces three major undesirable effects:
+Currently, when creating an application that utilizes KRM functions, there is no standardized way to manage the versioning these functions. While it is possible to manage the versioning of the functions manually, it is incredibly un-ergonomic to do so. The simplest solution to avoid managing versions is to use the `latest` tag when developing the application. Unfortunately, this produces three major undesirable effects:
 
 1. **Lack of reproducibility**: A developer using `latest` might start out with `v1` on their system. However, when they go to deploy on a different system, `latest` might pull a higher version with breaking changes.
 1. **Security vulnerabilities**: Many enterprise solutions will simply not tolerate blindly updating to the latest version of a technology before it is proven.
@@ -71,6 +71,7 @@ The other option is to lock down every instance of the function's usage to a spe
 
 1. **Lack of version mobility**: Developers will have to update every single reference to the function to the newer version, causing a refactoring headache.
 1. **Security vulnerabilities (still)**: A newer version of the function may be released with critical updates and bugfixes
+1. **Auditability**: If the functions are defined in one place, you don't accidentally use two different versions, which may cause conflicts.
 
 Additionally, as it currently stands there is no way to easily discover new KRM functions. While KPT has a [centralized function catalog](https://catalog.kpt.dev/), this severely limits the growth potential and adoption of KRM functions. 
 
@@ -100,7 +101,7 @@ Unless otherwise specified, all files are _project local_. All files and config 
 <!-- Need to create an OpenAPI spec for config.yaml? -->
 First, a user makes Kaffine aware of a catalog via `kaffine config add catalog <catalog>`. The catalog is appended to the `catalogs` list in the `config.yaml` file. The catalog is then saved in the `catalogs/` folder, with a name corresponding to the hash of the location. (`"example.com/catalogs/one" -> catalogs/<SHA-256>`)
 
-Next, a user can search the catalogs for a function via `kaffine search <name>`.
+Next, a user can search the catalogs for a function via `kaffine search <name>`. This searches the catalogs for a function with the specified name. Once the user finds a function they want to install, they can execute `kaffine install <name>`. This will add the function to a separate catalog stored in `installed.yaml`.
 
 If at any point the user wants to check for updates to their functions, they can execute `kaffine update`. This will check if there is an updated version of each catalog, and download it if need be. Then, if there are any functions with higher versions than the ones selected by kaffine, it will prompt the user and ask if they want to update.
 
@@ -108,58 +109,108 @@ If at any point the user wants to check for updates to their functions, they can
 
 ### User Stories
 
+The following catalog is published at `example.com/catalogs/catalog.yaml` (adapted from KEP-2906):
+
+```yaml
+apiVersion: config.kubernetes.io/v1alpha1
+kind: Catalog
+metadata: 
+  name: "example-co-functions"
+spec: 
+  krmFunctions: 
+  - group: example.com
+    names:
+      kind: JavaApplication
+    description: "A function that can handle Java apps"
+    versions:
+    - name: v2.0.0
+      runtime: 
+        container: 
+          image: docker.example.co/functions/java:v2.0.0
+    - name: v1.0.0
+      runtime: 
+        container: 
+          image: docker.example.co/functions/java:v1.0.0
+  - group: example.com
+    names:
+      kind: Logger
+    description: "A function that adds our bespoke logging"
+    versions:
+    - name: v1.0.2
+      runtime: 
+        container: 
+          image: docker.example.co/functions/logger:v1.0.2
+    - name: v1.0.1
+      runtime: 
+        container: 
+          image: docker.example.co/functions/logger:v1.0.1
+    - name: v1.0.0
+      runtime: 
+        container: 
+          image: docker.example.co/functions/logger:v1.0.0
+  - group: example.com
+    names:
+      kind: SecretSidecar
+    description: "A function that adds our bespoke secret sidecar"
+    versions:
+    - name: v3
+      runtime: 
+        container: 
+          image: docker.example.co/functions/secrets:v3.0.0
+```
+
 #### Story 1: Creating a new application
 
-Alice has in mind some functions that she wants to use that are created by Group Alpha. She adds the catalog their catalog via `kaffine config add catalog group-alpha.example.com`. Then she searches which functions are available in the catalog.
+Alice has in mind some functions that she wants to use that are created by Group Alpha. She adds the catalog their catalog via `kaffine config add catalog example.com/catalogs/catalog.yaml`. Then she searches which functions are available in the catalog.
 
 ```
-$ kaffine search -l group-alpha
-KIND      NAME          DESCRIPTION           LATEST  INSTALLED
-function  alpha-foo-er  A function that foos  v2.0.0     ---
-function  alpha-bar-er  A function that bars  v1.0.3     ---
-function  alpha-baz-er  A function that bazs  v3.1.0     ---
+$ kaffine search
+KRM Functions:
+NAME            DESCRIPTION                                     LATEST INSTALLED
+JavaApplication A function that can handle Java apps            v2.0.0    ---
+Logger          A function that adds our bespoke logging        v1.0.2    ---
+SecretSidecar   A function that adds our bespoke secret sidecar v3        ---
 
-$ kaffine install alpha-foo-er
-Installed group-alpha/alpha-foo-er:v2.0.0
+$ kaffine install JavaApplication
+Installed example.com/JavaApplication:v2.0.0
 
-$ kaffine install alpha-bar-er
-Installed group-alpha/alpha-baz-er:v3.1.0
+$ kaffine install Logger
+Installed example.com/Logger:v1.0.2
 
 $ kaffine list
-KIND      NAME          DESCRIPTION           INSTALLED
-function  alpha-foo-er  A function that foos  v2.0.0
-function  alpha-baz-er  A function that bazs  v3.1.0
+KRM Functions:
+NAME            DESCRIPTION                              INSTALLED
+JavaApplication A function that can handle Java apps     v2.0.0
+Logger          A function that adds our bespoke logging v1.0.2
 
-$ kaffine list > functions.yaml
-$ cat functions.yaml
+$ kaffine list -o yaml
 apiVersion: config.kubernetes.io/v1alpha1
-kind: ResourceList
-items:
-- kind: KrmFunction
-  catalog: group-alpha.example.com
-  name: alpha-foo-er
-  description: "A function that foos"
-  versions:
+kind: Catalog
+metadata: 
+  name: "kaffine-functions"
+spec: 
+  krmFunctions: 
+  - group: example.com
+    names:
+      kind: JavaApplication
+    description: "A function that can handle Java apps"
+    versions:
     - name: v2.0.0
-      tags: ['latest-stable']
-      runtime:
-        container:
-          image: images.example.com/functions/alpha-foo-er:v2.0.0
-          sha256: a428de...
-- kind: KrmFunction
-  catalog: group-alpha.example.com
-  name: alpha-baz-er
-  description: "A function that bazs"
-  versions:
-    - name: v3.1.0
-      tags: ['latest-stable']
-      runtime:
-        container:
-          image: images.example.com/functions/alpha-baz-er:v2.0.0
-          sha256: a428de...
+      runtime: 
+        container: 
+          image: docker.example.co/functions/java:v2.0.0
+  - group: example.com
+    names:
+      kind: Logger
+    description: "A function that adds our bespoke logging"
+    versions:
+    - name: v1.0.2
+      runtime: 
+        container: 
+          image: docker.example.co/functions/logger:v1.0.2
 ```
 
-She can now pass `functions.yaml` to another application.
+She can now pass either the output of `kaffine list -o yaml` or the contents of `.kaffine/installed.yaml` to another application.
 
 #### Story 2: Updating an existing application already using Kaffine
 
@@ -167,40 +218,39 @@ Bob wants to check if there are any updates to the functions he has installed.
 
 ```
 $ kaffine list
-KIND      NAME          DESCRIPTION           INSTALLED
-function  alpha-foo-er  A function that foos  v1.0.0
-function  alpha-bar-er  A function that bars  v0.0.3
-function  alpha-baz-er  A function that bazs  v2.1.0
+KRM Functions:
+NAME            DESCRIPTION                                     INSTALLED
+JavaApplication A function that can handle Java apps            v1.0.0
+Logger          A function that adds our bespoke logging        v1.0.0
+SecretSidecar   A function that adds our bespoke secret sidecar v3    
 
 $ kaffine update --check
 Checking for updates...
-group-alpha/alpha-foo-er v1.0.0 -> v2.0.0
-group-alpha/alpha-bar-er v0.0.3 -> v1.0.3
-group-alpha/alpha-baz-er v2.1.0 -> v3.1.0
+example.com/JavaApplication v1.0.0 -> v2.0.0
+example.com/Logger v1.0.0 -> v1.0.3
 Checked for updates without installing.
 
-$ kaffine update alpha-foo-er
-group-alpha/alpha-foo-er v1.0.0 -> v2.0.0
+$ kaffine update JavaApplication
+example.com/JavaApplication v1.0.0 -> v2.0.0
 
-$ kaffine update alpha-bar-er
-group-alpha/alpha-bar-er v0.0.3 -> v1.0.3
+$ kaffine update Logger
+example.com/Logger v1.0.0 -> v1.0.3
 
 $ kaffine list
-KIND      NAME          DESCRIPTION           INSTALLED
-function  alpha-foo-er  A function that foos  v2.0.0
-function  alpha-bar-er  A function that bars  v1.0.3
-function  alpha-baz-er  A function that bazs  v2.1.0
+KRM Functions:
+NAME            DESCRIPTION                                     INSTALLED
+JavaApplication A function that can handle Java apps            v2.0.0
+Logger          A function that adds our bespoke logging        v1.0.3
+SecretSidecar   A function that adds our bespoke secret sidecar v3    
 ```
 
 ### Implementation Details/Notes/Constraints
 
 #### Notes
 
-A catalog has 2 main parts: a URI and a name. The URI is the location of the catalog. It can be a server somewhere or a path on the local filesystem. The name is a user-friendly name of the catalog. If two catalogs conflict in naming, use the URI instead.
+Two functions may have the same name. If you want to disambiguate between them in, you can prepend the group that the function is in followed by a `/` character. Example: `example-group/function-bar`.
 
-If you want to disambiguate between functions in different catalogs, you can prepend the name of the catalog followed by a `/` character. Example: `catalog-foo/function-bar`. If you do not provide a catalog, it will search every catalog you have for the specified function.
-
-Additionally, if you want to install a specific version (such as `v1.1`, `latest-stable`, `nightly`, et cetera…) you can append a `:` character followed by the label. Example: `function-bar:nightly`. If you do not provide a version, it will default to `latest-stable`.
+Additionally, if you want to install a specific version (such as `v1.1`, `latest-stable`, `nightly`, et cetera…) you can append a `:` character followed by the label. Example: `function-bar:nightly`. If you do not provide a version, it will default to the highest one available.
 
 <!-- MAYBE ALSO A GO LIBRARY TO MAP FUNCTION NAMES TO LOCATIONS USING CONFIG -->
 #### CLI Commands
@@ -219,66 +269,65 @@ _Options_
 ```
 --regex, -r :: Treats <function-name> as a regular expression
 --output, -o <format> :: Format to output, ex. yaml, default, etc...
---location, -l <location> :: The location to search.
-    all :: (default) Searches all catalogs
-    catalog <catalog-name/uri> :: Only searches in the specified catalog
+--group, -G <group> :: Only matches functions with the specified group.
 ```
-
-catalogs :: Only searches in all catalogs
-catalog <catalog-name/uri> :: Only searches in the specified catalog
-local :: Only searches installed functions -->
 
 <!-- NOTE: pipelines and collections are for the future, don’t worry about them right now -->
 
 _Examples_
 ```
 $ kaffine search foo
- 
-KIND        NAME                   DESCRIPTION                           LATEST  INSTALLED
-function    foo-function           Generic foo function                  v2.0       ---
-function    foo-function-binary    Generic foo function, using a binary  v1.0.1     ---
-pipeline    make-fooable-pipeline  Makes resources fooable               v0.0.1     ---
-collection  frobnicate-the-foos    Frobnicates the foos                  v3.0.1     ---
+KRM Functions:
+NAME                   DESCRIPTION                           LATEST  INSTALLED
+foo-function           Generic foo function                  v2.0.0     ---
+foo-function-binary    Generic foo function, using a binary  v1.0.1     ---
+make-fooable-pipeline  Makes resources fooable               v0.0.1     ---
+frobnicate-the-foos    Frobnicates the foos                  v3.0.1     ---
 ```
 
 <!-- Using something like KEP-2906: Kustomize Function Catalog. Bare bones, probably would want to bring in line with KEP-2906 -->
 
 ```
 $ kaffine search foo -o yaml
+
 apiVersion: config.kubernetes.io/v1alpha1
-kind: ResourceList
-functionConfig:
-   query: "foo"
-   regex: false
-items:
-- kind: KrmFunction
-  catalog: catalog1.example.com
-  name: foo-function
-  description: "Generic foo function"
-  versions:
-    - name: v2.0
-      tags: ['latest-stable']
-      runtime:
-        container:
+kind: Catalog
+metadata: 
+  name: "kaffine-catalog"
+spec: 
+  krmFunctions: 
+  - group: catalog-1.com
+    names:
+      kind: foo-function
+    description: "Generic foo function"
+    versions:
+    - name: v2.0.0
+      runtime: 
+        container: 
           image: docker.example.co/functions/foo-function:v2.0
-          sha256: a428de...
-    - name: v1.0
+    - name: v1.0.0
       ...
-- kind: KrmFunction
-  catalog: catalog2.example.com
-  name: foo-function-binary
-  description: "Generic foo function, using a binary"
-  versions:
+  - group: catalog-2.com
+    names:
+      kind: foo-function-binary
+    description: "Generic foo function, using a binary"
+    versions:
     - name: v1.0.1
-      tags: ['latest-stable']
-      runtime:
-        binary:
-          image: catalog2.example.com/something/foo-function-binary-v1.tar.gz
-          sha256: b539ef...
-    - name: v2.0.0-nightly
-      tags: ['nightly']
+      runtime: 
+         exec:
+          platforms:
+          - bin: foo-amd64-linux
+            os: linux
+            arch: amd64
+            uri: https://example.com/foo-amd64-linux.tar.gz
+            sha256: <hash>
+          - bin: foo-amd64-darwin
+            os: darwin
+            arch: amd64
+            uri: https://example.com/foo-amd64-darwin.tar.gz
+            sha256: <hash>
+    - name: v1.0.0
       ...
-- ...
 ```
 
 **List**
@@ -298,7 +347,7 @@ _Options_
 kaffine install <function-name>
 ```
 
-Tries to install the function with the given name. It searches the catalogs for the function with the given name. If it finds it, it installs it. If there are duplicates, it will return the duplicate functions.
+Tries to install the function with the given name. It searches the catalogs for the function with the given name. If it finds it, it adds it to the catalog in `.kaffine/installed.yaml`. If there are duplicates, it will return the duplicate functions.
 
 **Remove**
 ```
@@ -328,6 +377,8 @@ kaffine config add catalog <URI>
 kaffine config remove catalog <Name/URI>
 kaffine config view
 ```
+
+Updates the config stored in `.kaffine/config.yaml`. When adding a new catalog, the catalog is appended to the `catalogs` list in the file. Then, the catalog is saved in the `.kaffine/catalogs/` folder, with a name corresponding to the hash of its location (`"example.com/catalogs/one" -> catalogs/<SHA-256>`).
 
 _Options_
 ```
