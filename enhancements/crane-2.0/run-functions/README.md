@@ -168,7 +168,7 @@ At present, user can perform the following steps to utilize KRM functions in cra
  2. User transform the resources with `kpt | kustomize`  and store them in the transform directory, finally
  3. User applies the transformed resources to the target using `crane apply`
   
-This approach is rejected for foloowing reasons:
+This approach is rejected for following reasons:
 - In the future, we would like to expand the functionality of the runner provided by ```kpt | kustomize``` and therefore, we need our wrapper of conatiner runner, which will be integral to the crane.
 - We are also proposing a [KRM Function Manager](https://github.com/konveyor/enhancements/pull/73)(Kaffine) enhancement, which manages the KRM functions. An in-house wrapper of container runner gives us the flexibility to integrate features of ```kaffine``` to enhance the KRM function execution.
 - As we are also proposing to enhance the ```crane transform``` command to execute functions under the hood, we need to have function execution capability with the crane.
