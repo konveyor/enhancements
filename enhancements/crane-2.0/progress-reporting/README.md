@@ -44,12 +44,16 @@ Unlike MTC (where logs were polled at certain intervals by the controller), Cran
 
 ### Goals
 
-> Provide better progress information about ongoing transfer
-    > Details like transfer speed, number of files transferred, total data transerred, completion percentage, errors, list of failed files 
+- Provide better progress information about ongoing transfer
+    - Details like transfer speed, number of files transferred, total data transerred, completion percentage, errors, list of failed files 
 
-> Separate output and error streams
+- Separate output and error streams
 
-> Optionally, write structured progress output to a file for automations to consume
+- Optionally, write structured progress output to a file for automations to consume
+
+### Non-Goals
+
+- What to do with the progress output file is out of scope of this document.
 
 ## Proposal
 
@@ -67,25 +71,31 @@ Currently, rsync logs are streamed and copied to `stdout` via a io.Reader:
 ```
 `Stream()` api returns a reader. `Copy()` reads data from reader and writes to stdout until EOF is reached. 
 
-We will introduce a custom Reader between the two. We will pass the stream to a custom reader `RsyncLogStreamReader`, the custom reader will parse original logs line-by-line and create its own log output and that output will be copied to stdout:
+We will introduce a custom Reader between the two. We will pass the stream to 2 instances of custom reader `RsyncLogStream`, they will parse the original log line-by-line and create their own log output. The final output will be either be copied to stdout or stderr based on who emitted it:
  
 ```golang
 	reader, err := podLogsRequest.Stream(context.Background())
 	if err != nil {
 		return err
 	}
-	rsyncLogStreamReader := RsyncLogStreamReader{
-		r: reader,
+	rsyncOutputEmitter, rsyncErrorEmitter, err := NewRsyncStream(reader)
+	if err != nil {
+		return err
 	}
-    // Copy() copy custom log message to stdout
-    _, err = io.Copy(os.Stdout, rsyncLogStreamReader)
+	// Copy() copy custom log message to stdout
+	_, err = io.Copy(os.Stdout, rsyncOutputEmitter)
+	if err != nil {
+		return err
+	}
+	// Copy() copy errors to stderr
+	_, err = io.Copy(os.Stderr, rsyncErrorEmitter)
 	if err != nil {
 		return err
 	}
 ```
 
 ```golang
-func (r RsyncLogStreamReader) Read(b []byte) (n int, err error) {
+func (r RsyncLogStream) Read(b []byte) (n int, err error) {
 	// parse logs and generate our own log output
 	stdout, stderr := r.generateProgressLog(string(buf[:n]))
 	...
@@ -118,13 +128,34 @@ The struct fields are self-explanatory. Use of pointers is intentional. The prog
 
 ### Separating errors
 
-Since Kubernetes `Stream()` API does not separate std error and output, the rsync logs are printed to stdout. Errors in rsync logs are easy to parse using well known error keywords. It is possible to separate between output and errors. `failedFiles` and `errors` fields will be printed to standard error.
+Since Kubernetes `Stream()` API does not separate std error and output, the rsync logs are printed to stdout. Errors in rsync logs are easy to parse using well known error keywords. It is possible to separate between output and errors. `failedFiles` and `errors` fields will be printed to standard error at the end of the transfer. The actual exit code of the rsync process will be returned by the subcommand, except when the subcommand itself results in an error.
  
 ### Dumping list of failed files
 
-It is possible that rsync fails to transfer some files. Reasons could be bad file, i/o errors, permission issues, storage timing out, among others. In case of large number of files, having a list of failed files will help diagnose problems faster. A structured output file can also be leveraged by automation for reporting, retries, manual copying etc. Users may also find files that they don't necessarily care about, e.g. lost+found, dead symlinks, device files. To achieve that, the subcommand will add `--output=<file>` option. When enabled, a list of failed filenames will be written to an output file.
+It is possible that rsync fails to transfer some files. Reasons could be bad file, i/o errors, permission issues, storage timing out, among others. In case of large number of files, having a list of failed files will help diagnose problems faster. A structured output file can also be leveraged by automation for reporting, retries, manual copying etc. Users may also find files that they don't necessarily care about, e.g. lost+found, dead symlinks, device files. To achieve that, the subcommand will add `--output=<file>` option. When enabled, a list of failed filenames will be written to an output file. The structured file output will look like:
 
-### User Stories [optional]
+```json
+{
+	"status": {
+        "pvc": "pvc-0",
+        "namespace": "namespace",
+        "transferredData": "50Mi",
+        "totalSize": "100Mi",
+        "transferRate": "10MB/s",
+        "phase": "partiallyFailed",
+        "exitCode": 13,
+        "failedFiles": [
+            {
+                "file": "file1",
+                "error": "permission denied (13)",
+            },
+        ]
+    }
+}
+
+```
+
+### User Stories
 
 #### Story 1
 
@@ -132,7 +163,7 @@ As a user, I want to see detailed transfer progress in CLI so that I don't have 
 
 #### Story 2
 
-As a user, I want to see a list of files that failed transfer so that I can use it to manually copy those files over.
+As a user, I want to see a list of files that failed transfer so that I can use it further for reporting, debugging or manually copying those files over.
 
 
 ## Implementation History
