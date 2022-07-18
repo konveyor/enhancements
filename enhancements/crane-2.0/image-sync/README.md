@@ -122,7 +122,7 @@ their data and workloads to new clusters.
 ### Crane `skopeo-sync-gen` subcommand
 
 Introduce a new subcommand to crane, `skopeo-sync-gen`, that will look for and
-evaulate all `export`ed ImageStreams to determine if they images (and the
+evaulate all `export`ed ImageStreams to determine if their images (and the
 image's tags) should be migrated. If an image is internally or externally built
 (ie. is not mirrored from another registry like quay|docker), then it will be
 staged.
@@ -148,7 +148,7 @@ subcommand and saves the output to a file in a
 
 This is covered by [this GitHub Issue](https://github.com/konveyor/crane-runner/issues/55).
 
-### Crane Runner `skopeo-sync` ClusterTask
+### Crane Runner `crane-skopeo-sync` ClusterTask
 
 This new ClusterTask will be responsible for accepting a source yaml (like the
 one generated from `crane skopeo-sync-gen`) and running `skopeo sync` to copy
@@ -159,6 +159,11 @@ log into the respective clusters (ie. `podman login -u $(oc whoami) -p $(oc
 whoami -t)`).
 
 This is covered by [this GitHub Issue](https://github.com/konveyor/crane-runner/issues/56).
+
+**NOTE**
+
+This command should be made as generic as possible, but must satisfy the use
+case outlined here first. That is why the `crane-` prefix has been added.
 
 ### Crane UI Updates
 
@@ -171,19 +176,14 @@ into consumable user actions.
 Currently, the UI import wizard recognizes when there are PeristentVolumeClaims
 (PVCs) to be migrated and asks the user for additional input for handling this
 data. We will update the import wizard to also recognize wihen there are
-ImageStreams to migrate. If the user wishes to migrate the images, they will be
-asked for the public URL of the cluster registry as this can not be reliably
-obtained via `oc registry info --public` (appears to only work on 4.11+ at the
-time of this enhancement).
-
-With this information in hand, we can construct a separate pipeline that runs
-ClusterTasks (in order):
+ImageStreams to migrate. If the user wishes to migrate the images, we can
+construct a separate pipeline that runs ClusterTasks (in order):
 
 1. `crane-export` targeting source cluster
 1. `oc-registry-info` targeting source and destination clusters
-1. `crane-skopeo-sync-gen` using the emitted results from `oc registry info` and
+1. `crane-skopeo-sync-gen` using the emitted registry info and
    the export results stored in the common workspace
-1. `skopeo-sync` targeting destination cluster
+1. `skopeo-sync` targeting destination cluster to actually transfer the images
 
 This is covered by [this GitHub Issue](https://github.com/konveyor/crane-ui-plugin/issues/110).
 
