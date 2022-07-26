@@ -3,15 +3,11 @@ title: run-krm-functions-from-crane
 authors:
   - "@MundraAnkur"
 reviewers:
-  - "@jwmatthews" 
   - "@dzager"
   - "@shawn-hurley"
-  - "@shubham-pampattiwar"
 approvers:
-  - "@jwmatthews" 
   - "@dzager"
   - "@shawn-hurley"
-  - "@shubham-pampattiwar"
 creation-date: 2022-06-21
 last-updated: 2022-06-21
 status: implementable
@@ -53,7 +49,7 @@ At present, we can not utilize the KRM functions in the crane. To leverage the b
 ### Command
 Crane subcommand will follow this synopsis:
 ```
-crane fn run [IMAGE] [flags] [-- args]
+crane runfn [IMAGE] [flags] [-- args]
 ```
 > The above subcommand will be used for transforming resources in a directory using functions. If a function fails, the process is aborted and the resource files will be left unchanged.
  
@@ -83,23 +79,23 @@ crane fn run [IMAGE] [flags] [-- args]
 
 ```
 # apply function example-fn on the resources in export directory and write output back to DIR
-$ crane fn run quay.io/example.com/example-fn --export-dir export
+$ crane runfn quay.io/example.com/example-fn --export-dir export
 ```
 
 ```
 # apply function example-fn with an input ConfigMap containing `data: {foo: bar}`
-$ crane fn run gcr.io/example.com/example-fn -- foo=bar
+$ crane runfn gcr.io/example.com/example-fn -- foo=bar
 ```
 
 ```
 # apply function example-fn on the resource and export foo environment variable
-$ crane fn run gcr.io/example.com/example-fn --env foo=bar
+$ crane runfn gcr.io/example.com/example-fn --env foo=bar
 ```
 
 ```
 # apply function 'set-namespace' on the resources in current directory and write
   the output resources to dest directory
-$ crane fn run docker.io/example.com/set-namespace:v0.1 --transform-dir path/to/dest -- namespace=crane
+$ crane runfn docker.io/example.com/set-namespace:v0.1 --transform-dir path/to/dest -- namespace=crane
 ```
 
 ### User Stories
