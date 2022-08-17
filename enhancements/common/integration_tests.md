@@ -1,55 +1,25 @@
 ---
-title: neat-enhancement-idea
+title: automated integration tests for forklift
 authors:
-  - "@janedoe"
+  - "@rokkbert"
 reviewers:
   - TBD
-  - "@alicedoe"
+  - TBD
 approvers:
   - TBD
-  - "@oscardoe"
-creation-date: yyyy-mm-dd
-last-updated: yyyy-mm-dd
-status: provisional|implementable|implemented|deferred|rejected|withdrawn|replaced
+  - TBD
+creation-date: 2022-08-17
+last-updated: 2022-08-17
+status: provisional
 see-also:
-  - "/enhancements/this-other-neat-thing.md"  
+  -   
 replaces:
-  - "/enhancements/that-less-than-great-idea.md"
+  - 
 superseded-by:
-  - "/enhancements/our-past-effort.md"
+  - 
 ---
 
-# Neat Enhancement Idea
-
-This is the title of the enhancement. Keep it simple and descriptive. A good
-title can help communicate what the enhancement is and should be considered as
-part of any review.
-
-The YAML `title` should be lowercased and spaces/punctuation should be
-replaced with `-`.
-
-To get started with this template:
-1. **Pick a domain.** Find the appropriate domain to discuss your enhancement.
-1. **Make a copy of this template.** Copy this template into the directory for
-   the domain.
-1. **Fill out the "overview" sections.** This includes the Summary and
-   Motivation sections. These should be easy and explain why the community
-   should desire this enhancement.
-1. **Create a PR.** Assign it to folks with expertise in that domain to help
-   sponsor the process.
-1. **Merge at each milestone.** Merge when the design is able to transition to a
-   new status (provisional, implementable, implemented, etc.). View anything
-   marked as `provisional` as an idea worth exploring in the future, but not
-   accepted as ready to execute. Anything marked as `implementable` should
-   clearly communicate how an enhancement is coded up and delivered. If an
-   enhancement describes a new deployment topology or platform, include a
-   logical description for the deployment, and how it handles the unique aspects
-   of the platform. Aim for single topic PRs to keep discussions focused. If you
-   disagree with what is already in a document, open a new PR with suggested
-   changes.
-
-The `Metadata` section above is intended to support the creation of tooling
-around the enhancement process.
+# Automated Integration Tests for Forklift
 
 ## Release Signoff Checklist
 
@@ -58,118 +28,161 @@ around the enhancement process.
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
 
-## Open Questions [optional]
+## Open Questions
 
-This is where to call out areas of the design that require closure before deciding
-to implement the design.  For instance, 
- > 1. This requires exposing previously private resources which contain sensitive
-  information.  Can we do this? 
+See below.
 
 ## Summary
 
-The `Summary` section is incredibly important for producing high quality
-user-focused documentation such as release notes or a development roadmap. It
-should be possible to collect this information before implementation begins in
-order to avoid requiring implementors to split their attention between writing
-release notes and implementing the feature itself. 
-
-A good summary is probably at least a paragraph in length.
+This enhancement proposes to create processes, infrastructure and code for automated
+integration tests. These tests should run unsupervised and test all the steps from
+deployment of forklift, over the creation of providers, mappings and migration plans,
+to the actual migration of virtual machines.
 
 ## Motivation
 
-This section is for explicitly listing the motivation, goals and non-goals of
-this proposal. Describe why the change is important and the benefits to users.
+Having such tests, which take considerable effort to execute manually, would help
+to guard against regressions when changes are made or new features are implemented.
+They can also be extended as needed to verify specific bug fixes.
+
+They can serve the secondary purpose of documenting what the expected behaviour of
+the system is.
 
 ### Goals
 
-List the specific goals of the proposal. How will we know that this has succeeded?
+The goal is to have an automated job that builds or collects all forklift components
+and then:
+* deploys them to a cluster (e.g. [minikube](https://minikube.sigs.k8s.io/docs/)
+or [CRC](https://crc.dev/crc/))
+* creates (& modifies/deletes) providers for VMware and Red Hat Virtualization
+* creates (& modifies/deletes) appropriate network- and storage mappings
+* creates (& modifies/deletes) migration plans
+* migrates VMs
+* verifies that the migration succeeded
+
+Most of these can be done with command line tools but it would be good if the
+basic workflow would also be tested through the web-GUI using something like
+[cypress](https://www.cypress.io/) or [selenium](https://www.selenium.dev/).
+
+To meet the goal we need:
+* ressources and processes to provide the infrastructure
+  * kubernetes cluster to run forklift
+  * kubernetes cluster with kubevirt as migration target
+  * vSphere, with VMs
+  * oVirt, with VMs
+  * platform that executes the test, which might or might not be possible on github
+* test scripts that go through the aforementioned steps
+  * should ideally be easy to configure so that anybody can run them on other systems too
 
 ### Non-Goals
 
-What is out of scope for this proposal? Listing non-goals helps to focus discussion
-and make progress.
+Unit tests are not covered by this enhancement because they are easy and quick
+to run by developers by themselves and don't need complex infrastructure.
+Only end-to-end tests are considered here.
 
 ## Proposal
 
-This is where we get down to the nitty gritty of what the proposal actually is.
+### User Stories
 
-### User Stories [optional]
+#### Test Release
 
-Detail the things that people will be able to do if this is implemented.
-Include as much detail as possible so that people can understand the "how" of
-the system. The goal here is to make this feel real for users without getting
-bogged down.
+Before a release version is tagged the tests are triggered by the package maintainer
+to check for any problems that might have been overlooked.
 
-#### Story 1
+#### Test Merge
 
-#### Story 2
+If it's fast and cheap enough the tests can automatically run after a PR was merged.
 
-### Implementation Details/Notes/Constraints [optional]
+#### Local Tests
 
-What are the caveats to the implementation? What are some important details that
-didn't come across above. Go in to as much detail as necessary here. This might
-be a good place to talk about core concepts and how they relate.
+A developer or quality engineer can utilize the test scripts to run the same tests
+on their own infrastructure to verify any work in progress version they are interested
+in.
+
+### Implementation Details/Notes/Constraints
+
+#### Open Questions
+
+* Can the tests run on GitHub?
+  * On a GitHub-hosted runner or somewhere else?
+* What is the best k8s-variant to test on?
+* Can/should the k8s-cluster[s] be instantiated dynamically by the
+test or be persistent somewhere?
+* What tool/framework should be used to write the tests and the setup scripts?
+* Where can vSphere run?
+  * How much space does it need?
+  * License?
+  * Access control?
+* Where can oVirt run?
+  * How much space does it need?
+  * Access control?
+* Which GUI-test tool should be used?
+* How fast can/should the tests be?
+* When do the tests run, manually, automatically, periodically?
+* Where do the forklift packages come from? Are they specified when running
+the tests or are the tests part of the build?
+
+Details about what VMs should be migrated and what configurations should be used
+are out of scope for this proposal. That will already be part of the "doing" and
+should not produce any critical questions.
 
 ### Security, Risks, and Mitigations
 
-**Carefully think through the security implications for this change**
-
-What are the risks of this proposal and how do we mitigate. Think broadly. How
-will this impact the broader OKD ecosystem? Does this work in a managed services
-environment that has many tenants?
-
-How will security be reviewed and by whom? How will UX be reviewed and by whom?
-
-Consider including folks that also work outside your immediate sub-project.
+If any infrastructure is used which persists outside of the test execution (i.e.
+anything that is not set up before and destroyed after the test) then the access
+to that needs to be protected somehow to prevent denial of service issues, data
+manipulation as well as potentially big cloud service fees.
+Maybe this prevents totally autonomous test runs because it might require a person
+to enter credentials, which can not be stored alongside the tests.
 
 ## Design Details
 
 ### Test Plan
 
-**Note:** *Section not required until targeted at a release.*
-
-Consider the following in developing a test plan for this enhancement:
-- Will there be e2e and integration tests, in addition to unit tests?
-- How will it be tested in isolation vs with other components?
-
-No need to outline all of the test cases, just the general strategy. Anything
-that would count as tricky in the implementation and anything particularly
-challenging to test should be called out.
-
-All code is expected to have adequate tests (eventually with coverage
-expectations).
-
 ### Upgrade / Downgrade Strategy
 
-If applicable, how will the component be upgraded and downgraded? Make sure this
-is in the test plan.
-
-Consider the following in developing an upgrade/downgrade strategy for this
-enhancement:
-- What changes (in invocations, configurations, API use, etc.) is an existing
-  cluster required to make on upgrade in order to...
-  -  keep previous behavior?
-  - make use of the enhancement?
+Dependencies regarding versions and configuration of external systems, as long as they
+are not created by the tests themselves, need to be considered and documented and, if
+possible, verified by the tests before running the actual tests.
 
 ## Implementation History
 
-Major milestones in the life cycle of a proposal should be tracked in `Implementation
-History`.
+We can start with a small set of tests and add more later to cover more options.
 
 ## Drawbacks
 
-The idea is to find the best form of an argument why this enhancement should _not_ be implemented.
+Compared to unit-tests, which can execute in a free github-runner (see
+[Billing for GitHub Actions](https://docs.github.com/en/billing/managing-billing-for-github-actions/about-billing-for-github-actions)),
+these e2e-tests will be very resource intensive. The will need much more CPU-time
+and memory and thus be expensive, depending on where they run. The time and trouble
+that is saved by having them needs to be more valuable than the cost of these resources.
+
+For VMware licensing costs need to be considered.
+
+Tests, especially GUI-tests, always add some amount of maintenance work on top, 
+otherwise they quickly become obsolete again.
 
 ## Alternatives
 
-Similar to the `Drawbacks` section the `Alternatives` section is used to
-highlight and record other possible approaches to delivering the value proposed
-by an enhancement.
+Instead of having a central process for such tests anybody who wants can do testing
+on their own systems, either manually or with their own scripts.
 
-## Infrastructure Needed [optional]
+If the questions regarding the required infrastructure turn out to not have good
+answers it could still be useful to have an agreed upon set of test scripts and data
+sets that verify the behaviour of forklift.
 
-Use this section if you need things from the project. Examples include a new
-subproject, repos requested, github details, and/or testing infrastructure.
+## Infrastructure Needed
 
-Listing these here allows the community to get the process for these resources
-started right away.
+* At least one kubernetes cluster on which to deploy/run forklift
+* Optional second kubernetes cluster for testing three-way-migration where the target
+it not the same as where forklift runs
+* VMware vSphere with 1+ source VMs (the more the better, to test different cases)
+* RHEV/oVirt with 1+ source VMs (the more the better, to test different cases)
+* GitHub-runner that executes the setup and the tests
+
+The k8s-clusters could be created dynamically by the test and don't need to exist all
+the time. That would also ensure reproducability. On the other hand, clean un-/re-deployment
+of forklift should be tested anyway.
+The source clusters would be more difficult to create from scratch each time, especially
+because they contain a lot of data in the form of the virtual machines. In theory these
+could also be downloaded dynamically but it sounds more troublesome.
