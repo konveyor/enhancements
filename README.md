@@ -60,3 +60,6 @@ Please comment on the enhancement issue to:
 - request a review or clarification on the process
 - update status of the enhancement effort
 - link to relevant issues in other repos
+
+## Code of Conduct
+Refer to Konveyor's Code of Conduct [here](https://github.com/konveyor/community/blob/main/CODE_OF_CONDUCT.md).
