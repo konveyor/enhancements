@@ -62,23 +62,13 @@ There should be a fairly generic rules schema that allows rules to be written ta
 Example: in Python, a reference to a CRD can be found at `kubernetes.client.ApiextensionsV1beta1Api.create_custom_resource_definition`, whereas in Golang that same reference may be something like `k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1.CustomResourceDefinition`. Even though the actual import path is not identical, both are made up of an import and a reference, so the rules could be expressed like:
 
 ```yaml
-python:
-    import: kubernetes.client.ApiextensionsV1beta1Api
-    references:
-        - create_custom_resource_definition
-        - delete_custom_resource_definition
-        - read_custom_resource_definition
-        - update_custom_resource_definition
-        - patch_custom_resource_definition
-    message: deprecated use … instead
-
-golang:
-    import: k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1
-    references:
-        CustomResourceDefinition
-        CustomResourceDefinitionSpec
-        CustomResourceDefinitionStatus
-    message: deprecated use … instead
+message: apiextensions/v1beta1/customresourcedefinitions is deprecated, apiextensions/v1/customresourcedefinitions should be used instead.
+when:
+  or:
+    - python:
+        referenced: kubernetes.client.ApiextensionsV1beta1Api.{create|delete|read|update|patch}_custom_resource_definition
+    - golang:
+        referenced: k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1.CustomResourceDefinition{|Spec|Status}
 ```
 
 **NOTE** The format above is purely an example and not meant to represent the actual design of the rule format
@@ -87,13 +77,14 @@ The format should allow for extension to support language specific features that
 
 ### Rules Engine
 
-The Rules Engine will process the rules format defined above and determine which language providers will need to be run, ensure they are initialized, and properly delegate queries to the appropriate language providers. It will also be responsible for performing all the actions specified in the rules, the language providers will only be responsible for evaluating individual conditional statements.
+The Rules Engine will process the rules format defined above and determine which language providers will need to be run, ensure they are initialized, and properly delegate queries to the appropriate language providers. It will also be responsible for performing all the actions specified in the rules, the language providers will only be responsible for reporting their capabilities and evaluating individual conditional statements.
 
 ### Language providers
 
 There should be an interface, likely over HTTP or stdin/stdout JSONRPC, that allows for:
 - Initialization of a Language Server with the desired codebase
 - Ready checks to determine when requests can begin
+- Capability checks to inform the rules engine what rules it supports and what extensions it contains
 - Communication with the Language Server
 
 ### User Stories [optional]
