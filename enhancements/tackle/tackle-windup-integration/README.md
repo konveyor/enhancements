@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - "jortel"
 creation-date: 2021-11-19
-last-updated: 2022-06-14
+last-updated: 2022-09-21
 status: implemented
 see-also:
   -   
@@ -679,14 +679,16 @@ The rest of the analysis configuration flow will be exactly the same as describe
 
 [AC001](#AC001) and [AC002](#AC002) effectively define three analysis modes: Source, Source + Dependencies and Binary. Each one of these modes will require a different set of Maven and Windup commands. The following points will provide examples of how these commands could potentially look like.
 
->**Note** - The mta-cli command is likely to be replaced with a windup-cli command instead for the upstream Windup release. This is yet to be confirmed.
+>**Note** - The mta-cli command has been replaced with the windup command. This documentation has been updated accordingly.
+
+>**Note** - The sourceMode flag has been deprecated in the latest release of Windup. This documentation has been updated accordingly.
 
 ##### Source mode
 
-Potentially the most straightforward mode of the three. Once the repository has been cloned, and provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
+Potentially the most straightforward mode of the three. Once the repository has been cloned, and provided the windup command is available in $PATH and custom rules are available in the customrules directory in $HOME:
 
 ```shell
-mta-cli --input $HOME/<repo_root>/<path> --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --sourceMode --output <bucket>
+windup --input $HOME/<repo_root>/<path> --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
 ```
 
 If no custom rules are provided in the request, the --userRulesDirectory flag should be skipped.
@@ -701,10 +703,10 @@ mvn -f $HOME/<repo_root>/<path>/pom.xml -s $HOME/settings.xml dependency:copy-de
 
 If no settings file was provided in the request, the "-s" part of the command should be skipped.
 
-Once all dependencies have been downloaded, we will use the following command, provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
+Once all dependencies have been downloaded, we will use the following command, provided the windup command is available in $PATH and custom rules are available in the customrules directory in $HOME:
 
 ```shell
-mta-cli --input $HOME/<repo_root>/<path> --input $HOME/dependencies/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --sourceMode --output <bucket>
+windup --input $HOME/<repo_root>/<path> --input $HOME/dependencies/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
 ```
 
 If no custom rules are provided in the request, the --userRulesDirectory flag should be skipped.
@@ -719,7 +721,7 @@ mvn -s $HOME/settings.xml dependency:copy -Dmdep.useBaseVersion=true -DoutputDir
 
 If no settings file was provided in the request, the "-s" part of the command should be skipped. Also, if no packaging is provided in the request, the format for the -Dartifact flag should be \<group>:\<artifact>:\<version>.
 
-Now, with the artifact available in $HOME/binaries, we can execute the analysis, provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
+Now, with the artifact available in $HOME/binaries, we can execute the analysis, provided the windup command is available in $PATH and custom rules are available in the customrules directory in $HOME:
 
 ```shell
 mta-cli --input $HOME/binaries/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
@@ -732,7 +734,7 @@ If no custom rules are provided in the request, the --userRulesDirectory flag sh
 When dealing with the analysis of a single application, users can upload a binary directly from their workstations. For that case, considering the artifact has been made available in $HOME/binaries, we can execute the analysis, provided the mta-cli command is available in $PATH and custom rules are available in the customrules directory in $HOME:
 
 ```shell
-mta-cli --input $HOME/binaries/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
+windup --input $HOME/binaries/ --userRulesDirectory $HOME/customrules/  --target <target1> --target <target2> ... --target <targetn> <other_flags> --batchMode --overwrite --output <bucket>
 ```
 
 If no custom rules are provided in the request, the --userRulesDirectory flag should be skipped.
