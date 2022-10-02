@@ -1,0 +1,144 @@
+---
+title: unified-experience
+authors:
+- "@jwmatthews"
+- "@rromannissen"
+creation-date: 2022-10-02
+last-updated: 2022-10-02
+---
+
+# Konveyor Community Mission
+Konveyor's mission is to establish:
+> A community of people passionate about helping others modernize and migrate their applications to the hybrid cloud by 
+> building tools and best practices on how to replatform and refactor applications to run on Kubernetes and 
+> cloud-native technologies
+
+The community is focused on building:
+> The ultimate Open Source toolkit to help organizations safely migrate and modernize their application portfolio to 
+> leverage Kubernetes, providing differential value on each stage of the adoption process
+
+# Konveyor Methodology
+An open [methodology](https://github.com/konveyor/methodology) for migrating and modernizing applications to leverage 
+Kubernetes has been contributed, providing suggestions for how to use the projects within the
+[Konveyor](www.konveyor.io) community to accelerate the process where applicable.
+
+![Process](images/methodology.png)
+[Image Source](https://docs.google.com/drawings/d/1zHTILKacmiP6fHKyqQPHLVsDyHnyiB7sMGQ4clsKzks/edit)
+
+1. [Assess](#assess) - Engagement in which an exhaustive analysis of the current situation is made, including infrastructure and applications, technologies used and dependencies. Not only is it technical, it also affects processes and application lifecycle management. Next, a definition of the TO-BE scenario is proposed to implement the new platform, clearly identifying gaps and defining the next steps to follow. In addition, an initial estimate of the complete migration process is offered. This first estimate does not have great precision, but it does serve to give an idea of ​​orders of magnitude.
+
+2. [Rationalize](#rationalize) - Based on the outputs obtained during the Assess phase, the most suitable migration strategy for each application type is decided during the Rationalize phase. These strategies are based on the now standard [6 Rs approach](https://aws.amazon.com/blogs/enterprise-strategy/6-strategies-for-migrating-applications-to-the-cloud/) that Amazon popularized a few years ago.
+
+3. [Prepare](#prepare) - This phase focuses on ensuring everything is ready to start deploying applications on the target platform and on conducting technical feasibility tests for migration. Its main mission is to solve the technical challenges encountered during the assessment and mitigate the risks associated with them, while initializing the common knowledge base with the findings that are being made.
+
+4. [Pilot](#pilot) - After solving the main technical problems in the Prove phase, a complete migration of a representative set of applications to the new environment is executed, thoroughly documenting the process, focusing on making it repeatable.
+
+5. [Scale](#scale) - Using the information collected in the previous points it is possible to offer a much more accurate estimate of the following steps. In addition, the definitive implementation strategy is defined with its associated project plan, including the design of the different teams to be involved in the migration and the management and communication model between them. Once everything is set, execution of the migration plan can be carried out, starting the “factory mode” in which applications are migrated in parallel by various teams in typically two-week sprints.
+
+
+This [methodology](https://github.com/konveyor/methodology) is the result of several years of working with many large 
+organizations, distilling the best practices for navigating and orchestrating modernization efforts safely at scale. 
+
+See [github.com/konveyor/methodology](https://github.com/konveyor/methodology) for more info.
+
+
+# Unified Experience
+## Overview
+Konveyor will provide a unified experience of tools to help organizations modernize their applications at scale, 
+optionally allowing adoption of the open [konveyor/methodology](https://github.com/konveyor/methodology) to provide a 
+form of 'guide rails' for the modernization journey.
+
+The unified experience will be centered on surfacing information to a user so they may make informed business value 
+decisions in regard to application modernization.
+
+The unified experience aims to be developed in a technology-agnostic manner, meaning the 'Hub' will codify the workflow
+for a modernization journey, relying on additional components to provide the technology specific rules.  The aim being 
+that this solution will be able to evolve in time as technology needs change beyond the initial goal of enabling 
+legacy applications to be modernized to Kubernetes.
+
+## Workflow
+
+![Workflow_SMPD](images/Workflow_SMPD.jpg)
+[Image Source](https://docs.google.com/drawings/d/1vHOKHUj7cSqawof9PQqb8zpsYyPCR3WL-Pz4GIBiYzE/edit)
+
+1. 'Surface Information': Surface information about applications (static code analysis & assessments) to a Decision Maker, storing information 
+in an 'Application Inventory' provided by a 'Hub'
+2. 'Make Decisions':  Aid a Decision Maker to make informed decisions about their modernization/migration needs 
+3. 'Plan Work': Help a Decision Maker plan work via 'Migration Waves'
+4. 'Do Work': Help a Developer complete the needed work by either scaffolding the beginning of projects and/or providing a 
+catalog of integrated tools to aid specific workflows.
+
+![Workflow_DoWork](images/Workflow_DoWork.jpg)
+[Image Source](https://docs.google.com/drawings/d/1ASbIjFKfQc88ZeL-Dm7RsfTNkxystsmgmZagrqk8q6o/edit)
+
+## Personas
+Two initial personas are identified, with more to be added in the future.
+
+### Architect
+'Architect': A decision maker, who will review information Konveyor surfaces about an application's suitability for a 
+given technology and ultimately make decisions of planning work for a 'Developer' to complete.
+* Surfaced information will be used to help this user make informed decisions, plan, and begin to execute 
+modernization work. 
+* Individual is expected to understand the business value an application provides and be capable
+of weighing technical costs versus expected business value to decide on the best course for modernization need.
+* Optionally, they will seed development work for 'Developers' to handle identified issues
+* Primary expected user of Konveyor's unified experience.
+
+### Developer
+'Developer': A software engineer assigned to handle the source code updates and development efforts to satisfy
+issues identified and allow the application to take advantage of the given target technology
+
+# Steps
+## Step-1: Surface Information
+![UnifiedVision_Step1](images/UnifiedVision_Step1.jpg)
+[Image Source](https://docs.google.com/drawings/d/1ghfkvMC0pePv9IyWou9uySN6m31sciclhLeP4OFCPek/edit)
+
+Step-1 is focused on uncovering information about issues and recommendations when considering a given application for a 
+desired technology.  This information is obtained from a mixture of static source code analysis along with 
+interviews with stakeholders to uncover information on processes, implied dependencies and other factors not readily 
+assessable from a pure code analysis perspective.
+
+The outcome of this step is a report of an application for a given technology to allow a stakeholder to make better 
+informed decisions.
+
+## Step-2: Make Decisions
+![UnifiedVision_Step2](images/UnifiedVision_Step2.jpg)
+[Image Source](https://docs.google.com/drawings/d/1lAFdJs7bVQW8P83AZuz3s8EXvGHZ7lTjGbyg46lBWe8/edit)
+
+Step-2 is focused on providing information to a stakeholder so they can understand the issues, costs, and complexities of 
+modifying an application for a given technology.  Konveyor is not intending to make automated decisions of modernization 
+needs, it is understood that modernization decisions involve choices of balancing business value and technical cost 
+which is out of scope for the tooling to decide.
+
+## Step-3: Plan Work
+![UnifiedVision_Step3](images/UnifiedVision_Step3.jpg)
+[Image Source](https://docs.google.com/drawings/d/1und523-QrA_p7dRkEzAD8GDdyHbE4DRKP6OoOn36HBU/edit)
+
+Step-3 is focused on helping an Architect plan work via batching units of work together in 'Migration Waves'.
+
+Optionally, this step will allow integration with an external issue tracking system.  The expected workflow is that 
+integration with an external system, such as JIRA for example, would allow a JIRA Story/Task to be created per 
+application in the Migration Wave.
+
+## Step-4: Do Work
+![UnifiedVision_Step4](images/UnifiedVision_Step4.jpg)
+[Image Source](https://docs.google.com/drawings/d/1_1GPICFI1a7vNemhBdRKwfLU-39NHNpuKjEi-kKuOeg/edit)
+
+Step-4 is focused on helping the developer do the work for modernizing the application. 
+
+It will be possible for the Architect to execute a series of tools to scaffold a new modernization project.
+For example, this could be:
+* onboard a Git repository to a CI/CD workflow
+* generate a Dockerfile
+* generate Kubernetes Deployment resources
+* run an Ansible playbook 
+
+Intent is to scaffold the project to help the developer begin work at a better starting position.
+
+Konveyor will integrate and provide tools that will aid specific modernization use-cases, yet it is _not_ 
+intended to become an 'easy button' that will 'automagically' refactor an application for a given technology.  
+That is considered out of scope for the project.  
+  
+It is imagined that a growing catalog of community tools will become available to aid the problems a developer faces
+with modernization use-cases.  This will make modernization exercises easier but is not intended to become a 
+fully automated experience without developer intervention.
