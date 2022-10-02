@@ -6,8 +6,12 @@ authors:
 creation-date: 2022-10-02
 last-updated: 2022-10-02
 ---
+# Konveyor Unified Experience
+Konveyor will provide a unified experience of tools to help organizations modernize their applications at scale,
+optionally allowing adoption of the open [konveyor/methodology](https://github.com/konveyor/methodology) to provide a
+form of 'guide rails' for the modernization journey.
 
-# Konveyor Community Mission
+## Konveyor Community Mission
 Konveyor's mission is to establish:
 > A community of people passionate about helping others modernize and migrate their applications to the hybrid cloud by 
 > building tools and best practices on how to replatform and refactor applications to run on Kubernetes and 
@@ -17,7 +21,7 @@ The community is focused on building:
 > The ultimate Open Source toolkit to help organizations safely migrate and modernize their application portfolio to 
 > leverage Kubernetes, providing differential value on each stage of the adoption process
 
-# Konveyor Methodology
+## Konveyor Methodology
 An open [methodology](https://github.com/konveyor/methodology) for migrating and modernizing applications to leverage 
 Kubernetes has been contributed, providing suggestions for how to use the projects within the
 [Konveyor](www.konveyor.io) community to accelerate the process where applicable.
@@ -25,15 +29,15 @@ Kubernetes has been contributed, providing suggestions for how to use the projec
 ![Process](images/methodology.png)
 [Image Source](https://docs.google.com/drawings/d/1zHTILKacmiP6fHKyqQPHLVsDyHnyiB7sMGQ4clsKzks/edit)
 
-1. [Assess](#assess) - Engagement in which an exhaustive analysis of the current situation is made, including infrastructure and applications, technologies used and dependencies. Not only is it technical, it also affects processes and application lifecycle management. Next, a definition of the TO-BE scenario is proposed to implement the new platform, clearly identifying gaps and defining the next steps to follow. In addition, an initial estimate of the complete migration process is offered. This first estimate does not have great precision, but it does serve to give an idea of ​​orders of magnitude.
+1. [Assess](https://github.com/konveyor/methodology#assess) - Engagement in which an exhaustive analysis of the current situation is made, including infrastructure and applications, technologies used and dependencies. Not only is it technical, it also affects processes and application lifecycle management. Next, a definition of the TO-BE scenario is proposed to implement the new platform, clearly identifying gaps and defining the next steps to follow. In addition, an initial estimate of the complete migration process is offered. This first estimate does not have great precision, but it does serve to give an idea of ​​orders of magnitude.
 
-2. [Rationalize](#rationalize) - Based on the outputs obtained during the Assess phase, the most suitable migration strategy for each application type is decided during the Rationalize phase. These strategies are based on the now standard [6 Rs approach](https://aws.amazon.com/blogs/enterprise-strategy/6-strategies-for-migrating-applications-to-the-cloud/) that Amazon popularized a few years ago.
+2. [Rationalize](https://github.com/konveyor/methodology#rationalize) - Based on the outputs obtained during the Assess phase, the most suitable migration strategy for each application type is decided during the Rationalize phase. These strategies are based on the now standard [6 Rs approach](https://aws.amazon.com/blogs/enterprise-strategy/6-strategies-for-migrating-applications-to-the-cloud/) that Amazon popularized a few years ago.
 
-3. [Prepare](#prepare) - This phase focuses on ensuring everything is ready to start deploying applications on the target platform and on conducting technical feasibility tests for migration. Its main mission is to solve the technical challenges encountered during the assessment and mitigate the risks associated with them, while initializing the common knowledge base with the findings that are being made.
+3. [Prepare](https://github.com/konveyor/methodology#prepare) - This phase focuses on ensuring everything is ready to start deploying applications on the target platform and on conducting technical feasibility tests for migration. Its main mission is to solve the technical challenges encountered during the assessment and mitigate the risks associated with them, while initializing the common knowledge base with the findings that are being made.
 
-4. [Pilot](#pilot) - After solving the main technical problems in the Prove phase, a complete migration of a representative set of applications to the new environment is executed, thoroughly documenting the process, focusing on making it repeatable.
+4. [Pilot](https://github.com/konveyor/methodology#pilot) - After solving the main technical problems in the Prove phase, a complete migration of a representative set of applications to the new environment is executed, thoroughly documenting the process, focusing on making it repeatable.
 
-5. [Scale](#scale) - Using the information collected in the previous points it is possible to offer a much more accurate estimate of the following steps. In addition, the definitive implementation strategy is defined with its associated project plan, including the design of the different teams to be involved in the migration and the management and communication model between them. Once everything is set, execution of the migration plan can be carried out, starting the “factory mode” in which applications are migrated in parallel by various teams in typically two-week sprints.
+5. [Scale](https://github.com/konveyor/methodology#scale) - Using the information collected in the previous points it is possible to offer a much more accurate estimate of the following steps. In addition, the definitive implementation strategy is defined with its associated project plan, including the design of the different teams to be involved in the migration and the management and communication model between them. Once everything is set, execution of the migration plan can be carried out, starting the “factory mode” in which applications are migrated in parallel by various teams in typically two-week sprints.
 
 
 This [methodology](https://github.com/konveyor/methodology) is the result of several years of working with many large 
@@ -41,18 +45,12 @@ organizations, distilling the best practices for navigating and orchestrating mo
 
 See [github.com/konveyor/methodology](https://github.com/konveyor/methodology) for more info.
 
-
-# Unified Experience
-## Overview
-Konveyor will provide a unified experience of tools to help organizations modernize their applications at scale, 
-optionally allowing adoption of the open [konveyor/methodology](https://github.com/konveyor/methodology) to provide a 
-form of 'guide rails' for the modernization journey.
-
+# Unified Experience Overview
 The unified experience will be centered on surfacing information to a user so they may make informed business value 
 decisions in regard to application modernization.
 
-The unified experience aims to be developed in a technology-agnostic manner, meaning the 'Hub' will codify the workflow
-for a modernization journey, relying on additional components to provide the technology specific rules.  The aim being 
+The unified experience aims to be developed in a technology-agnostic manner, meaning Konveyor will codify the workflow
+for a modernization journey, relying on additional components to provide the technology specific details.  The aim being 
 that this solution will be able to evolve in time as technology needs change beyond the initial goal of enabling 
 legacy applications to be modernized to Kubernetes.
 
@@ -68,11 +66,12 @@ in an 'Application Inventory' provided by a 'Hub'
 4. 'Do Work': Help a Developer complete the needed work by either scaffolding the beginning of projects and/or providing a 
 catalog of integrated tools to aid specific workflows.
 
-![Workflow_DoWork](images/Workflow_DoWork.jpg)
-[Image Source](https://docs.google.com/drawings/d/1ASbIjFKfQc88ZeL-Dm7RsfTNkxystsmgmZagrqk8q6o/edit)
 
 ## Personas
 Two initial personas are identified, with more to be added in the future.
+
+![Workflow_DoWork](images/Workflow_DoWork.jpg)
+[Image Source](https://docs.google.com/drawings/d/1ASbIjFKfQc88ZeL-Dm7RsfTNkxystsmgmZagrqk8q6o/edit)
 
 ### Architect
 'Architect': A decision maker, who will review information Konveyor surfaces about an application's suitability for a 
