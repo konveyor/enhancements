@@ -99,7 +99,7 @@ A developer assigned to handle the source code updates and development efforts t
 
 Step-1 is focused on uncovering information about the application landscape in the organization, focusing on identifying patterns that allow to group applications by common attributes and finding issues and recommendations when considering the modernization or migration of any of these application types to leverage a given platform or runtime technology. This information is obtained from a mixture of static source code analysis along with interviews with stakeholders to uncover information on processes, implied dependencies and other factors not readily assessable from a pure code analysis perspective.
 
-The outcome of this step is a report of an application for a given technology to allow a stakeholder to make better informed decisions.
+The outcome of this step is a report of the suitability, or issues the application(s) may face for a given technology, thereby informing the stakeholder so they make better decisions.
 
 ## Step-2: Make Decisions
 ![UnifiedVision_Step2](images/UnifiedVision_Step2.jpg)
