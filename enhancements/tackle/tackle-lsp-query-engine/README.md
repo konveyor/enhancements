@@ -65,10 +65,8 @@ Example: in Python, a reference to a CRD can be found at `kubernetes.client.Apie
 message: apiextensions/v1beta1/customresourcedefinitions is deprecated, apiextensions/v1/customresourcedefinitions should be used instead.
 when:
   or:
-    - python:
-        referenced: kubernetes.client.ApiextensionsV1beta1Api.{create|delete|read|update|patch}_custom_resource_definition
-    - golang:
-        referenced: k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1.CustomResourceDefinition{|Spec|Status}
+    - python.referenced: kubernetes.client.ApiextensionsV1beta1Api.{create|delete|read|update|patch}_custom_resource_definition
+    - golang.referenced: k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1beta1.CustomResourceDefinition{|Spec|Status}
 ```
 
 **NOTE** The format above is purely an example and not meant to represent the actual design of the rule format
