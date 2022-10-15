@@ -49,11 +49,14 @@ See [github.com/konveyor/methodology](https://github.com/konveyor/methodology) f
 The unified experience will be centered on surfacing information to a user so they may make informed business value
 decisions in regard to application modernization.
 
-The unified experience aims to be developed in a technology-agnostic manner, meaning Konveyor will codify the workflow
-for a modernization journey, relying on additional components to provide the technology specific details.  The aim being
-that this solution will be able to evolve in time as technology needs change beyond the initial goal of enabling
-legacy applications to be modernized to Kubernetes.
+The unified experience aims to be developed in a technology-agnostic manner, meaning Konveyor will codify discrete steps
+to build a workflow for any modernization journey, relying on additional components to provide the technology specific 
+details.  The aim being that this solution will be able to evolve in time as technology needs change beyond the initial 
+goal of enabling legacy applications to be modernized to Kubernetes.
 
+_Note: Konveyor will integrate and provide tools that will aid specific modernization use-cases, yet it is _not_
+intended to become an 'easy button' that will 'automagically' refactor an application for a given technology. That is 
+considered out of scope for the project._
 
 ## Workflow
 
