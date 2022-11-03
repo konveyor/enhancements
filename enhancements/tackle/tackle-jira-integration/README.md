@@ -61,7 +61,7 @@ This integration would provide the following advantages:
 
 ### Non-Goals
 
-- Implement a Jira addon of any kind.
+- Implement a [Jira App](https://marketplace.atlassian.com/addons/app/jira) of any kind.
 - Design and implement the executive dashboards or tackle the senior management persona. These features will be dealt with in a potential future enhancement.
 
 ## Proposal
