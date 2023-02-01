@@ -268,269 +268,70 @@ At the top level of the compound expandable section, the aggregated status of th
 
 ### Implementation Details/Notes/Constraints
 
-The Tackle-Jira integration will be implemented by a tackle2-addon component which integrates with the tackle2-hub.
-
-This tackle2-addon-jira will be built with Java stack, following a microservice architecture with http endpoints (Spring Boot + Swagger) that the tackle2-hub uses to create Jira issues. By this way, an abstraction layer is created that can be enhanced later on to support other ticketing products through additional tackle2-addons, for instance. All communications between the tackle2-hub and this tackle2 addon for Jira, will be performed by the use of REST API Calls.
-
-![Tackle Addon Jira Overview](images/tackle-addon-jira-overview.png?raw=true "Tackle Addon Jira Overview")
-
-#### First iteration limitations
-
-* This tackle addon for Jira will not mirror any data for Tackle, issues will live on Jira instance only.
-* Mandatory Jira custom fields will not be supported. However, this will not a mayor issue as the creation flow will not be any different: if there is an invalid value for required fields, the API will throw an error telling field_xxxx is required together with a Bad Request HTTP error.
-
-#### Current design limitations
-
-* This tackle addon for Jira will act as a black box. Meaning, its clients have to decide on their error handling strategy. The data flow is "pass-through", only adapting data structures.
-* In case of exporting a Migration Wave to Jira, this component will create an issue if asked to do so, but it won't track if the data sent is already present on Jira, created on a previous call.
-
-#### Jira issue status considerations
-
-* On Jira ecosystem, statuses do not have icons but colours.
-* Statuses are grouped into Status Catogories and every category has its own colour that is not configurable.
-* Right now Jira tools use the following Status Categories:
-  * To-Do → Initial status with colour Blue, e.g. OPEN
-  * In Progress → Intermediate status with colour Yellow, e.g. TESTING
-  * Done →  Final status with colour Green, e.g. REJECTED
-* Any existing status or custom ones, that are created for the use in Jira workflows, will be mapped to one of these core categories and will take on the same colour.
-
-#### Supported Platforms
-
-At first release, only the following products / versions are supported:
-
-|                  | Jira Flavours                              | Product Versions |
-| ---------------- | ------------------------------------------ | ---------------- |
-| Jira Server      | - Jira Work Management (aka Jira Core)<br/>- Jira Software<br/>- Jira Service Management (aka Jira Service Desk)	| - Jira 7.x<br/>- Jira 8.x<br/>- Jira 9.x |
-| Jira Data Center | - Jira Work Management (aka Jira Core)<br/>- Jira Software<br/>- Jira Service Management (aka Jira Service Desk) |	- Jira 7.x<br/>- Jira 8.x<br/>- Jira 9.x |
-| Jira Cloud       | - Jira Work Management (aka Jira Core)<br/>- Jira Software<br/>- Jira Service Management (aka Jira Service Desk) |	- Any via API v3 |
-
-
-#### Jira documentation
-
-* [Jira Cloud REST API](https://developer.atlassian.com/cloud/jira/platform/rest/v3/intro/)
-* [Jira Server / Data Center REST API](https://docs.atlassian.com/software/jira/docs/api/REST/9.3.0/)
-
-
 #### Jira Communication Flow/API calls
 
-API REST Calls from this Tackle add-on to a Jira instance will be authenticated using [Basic Authentication](https://developer.atlassian.com/cloud/jira/platform/basic-auth-for-rest-apis/) headers. Personal user accounts should not be used - only generic service accounts with a specific authentication token should be used.  It will be necessary to provide a valid username and token in order to perform any of the subsequent actions.
+Documentation of the communication flow for each instance type.
 
-The user account permissions on Jira are equal for all ways of interaction. That is, if the user doesn't have permission to do an operation through Jira web interface, the user will not have permissions to do so using this add-on. Therefore, the service user account must sufficient permissions in order to execute the following actions.
-
-This connector will act as an abstraction to Jira, handling the specifics of the different Jira implementations (Cloud, Server, Data Center).
-
-All API endpoints follow the flow shown in the diagram below:
-
-![Tackle Addon Jira API flow](images/tackle-addon-jira-api-flow.png?raw=true "Tackle Addon Jira API Flow")
-
-
-The following endpoints will be provided by this 'tackle2-jira-connector'.
-
-
-
-##### Jira On Premise and Jira Cloud
+##### Jira On Premise
 
 ###### Authentication
 
-As per design, our REST API endpoints will require Konveyor UI to provide connection data on every request as this connector has been design as stateless.
-For that, we have defined three custom headers that will contain all the information required:
-
-* `X-Atlassian-Host` — Base url of target Jira instance. I.e. https://tracker.mycompany.com/jira or https://mycompany.atlassian.net/
-* `X-Atlassian-Username` — Actor used for REST API calls agains given Jira instance.
-* `X-Atlassian-Password` — Related Jira password / api token for given username.
-
-###### Test Connection
-
-| POST /connection |
-| ---------------- |
-Validates the autentication data provided against a given Jira instance.
-Ideally, this endpoint should only be used for [TEST CONNECTION] action in Tackle UI, when setting up a new Jira Connection.
-Credential pairs need to be provided on each API call (stateless model), together with the target Jira instance.
-
-| HEADERS |
-| --------------- |
-Custom headers below will be necesary for authenticatin purposes as described under 'Authentication' section above.
-* X-Atlassian-Host
-* X-Atlassian-Username
-* X-Atlassian-Password
-
-| QUERY PARAMETERS |
-| ---------------- |
-None
-
-| BODY PARAMETERS |
-| --------------- |
-None
+TBD
 
 ###### Listing projects
 
-| GET /project |
-| ------------ |
-Returns all projects visible by the user
+TBD
 
-| HEADERS |
-| --------------- |
-Custom headers below will be necesary for authenticatin purposes as described under 'Authentication' section above.
-* X-Atlassian-Host
-* X-Atlassian-Username
-* X-Atlassian-Password
-
-| QUERY PARAMETERS |
-| ---------------- |
-None
-
-| BODY PARAMETERS |
-| --------------- |
-None
 
 ###### Listing Issue Types
 
-| GET /project/`{{projectId}}`/issuetype |
-| ------------------------------------ |
-Returns a list of all issue types in a project.
-
-| HEADERS |
-| --------------- |
-Custom headers below will be necesary for authenticatin purposes as described under 'Authentication' section above.
-* X-Atlassian-Host
-* X-Atlassian-Username
-* X-Atlassian-Password
-
-| QUERY PARAMETERS |
-| ---------------- |
-`projectId` — Identifier of the Jira project you want to know their issue types.<br/>This projectId will be included as part of GET /project as response body among other meaningful data.
-
-| BODY PARAMETERS |
-| --------------- |
-None
-
+TBD
 
 ###### Creating Issues
 
-| POST /issue |
-| ----------- |
-Creates an issue on Jira.
-> In this first release, only Summary & Description fields will be supported (no custom fields).
-> A successful request will return the new issue instance (same data as using `GET /issue/{{issueId}}`)
-
-| HEADERS |
-| --------------- |
-Custom headers below will be necesary for authenticatin purposes as described under 'Authentication' section above.
-* X-Atlassian-Host
-* X-Atlassian-Username
-* X-Atlassian-Password
-
-| QUERY PARAMETERS |
-| ---------------- |
-None
-
-| BODY PARAMETERS |
-| --------------- |
-`projectId` — Identifier of the Jira project you want to create this issue under.<br/>This projectId will be included as part of GET /project as response body among other meaningful data.
-`issueTypeId` — Identifier of the Jira issue type (Bug, Story, Initiative,...) you want to create this issue under.<br/>This issueTypeId will be included as part of GET /project/{{projectId}}/issuetype as response body among other meaningful data. 
-`fields` — An object containing one or more fields values for the creation of this issue.
-`summary` — A brief summary of the issue.
-`description` — A long-text description of the issue.
-*An example:*
-```
-{
-  "projectId": "10005",
-  "issueTypeId": "10095", 
-  "fields": {
-    "summary": "Enable PayPal bridge for online payments",
-    "description": "As a customer, I would like to purchase your products using my balance on paypal platform."
-  }
-}
-```
+TBD
 
 ###### Checking Issue Status
 
-| GET /issue/`{{issueId}}` |
-| ------------------------------------ |
-Returns a single issue.
-> In this first release, the following fields will be returned:
-> * Summary
-> * Description
-> * Status
+TBD
 
-| HEADERS |
-| --------------- |
-Custom headers below will be necesary for authenticatin purposes as described under 'Authentication' section above.
-* X-Atlassian-Host
-* X-Atlassian-Username
-* X-Atlassian-Password
+##### Jira Cloud
 
-| QUERY PARAMETERS |
-| ---------------- |
-`issueId` — Identifier of the Jira issue you want to retrieve.<br/>This issueId will be included as part of POST /issue as response body among other meaningful data.
+###### Authentication
 
-| BODY PARAMETERS |
-| --------------- |
-None
+TBD
+
+###### Listing projects
+
+TBD
+
+###### Listing Issue Types
+
+TBD
+
+###### Creating Issues
+
+TBD
+
+###### Checking Issue Status
+
+TBD
+
+
 
 ### Security, Risks, and Mitigations
 
-All communications, inbound and outbound, should be protected by TLS. The Tackle2 Jira Connector will not handle its own certificates or trust store. The default key and trust stores of the JVM apply.
-
-It is recommended not to support self-signed certificates for TLS.
+TBD
 
 ## Design Details
 
-Every endpoint provided by this Tackle Jira Connector acts as black box. Given an input by tackle2 hub, this component handles any required logic to call Jira REST API  regardless of the destination Jira flavour (Cloud, Server, DataCenter).
-
 ### Test Plan
 
-#### Testing Scope
-
-The Tackle2 Jira Connector will execute unit tests on its own endpoints.
-
-If required, Konveyor team may define integration Test Cases to ensure the whole process flow, from Konveyor UI to target Jira and back. In this case Jira target instances might be integrated using test containers.
-
-#### Testing Type
-
-Automated unit tests will ensure that a section of an application (each endpoint) meets its design and behaves as intended.
-To isolate issues that may arise, each test case will be tested independently using method stubs, mock objects and test assertions to assist testing every endpoint in isolation. 
-
-#### Test Cases
-
-##### Authentication
-
-* Call `/connection` endpoint with invalid credentials to ensure we sent back an error as response
-* Call `/connection` endpoint with valid credentials to ensure we sent back an http-200 OK as response
-
-##### Listing projects
-
-* Call `/project` endpoint with invalid credentials to ensure that no data is leaked
-* Call `/project` endpoint with valid credentials to ensure that project data is sent correctly within the response but limited to user permissions<br/>
-...so if credential pair has no access to view any project, an empty list will be sent as response, otherwise the list of projects where the user has visibility will be sent as response.
-
-##### Listing Issue Types
-
-* Call `/project/{{projectId}}/issuetype` endpoint with invalid credentials to ensure no data is leaked
-* Call `/project/{{projectId}}/issuetype` endpoint with valid credentials but invalid projectId to ensure no data is leaked
-* Call `/project` endpoint with valid credentials and valid projectId to ensure data is sent correctly within the response but limited to user permissions<br>
-...so if credential pair has no access to view given project, an error will be thrown, otherwise the list of issye types for selected project will be sent as response.
-
-##### Creating Issue
-
-* Call `/issue` endpoint with invalid credentials to ensure no data is written
-* Call `/issue` endpoint with  valid credentials but invalid payload to ensure no data is written and an error is thrown instead.
-* Call `/issue` endpoint with valid credentials and valid payload to ensure data is written correctly but limited to user permissions.<br/>
-...so if credential pair has no access to create issues on given project, an error will be thrown, otherwise the created issue data will be sent as response.
-
-##### Checking Issue Status
-
-* Call `/issue/{{issueId}}` endpoint with invalid credentials to ensure no data is leaked
-* Call `/issue/{{issueId}}` endpoint with  valid credentials but invalid issueId to ensure no data is leaked
-* Call `/issue/{{issueId}}` endpoint with valid credentials and valid issueId to ensure data is sent correctly within the response but limited to user permissions.<br/>
-...so if credential pair has no access to view given issue, an error will be thrown, otherwise the issue data will be sent as response.
+TBD
 
 ### Upgrade / Downgrade Strategy
 
-The Tackle2 Jira Connector is designed as a stateless service with a versioned API. Mayor Jira API changes will trigger a new component API version.
-
-Automatic migration from previous to current API flows and target systems is subject to detailed study and future releases.
-
+TBD
 
 ## Implementation History
 
@@ -538,20 +339,12 @@ TBD
 
 ## Drawbacks
 
-Tackle2 is in charge of issue states, specially in case of Migration Wave issues. The Jira connector component will not save any state of whether the issue was already exported to one Jira instance or to any other ITSM instance, or not exported at all.
+TBD
 
 ## Alternatives
 
-Instead of an independent Tackle2 Addon, it would also be possibsle to integrate this Jira connector as a library into the tackle2-hub process. The pros and cons of each integration scenario should be evaluated by the Konveyor architecture team.
+TBD
 
 ## Infrastructure Needed
 
-### Runtime
-The Tackle2 Jira Connector will be containerized as needed by the Konveyor Team. Kubernetes based execution is supported.
-
-### Testing
-Testing infrastructure will be required for integration tests. It should be discussed if getting infrastructure on demand is an option, or if we should consider using a simulation/mocking strategy instead.
-
-At first version, we will only have unit testing as testing method as describe under Design Details section. However, we can further discuss how to perform integration testing to validate the whole solution from Konveyor to Jira Instance and back.
-
-Atlassian provides trial licenses for Server and DataCenter products and free tiers for Atlassian Cloud, therefore testing environments may be set up, if needed.
+Testing infrastructure will be required for this to test the integration. It should be discussed if getting infrastructure on demand is an option, or if we should consider using a simulation/mocking strategy instead.
