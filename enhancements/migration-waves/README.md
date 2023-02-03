@@ -6,10 +6,11 @@ reviewers:
   - "@jortel"
   - "@mansam"
   - "@jwmatthews"
+  - "@ibolton336"
 approvers:
   - "jortel"
 creation-date: 2022-12-16
-last-updated: 2022-12-16
+last-updated: 2023-02-03
 status: provisional
 see-also:
   - "[tackle-jira-integration](https://github.com/konveyor/enhancements/pull/85)"   
@@ -31,7 +32,7 @@ superseded-by:
 
 ## Open Questions
 
-- What happens with the "*Status*" compound expandable section of the Migration Waves view if no issue tracker is enabled?(See [tackle-jira-integration](https://github.com/konveyor/enhancements/pull/85))
+- ~~What happens with the "*Status*" compound expandable section of the Migration Waves view if no issue tracker is enabled?(See [tackle-jira-integration](https://github.com/konveyor/enhancements/pull/85))~~ **The "Status" section will only be displayed if there is at least one Issue Manager instance configured in the Konveyor instance**
 - What format will be used to load stakeholders that don't exist in the CSV import?
 
 ## Summary
@@ -69,7 +70,7 @@ A technical lead for the migration project that can create and modify applicatio
 
 #### Project Manager
 
-**New persona to create in Konveyor with this enhancement**. A management lead for the migration project that can create and modify migration waves but can only assign an owner and contributors to an application and applications to waves in the application inventory.
+**New persona to create in Konveyor with this enhancement**. A management lead for the migration project that can create and modify migration waves and assign applications to them but can only assign an owner and contributors to an application in the application inventory.
 
 
 ### User Stories
@@ -78,12 +79,12 @@ A technical lead for the migration project that can create and modify applicatio
 
 ##### AOC001
 
-*As an Architect and a Project Manager I want to be able to associate a stakeholder to an application as its owner*
+*As an Architect or a Project Manager I want to be able to associate a stakeholder to an application as its owner*
 
 
 ##### AOC002
 
-*As an Architect and a Project Manager I want to be able to associate stakeholders to an application as contributors*
+*As an Architect or a Project Manager I want to be able to associate stakeholders to an application as contributors*
 
 
 #### Migration Waves Management
@@ -163,7 +164,7 @@ The application creation view will include two new fields:
 ![Application Creation view](images/app-edition-fields.png?raw=true "Application Creation view")
 
 
-It is important to note that Project Managers should only be able to edit the Owner and Contributor fields, and the rest of the fields should appear disabled. Architects will have full access.
+It is important to note that **Project Managers should only be able to edit the Owner and Contributor fields, and the rest of the fields should appear disabled**. Architects will have full access.
 
 
 #### Migration Waves Management
@@ -191,7 +192,7 @@ A new option "*Migration Waves*" will be included in the left menu for the Devel
 - **Name**: Name of the migration wave. This field is optional and could appear empty.
 - **Start date**: Start date for the migration wave.
 - **End date**: End date for the migration wave.
-- **Application**: Compound expandable section with a nested table that includes the list of applications assigned to the migration wave. Each row will have a kebab menu with just one option, "*Remove*", to remove the application belonging to the row from the list of assigned applications to the migration wave. Each row will include the following fields from the application:
+- **Application**: Compound expandable section with a nested table that includes the list of applications assigned to the migration wave. Each row will have trashcan icon to remove the application belonging to the row from the list of assigned applications to the migration wave. Each row will include the following fields from the application:
   - *Application name*
   - *Description*
   - *Business service*
@@ -199,7 +200,7 @@ A new option "*Migration Waves*" will be included in the left menu for the Devel
 
 ![Migration Waves view - Applications](images/migration-waves-applications-compound.png?raw=true "Migration Waves view - Applications")
 
-- **Stakeholders**: Compound expandable section with a nested table that includes the list of stakeholders associated with a migration wave. This list will be automatically populated with all the owners and contributors to all the applications associated with the migration wave, and with any additional stakeholders that could have been associated directly to the migration wave on creation/edition or indirectly through the association of a determined stakeholder group. Just to clarify, **if a stakeholder group is associated to a migration wave on creation/edition, all of its members will appear in this list**. Each row will include the following fields:
+- **Stakeholders**: Compound expandable section with a nested table that includes the list of stakeholders associated with a migration wave. This list will be automatically populated with all the owners and contributors to all the applications assigned to the migration wave, and with any additional stakeholders that could have been associated directly to the migration wave on creation/edition or indirectly through the association of a determined stakeholder group. Just to clarify, **if a stakeholder group is associated to a migration wave on creation/edition, all of its members will appear in this list**. Each row will include the following fields:
 
   - *Name*
   - *Job Function*
@@ -209,7 +210,7 @@ A new option "*Migration Waves*" will be included in the left menu for the Devel
 
 ![Migration Waves view - Stakeholders](images/migration-waves-stakeholders-compound.png?raw=true "Migration Waves view - Stakeholders")
 
-- **Status**: Compound expandable section for the migration waves to reflect status data. This section is explained in depth in the related [tackle-jira-integration](https://github.com/konveyor/enhancements/pull/85) enhancement.
+- **Status**: Compound expandable section for the migration waves to reflect status data. This section is explained in depth in the related [tackle-jira-integration](https://github.com/konveyor/enhancements/pull/85) enhancement. **This section will only be displayed if there is at least one Issue Manager configured in the Konveyor instance**
 
 ![Migration Waves view - Status](images/migration-waves-status-compound.png?raw=true "Migration Waves view - Status")
 
@@ -225,8 +226,8 @@ New migration waves can be created by clicking on the button "Create new" at the
 - **Name**: Optional. String with the name of the wave.
 - **Start date**: Mandatory. Date picker.
 - **End date**: Mandatory. Date picker.
-- **Stakeholders**: Optional. Dropdown, multiple selection. Values will be the list of available stakeholders in the instance. Stakeholders to associate directly to the migration wave. When an application is assigned to a migration wave, all of its associated stakeholders get transitively associated to the wave. By associating them directly through this field, they will appear with no role in the Stakeholders compound expandable section.
-- **Stakeholder Groups**: Optional. Dropdown, multiple selection. Values will be the list of available stakeholder groups in the instance. Stakeholder groups to associate directly to the migration wave. By associating a Stakeholder Group to a migration wave through this field, all the associated stakeholders in the group will appear with no role in the Stakeholders compound expandable section.
+- **Stakeholders**: Optional. Dropdown, multiple selection. Values will be the list of available stakeholders in the instance. Stakeholders to associate directly to the migration wave. When an application is assigned to a migration wave, all of its associated stakeholders get transitively associated to the wave. By associating them directly through this field, they will appear with no role in the Stakeholders compound expandable section, unless they are transitively associated by an application, in which case the role will be displayed.
+- **Stakeholder Groups**: Optional. Dropdown, multiple selection. Values will be the list of available stakeholder groups in the instance. Stakeholder groups to associate directly to the migration wave. By associating a Stakeholder Group to a migration wave through this field, all the associated stakeholders in the group will appear with no role in the Stakeholders compound expandable section, unless they are transitively associated by an application, in which case the role will be displayed.
 
 ![Migration Waves view - Create wave](images/migration-waves-create.png?raw=true "Migration Waves view - Create wave")
 
@@ -256,7 +257,7 @@ Clicking in the option will open a modal window with a table displaying all appl
 
 ![Migration Waves view - Manage Applications](images/manage-applications-modal.png?raw=true "Migration Waves view - Manage Applications")
 
-The "*Selected wave*" field on top won't be modifiable and will only display the name or the range for the selected wave in case it doesn't have a name. As in the "*Applications*" coumpound expandable session from the main table in the Migration Waves view, the table will display the following fields on each application row:
+The "*Selected wave*" field on top won't be modifiable and will only display the name or the range for the selected wave in case it doesn't have a name. As in the "*Applications*" compound expandable session from the main table in the Migration Waves view, the table will display the following fields on each application row:
 
 - *Application name*
 - *Description*
