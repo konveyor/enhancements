@@ -132,6 +132,8 @@ History`.
 
 1. [Konveyor API Tests in Python](https://github.com/konveyor/tackle-api-tests)
     * These tests are a great starting point to begin building a robust test suite that covers the API endpoints for the hub. Using this repo as a guide to begin building test fixtures feels like a good path forward, but we could choose to continue building this suite in Python.
+2. [Konveyor API Tests in Venom](https://github.com/aufi/konveyor-ci-playground)
+    * Equivalent functionality as python tests using a tool called [Venom](https://github.com/ovh/venom). Benefits to this approach is ease of use and human readable tests in YaML.
 
 ## Infrastructure Needed [optional]
 
