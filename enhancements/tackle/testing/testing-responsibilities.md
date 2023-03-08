@@ -79,7 +79,8 @@ These tests should be executed and maintained as described in following section.
 |---|---|---|---|---|
 | **integration** Hub | Hub developers | REST API coverage tests, maybe addons, [more](https://github.com/konveyor/tackle2-hub/discussions/241) | https://github.com/konveyor/tackle2-hub/... | PR&push |
 | **integration** addon-windup | Addon developers | Bash-scripted windup analysis | https://github.com/konveyor/tackle2-addon-windup/blob/main/hack/test-e2e.sh | PR&push |
-| **E2E** API | Developers&QE | Golang API test suite (WIP) | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
+||||||
+| **E2E** API | QE&Developers | Golang API test suite (WIP) | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
 | **E2E** UI | QE | Existing QE-maintained UI test suite using cypress framework | https://github.com/konveyor/tackle-ui-tests | time-based schedule |
 
 TODO:define what to test - like require QE to have links to test cases, devs to tickets/issues/enhancements
