@@ -59,6 +59,8 @@ Let's start with kinds of tests relevant for us:
   - Tests basic **use-cases** of the Konveyor tool (scenarios which real users would expect to be working).
   - Requires running Konveyor installation and covers functions of multiple components.
 
+TODO: That make a difference on components tests vs. E2E tests - devs vs QE - code logic tests vs end user tests scenarios.
+
 These tests should be executed and maintained as described in following section.
 
 ### Responsibilities
@@ -80,7 +82,7 @@ These tests should be executed and maintained as described in following section.
 | **E2E** API | Developers&QE | Golang API test suite (WIP) | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
 | **E2E** UI | QE | Existing QE-maintained UI test suite using cypress framework | https://github.com/konveyor/tackle-ui-tests | time-based schedule |
 
-
+TODO:define what to test - like require QE to have links to test cases, devs to tickets/issues/enhancements
 
 ### What Konveyor org expects from its components
 - Decide if unit tests are relevant for given component, if so, write it and maintain it.
