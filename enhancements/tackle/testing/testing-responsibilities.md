@@ -54,20 +54,33 @@ Let's start with kinds of tests relevant for us:
   - Tests **logic** of a single Konveyor component (hub, UI, …), doesn’t require running whole Konveyor installation or other components (like Keycloak) to be executed, but either doesn’t need it or mocking it.
   - Test technology/framework depends on technology used in a given component.
 - Component/repository specific **integration tests**
-  - Tests **logic** of a single Konveyor component (hub, UI, …), but requires other Konveyor components to be running in order to pass the test (e.g. testing addon via requests to Hub to trigger analysis).
+  - Tests **logic** of features from a single Konveyor component (hub, UI, …), but requires other Konveyor components to be running in order to pass the test (e.g. testing addon via requests to Hub to trigger analysis).
 - Konveyor suite **end-to-end tests** (with UI or API)
-  - Tests basic **use-cases** of the Konveyor tool (scenarios which real users would expect to be working).
+  - Tests basic **use-cases** of the Konveyor tool (scenarios which real users would expect to be working, ideally matching to Polarion test cases).
   - Requires running Konveyor installation and covers functions of multiple components.
 
-TODO: That make a difference on components tests vs. E2E tests - devs vs QE - code logic tests vs end user tests scenarios.
-
 These tests should be executed and maintained as described in following section.
+
+### Why such structure
+
+Component integration tests and E2E (API) tests are technically nearly the same, but they serves to slightly different purposes. At some point, PRs with new feature or fix should contain a test, the test written by the PR author should prove it basically works. There might be multiple PRs across Konveyor components for given feature, each component might test just it's part (focusing if it works, don't have to care too much about setting up other data to real use-case scenario). So, even Hub might have integration test using an addon, it might not care about all different options of using the feature (e.g. for an analysis, if the setup options like RWX, different kinds of identities, etc. might matter), but that's a stuff which developer's integration tests don't have to care much.
+
+Once the feature backend/API work was (mostly) completed, QE comes to play writing tests for it. They might use similar/shared methods with integration tests, but the tests focus on building real user test flows with relevant test data matching to Polarion test steps (if possible).
+
+An ideal workflow on developers&QE cooperation on a new feature work:
+
+|Feature started ->|||||
+|---|---|---|---|---|
+|Backend dev|Push PRs to e.g.addon/analyzer including tests<br>Push PRs to Hub including tests||||
+|UI dev||Make UI for the feature|||
+|QE||Work on test steps&E2E API test|Write UI tests<br>Run sanity checks||
+|||||-> Feature ready for release process|
 
 ### Responsibilities
 
 #### Overview matrix
 
-| Kind of test | Primary Responsible | Presence | Executed on | Executed from | Source code in |
+| Kind of test | Primary Responsible | Presence | Executed on | Trigger (min.required) | Source code in |
 |---|---|---|---|---|---|
 | **unit** | Developers | optional | Component | PRs&push | Component repo |
 | **integration** | Developers | required | Component+Konveyor | PRs&push | Component repo |
@@ -75,15 +88,13 @@ These tests should be executed and maintained as described in following section.
 
 #### More specific matrix as a starting point for Konveyor Hub and E2E tests
 
-| Kind of test | Primary Responsible | Description | Source code | Triggered by |
+| Kind of test | Primary Responsible | Description | Tests code | Trigger (min.required) |
 |---|---|---|---|---|
-| **integration** Hub | Hub developers | REST API coverage tests, maybe addons, [more](https://github.com/konveyor/tackle2-hub/discussions/241) | https://github.com/konveyor/tackle2-hub/... | PR&push |
-| **integration** addon-windup | Addon developers | Bash-scripted windup analysis | https://github.com/konveyor/tackle2-addon-windup/blob/main/hack/test-e2e.sh | PR&push |
+| **integration** Hub | Hub developers | REST API coverage tests, applications import, [more](https://github.com/konveyor/tackle2-hub/discussions/241) | https://github.com/konveyor/tackle2-hub/... | PR&push (+time anyway?) |
+| **integration** addon-windup | Addon developers | Bash-scripted windup analysis | https://github.com/konveyor/tackle2-addon-windup/blob/main/hack/test-e2e.sh | PR&push (+time anyway?) |
 ||||||
-| **E2E** API | QE&Developers | Golang API test suite (WIP) | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
+| **E2E** API | QE&Developers | Golang API test suite (WIP), focusing on sanity checks | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
 | **E2E** UI | QE | Existing QE-maintained UI test suite using cypress framework | https://github.com/konveyor/tackle-ui-tests | time-based schedule |
-
-TODO:define what to test - like require QE to have links to test cases, devs to tickets/issues/enhancements
 
 ### What Konveyor org expects from its components
 - Decide if unit tests are relevant for given component, if so, write it and maintain it.
@@ -96,7 +107,9 @@ TODO:define what to test - like require QE to have links to test cases, devs to 
 
 ### Execution and project status
 
-Konveyor CI repository is at https://github.com/konveyor/ci, it doesn't execute test suites itself, it just display status of E2E or components tests runs.
+Konveyor CI repository is https://github.com/konveyor/ci
+
+The CI repo doesn't execute test suites itself, it just display status of E2E or components tests runs.
 
 Overall CI status is:
 - GREEN if all E2E test suites and all reporting components tests are passing.
@@ -109,13 +122,13 @@ TBD technologies&resources to for re-use
 
 ### Security, Risks, and Mitigations
 
-Upstream test suite must not contain any company internal information not customer data (not even as sample data).
+Upstream test suite must not contain any company internal information not customer data (not even as a sample data).
 
 ## Design Details
 
 ### Test Plan
 
-Open Konveyor upstream CI at https://github.com/konveyor/ci and see its status (green hopefully).
+Open Konveyor upstream CI at https://github.com/konveyor/ci and tests statuses should be visible (green-ish hopefully).
 
 ### Upgrade / Downgrade Strategy
 
@@ -131,7 +144,7 @@ This is a follow-up on Dylan's Testing overview enhancement https://github.com/k
 
 Since testing could be considered as QE's responsibility, developers and Konveyor component maintainers don't need to care, so we might:
 - not run upstream tests, leave it for downstream product builders OR
-- not formalize upstream testing responsibilities too much to not make it over-engineered. 
+- not formalize upstream testing responsibilities too much to not make it over-engineered, just put some integration tests to Hub.
 
 ## Infrastructure Needed
 
