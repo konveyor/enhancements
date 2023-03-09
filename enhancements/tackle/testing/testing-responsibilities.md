@@ -55,15 +55,17 @@ Let's start with kinds of tests relevant for us:
   - Test technology/framework depends on technology used in a given component.
 - Component/repository specific **integration tests**
   - Tests **logic** of features from a single Konveyor component (hub, UI, …), but requires other Konveyor components to be running in order to pass the test (e.g. testing addon via requests to Hub to trigger analysis).
-- Konveyor suite **end-to-end tests** (with UI or API)
-  - Tests basic **use-cases** of the Konveyor tool (scenarios which real users would expect to be working, ideally matching to Polarion test cases).
+- Konveyor suite **end-to-end tests** (with UI or API on application level)
+  - Tests basic **use-cases** of the Konveyor application (scenarios which real users would expect to be working, ideally matching to Polarion test cases).
   - Requires running Konveyor installation and covers functions of multiple components.
 
 These tests should be executed and maintained as described in following section.
 
 ### Why such structure
 
-Component integration tests and E2E (API) tests are technically nearly the same, but they serves to slightly different purposes. At some point, PRs with new feature or fix should contain a test, the test written by the PR author should prove it basically works. There might be multiple PRs across Konveyor components for given feature, each component might test just it's part (focusing if it works, don't have to care too much about setting up other data to real use-case scenario). So, even Hub might have integration test using an addon, it might not care about all different options of using the feature (e.g. for an analysis, if the setup options like RWX, different kinds of identities, etc. might matter), but that's a stuff which developer's integration tests don't have to care much.
+Component integration tests and E2E (API) tests are technically nearly the same, but they serves to slightly different purposes. At some point, PRs with new feature or fix should contain a test, the test written by the PR author should prove it basically works. There might be multiple PRs across Konveyor components for given feature, each component might test just it's part (focusing if it works, don't have to care too much about setting up other data to real use-case scenario).
+
+So, even Hub might have integration test using an addon, it might not care about all different options of using the feature (e.g. for an analysis, if the setup options like RWX, different kinds of identities, etc. might matter), but that's a stuff which developer's integration tests don't have to care much.
 
 Once the feature backend/API work was (mostly) completed, QE comes to play writing tests for it. They might use similar/shared methods with integration tests, but the tests focus on building real user test flows with relevant test data matching to Polarion test steps (if possible).
 
