@@ -10,7 +10,7 @@ reviewers:
 approvers:
   - "jortel"
 creation-date: 2023-02-06
-last-updated: 2023-02-06
+last-updated: 2023-03-09
 status: provisional
 see-also:
   -   
@@ -109,7 +109,19 @@ A developer that should be allowed to run analysis, but not to assess, create or
 
 ##### Description
 
-The application inventory view needs to accommodate the concept of sources for a set of tags. Also, given the fact that the number of tags can increase significantly, the way tags are displayed needs to include the tag type (to be renamed to "*Category*") as well. Mockups for this are WIP and will be added as soon as they are ready.
+The application profile for each application in the inventory has being redesigned, and now relies on a side drawer with multiple tabs to display all the information about a given application in an organized way:
+
+![Application Profile Side Drawer](images/new-application-drawer.png?raw=true "Application Profile Side Drawer")
+
+The *Tags* tab contains all the tags associated to the selected application, organized by the different sources they might be coming from and adding the Tag Type, now renamed to *Category*, for each tag. The user will be able to filter tags by their source and category.
+
+![Application Profile Side Drawer](images/new-application-drawer-tags.png?raw=true "Application Profile Side Drawer")
+
+A third tab will be made available to store information about reports associated to the application:
+
+![Application Profile Side Drawer](images/new-application-drawer-reports.png?raw=true "Application Profile Side Drawer")
+
+This will include the possibility of downloading HTML or CSV reports if the corresponding option is enabled in the General configuration menu from the Administration perspective as explained in [the RFE that requested this behavior](https://github.com/konveyor/enhancements/issues/91).
 
 #### Changes in the Analysis Configuration Wizard
 
@@ -127,8 +139,9 @@ The application inventory view needs to accommodate the concept of sources for a
 
 ##### Description
 
-The analysis configuration wizard should include an additional option to allow users to configure whether they want the analysis to automatically tag the included applications or not. This will be displayed as an additional switch in the advanced options view from the wizard. Mockups for this are WIP and will be added as soon as they are ready.
+The analysis configuration wizard should include an additional option to allow users to configure whether they want the analysis to automatically tag the included applications or not. This will be displayed as an additional switch in the advanced options view from the wizard and enabled by default:
 
+![Analysis Configuration Wizard](images/analysis-wizard.png?raw=true "Analysis Configuration Wizard")
 
 ### Implementation Details/Notes/Constraints
 
