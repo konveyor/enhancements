@@ -25,7 +25,7 @@ see-also:
 
 ## Summary
 
-Testing of Konveyor is critical to keep its quality, release stability and happyness of community. In order to accomplish that, it is needed to create, execute and maintain several kinds of tests like end-to-end and components-specific test suites.
+Testing of Konveyor is critical to keep its quality, release stability and happiness of community. In order to accomplish that, it is needed to create, execute and maintain several kinds of tests like application level end-to-end and components-specific test suites.
 
 This enhancement should provide an introduction to Konveyor project testing strategy and define basic responsibilities for community members including developers as well as QE.
 
@@ -35,7 +35,7 @@ As we build an upstream community project that consists of multiple components, 
 
 There are multiple level of tests like unit, integration or end-to-end, those could be executed on several levels from a single component unit tests to the Konveyor end-to-end UI test suite executed by automated CI.
 
-The motivation for this enhancement is to do it in the most effective and engineers-friendly way.
+The motivation for this enhancement is to do it in the most effective, user-focused and engineers-friendly way.
 
 ### Goals
 
@@ -53,17 +53,24 @@ Let's start with kinds of tests relevant for us:
 - Component/repository specific **unit tests**
   - Tests **logic** of a single Konveyor component (hub, UI, …), doesn’t require running whole Konveyor installation or other components (like Keycloak) to be executed, but either doesn’t need it or mocking it.
   - Test technology/framework depends on technology used in a given component.
+  - Unit tests are optional and if existed should be placed in the component repository.
+
 - Component/repository specific **integration tests**
   - Tests **logic** of features from a single Konveyor component (hub, UI, …), but requires other Konveyor components to be running in order to pass the test (e.g. testing addon via requests to Hub to trigger analysis).
-- Konveyor suite **end-to-end tests** (with UI or API on application level)
+  - Tests should be placed in the component repository. Even the test might require other Konveyor components to test given component (e.g. addon might execute integration test sending request to Hub API which triggers the tested addon action, so it is practically an end-to-end test), the main point here is to test the component, other required Konveyor components are considered to be just dependencies required to run the test.
+  - As these tests focus on basic feature logic, assertions like expected HTTP response code, only partial check of returned data, etc. might be acceptable here.
+
+- Konveyor **application level end-to-end tests** (with UI or API)
   - Tests basic **use-cases** of the Konveyor application (scenarios which real users would expect to be working, ideally matching to Polarion test cases).
   - Requires running Konveyor installation and covers functions of multiple components.
+  - Test scenarios should follow expected usage of the Konveyor by its users.
+  - Assertions in tests require higher certainity that application works from user point of view than integration tests. E.g. Application creation test might look on HTTP response code too, but must try to retrieve the created application by its returned ID as a check if it was really created.
 
 These tests should be executed and maintained as described in following section.
 
 ### Why such structure
 
-Component integration tests and E2E (API) tests are technically nearly the same, but they serves to slightly different purposes. At some point, PRs with new feature or fix should contain a test, the test written by the PR author should prove it basically works. There might be multiple PRs across Konveyor components for given feature, each component might test just it's part (focusing if it works, don't have to care too much about setting up other data to real use-case scenario).
+Component integration tests and Application level E2E (API) tests are technically nearly the same, but they serves to slightly different purposes. At some point, PRs with new feature or fix should contain a test, the test written by the PR author should prove it basically works. There might be multiple PRs across Konveyor components for given feature, each component might test just it's part (focusing if it works, don't have to care too much about setting up other data to real use-case scenario).
 
 So, even Hub might have integration test using an addon, it might not care about all different options of using the feature (e.g. for an analysis, if the setup options like RWX, different kinds of identities, etc. might matter), but that's a stuff which developer's integration tests don't have to care much.
 
@@ -75,7 +82,7 @@ An ideal workflow on developers&QE cooperation on a new feature work:
 |---|---|---|---|---|
 |Backend dev|Push PRs to e.g.addon/analyzer including tests<br>Push PRs to Hub including tests||||
 |UI dev||Make UI for the feature|||
-|QE||Work on test steps&E2E API test|Write UI tests<br>Run sanity checks||
+|QE||Work on test steps&application E2E API test|Write UI tests<br>Run sanity checks||
 |||||-> Feature ready for release process|
 
 ### Responsibilities
@@ -86,22 +93,23 @@ An ideal workflow on developers&QE cooperation on a new feature work:
 |---|---|---|---|---|---|
 | **unit** | Developers | optional | Component | PRs&push | Component repo |
 | **integration** | Developers | required | Component+Konveyor | PRs&push | Component repo |
-| **E2E** | QE | required | Running Konveyor | time-based schedule | E2E test suite repos |
+| **application E2E** | QE | required | Running Konveyor | time-based schedule | E2E test suite repos |
 
 #### More specific matrix as a starting point for Konveyor Hub and E2E tests
 
-| Kind of test | Primary Responsible | Description | Tests code | Trigger (min.required) |
+| Kind of test | Responsible | Description | Tests code | Trigger (min.required) |
 |---|---|---|---|---|
 | **integration** Hub | Hub developers | REST API coverage tests, applications import, [more](https://github.com/konveyor/tackle2-hub/discussions/241) | https://github.com/konveyor/tackle2-hub/... | PR&push (+time anyway?) |
 | **integration** addon-windup | Addon developers | Bash-scripted windup analysis | https://github.com/konveyor/tackle2-addon-windup/blob/main/hack/test-e2e.sh | PR&push (+time anyway?) |
 ||||||
-| **E2E** API | QE&Developers | Golang API test suite (WIP), focusing on sanity checks | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
-| **E2E** UI | QE | Existing QE-maintained UI test suite using cypress framework | https://github.com/konveyor/tackle-ui-tests | time-based schedule |
+| **application E2E** API | QE&Developers | Golang API test suite (WIP), focusing on sanity checks | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
+| **application E2E** UI | QE&Developers | Existing QE-maintained UI test suite using cypress framework | https://github.com/konveyor/tackle-ui-tests | time-based schedule |
 
 ### What Konveyor org expects from its components
 - Decide if unit tests are relevant for given component, if so, write it and maintain it.
 - Be primarily responsible for maintaining component integration tests.
 - Setup test actions on their components repositories and report it to Konveyor CI repo.
+- For new implemented features, create E2E application level test (or work with QE on it) to ensure the feature is fully working and is ready for real-world usage.
 
 ### What Konveyor components should expect from Konveyor org
 - Provide tools for automated Konveyor installation setup (locally as well as with github actions) ready for running their integration tests on PRs (use Konveyor CI repo as a starting point).
@@ -111,12 +119,12 @@ An ideal workflow on developers&QE cooperation on a new feature work:
 
 Konveyor CI repository is https://github.com/konveyor/ci
 
-The CI repo doesn't execute test suites itself, it just display status of E2E or components tests runs.
+The CI repo doesn't execute test suites itself, it just display status of application E2E or components tests runs.
 
 Overall CI status is:
-- GREEN if all E2E test suites and all reporting components tests are passing.
-- YELLOW if all E2E test suites are passing, but some of components reporting tests are failing.
-- RED if some of E2E test suites is failing.
+- GREEN if all application E2E test suites and all reporting components tests are passing.
+- YELLOW if all application E2E test suites are passing, but some of components reporting tests are failing.
+- RED if some of application E2E test suites is failing.
 
 ### Implementation Details/Notes/Constraints [optional]
 
