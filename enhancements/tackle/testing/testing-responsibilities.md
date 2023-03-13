@@ -156,6 +156,12 @@ Since testing could be considered as QE's responsibility, developers and Konveyo
 - not run upstream tests, leave it for downstream product builders OR
 - not formalize upstream testing responsibilities too much to not make it over-engineered, just put some integration tests to Hub.
 
+### A minimal working alternative
+
+As a minimal change to current state which would move us a step forward is: **Put integration (E2E) tests to Hub as a developers effort and start require tests on new features PRs.**
+
+Other things like Dev/QE cooperation on tests, application level API tests, requirements on type of tests, etc. would not be implemented.
+
 ## Infrastructure Needed
 
 Github actions with Minikube should be enough for upstream tests executions.
