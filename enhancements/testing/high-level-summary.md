@@ -1,14 +1,18 @@
 ---
-title: neat-enhancement-idea
+title: CI Testing High Level Overview
 authors:
   - "@dymurray"
 reviewers:
-  - TBD
+  - djzager
+  - aufi
+  - jortel
 approvers:
-  - TBD
+  - djzager
+  - aufi
+  - jortel
 creation-date: 2023-02-08
-last-updated: 2023-02-09
-status: provisional|implementable|implemented|deferred|rejected|withdrawn|replaced
+last-updated: 2023-03-23
+status: implementable
 ---
 
 # Konveyor Testing Initiative
@@ -23,8 +27,6 @@ and we haven't introduced any regressions.
 
 - [ ] Enhancement is `implementable`
 - [ ] Design details are appropriately documented from clear requirements
-- [ ] Test plan is defined
-- [ ] User-facing documentation is created
 
 ## Open Questions [optional]
 
@@ -64,7 +66,7 @@ to merge and regression protection for that feature in the future.
 ## Proposal
 
 I propose we make this a phased approach. The first phase will be building upon
-te existing work done by Shveta and Mayaan (see Alternatives section) to
+the existing work done by Shveta and Mayaan (see Alternatives section) to
 establish a test suite which provides full API test coverage. I propose we
 write this test suite in Golang so that all API contributors can provide tests
 for features they contribute. As we build out the test suite for phase 1 we
@@ -79,7 +81,8 @@ interactions with the hub.
 To begin phase 1, I will work to replicate the functionality of the Python test
 suite in a Golang version using a [table-driven
 testing](https://dave.cheney.net/2019/05/07/prefer-table-driven-tests)
-approach. 
+approach. Please read the attached blog by Dave Cheney to see the proper way to
+develop table-driven tests in Go.
 
 ### User Stories [optional]
 
