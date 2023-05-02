@@ -288,7 +288,7 @@ Uploading a file on the "Manual" tab or entering data on any of the fields of th
 - There could be multiple custom targets selected, so the Windup addon should be capable of retrieving files from multiple sources, group them and pass them to the Windup CLI.
 - Custom rules can be passed on the analysis wizard on top of the selection of custom migration targets. Those files should be passed to the Windup CLI as well.
 - When retrieving files from a repository, the following needs to be taken into account:
-  - The Windup CLI walks through all levels of the file tree, starting from the "Root path" value if provided
+  - The Windup CLI walks through all levels of the file tree, starting from the "Root path" value if provided.
   - The addon should validate that all files have a ".windup.xml" suffix. This is a requirement from the Windup CLI, so this validation is a way to make sure that any rules file that gets passed will not be ignored by the CLI. If a file doesn't have the suffix, it would be ignored right away by the Windup CLI, so the addon should take the responsibility of notifying the user about it. For each file that is not compliant with the file name format, the following line will be logged: 'File SFILENAME doesn't comply with the ".windup.xml" suffix and will be ignored during analysis'.
 
 
