@@ -17,7 +17,7 @@ superseded-by:
   - 
 ---
 
-# Neat Enhancement Idea
+# .Net Provider for Analyzer LSP
 
 ## Release Signoff Checklist
 
