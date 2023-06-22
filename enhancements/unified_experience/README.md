@@ -50,12 +50,12 @@ The unified experience will be centered on surfacing information to a user so th
 decisions in regard to application modernization.
 
 The unified experience aims to be developed in a technology-agnostic manner, meaning Konveyor will codify discrete steps
-to build a workflow for any modernization journey, relying on additional components to provide the technology specific 
-details.  The aim being that this solution will be able to evolve in time as technology needs change beyond the initial 
+to build a workflow for any modernization journey, relying on additional components to provide the technology specific
+details.  The aim being that this solution will be able to evolve in time as technology needs change beyond the initial
 goal of enabling legacy applications to be modernized to Kubernetes.
 
 _Note: Konveyor will integrate and provide tools that will aid specific modernization use-cases, yet it is _not_
-intended to become an 'easy button' that will 'automagically' refactor an application for a given technology. That is 
+intended to become an 'easy button' that will 'automagically' refactor an application for a given technology. That is
 considered out of scope for the project._
 
 ## Workflow
@@ -74,7 +74,7 @@ catalog of integrated tools to aid specific workflows.
 While the workflow associated with the Unified Experience provides differential value on each one of the stages of the Konveyor migration methodology, the intent is to make it generic enough so it can be leveraged on different migration and modernization methodologies that organizations, GSIs and vendors might be used to follow. Konveyor won't be built to enforce a given methodology, but to **provide insights, guidance, assets and some degree of automation that can be leveraged on large scale migration projects**. The ultimate goal of Konveyor is to enable organizations to reduce the risk associated with large modernization initiatives by making the associated projects measurable and predictable.
 
 ## Personas
-Two initial personas are identified, with more to be added in the future.
+Three different personas have been identified so far, with more to be added in the future.
 
 ![Workflow_DoWork](images/Workflow_Personas.jpg)
 [Image Source](https://docs.google.com/drawings/d/1ASbIjFKfQc88ZeL-Dm7RsfTNkxystsmgmZagrqk8q6o/edit)
@@ -82,7 +82,7 @@ Two initial personas are identified, with more to be added in the future.
 ### Architect
 
 
-A decision maker leading the modernization/migration initiative, who will review information Konveyor surfaces about an application's suitability for a given platform or runtime technology and ultimately make decisions of planning work for a **Migrator** to complete.
+A decision maker and tech lead for the modernization/migration initiative, who will review information Konveyor surfaces about an application's suitability for a given platform or runtime technology and ultimately make decisions of planning work for a **Migrator** to complete.
 * Surfaced information will be used to help this user make informed decisions, plan, and begin to execute
 modernization work.
 * Architects are expected to be knowledgeable individuals that understand the business value an application provides and are capable
@@ -94,6 +94,10 @@ of weighing technical costs versus expected business value to decide on the best
 
 
 A developer assigned to handle the source code updates and development efforts to satisfy issues identified and allow the application to run on a target platform or runtime technology and ideally leverage its capabilities.
+
+### Project Manager
+
+The management lead for the modernization/migration initiative, in charge of planning the work required for it to be executed and measuring progress.
 
 # Steps
 ## Step-1: Surface Information
@@ -117,7 +121,7 @@ which is out of scope for the tooling to decide.
 ![UnifiedVision_Step3](images/UnifiedVision_Step3.jpg)
 [Image Source](https://docs.google.com/drawings/d/1und523-QrA_p7dRkEzAD8GDdyHbE4DRKP6OoOn36HBU/edit)
 
-Step-3 is focused on helping an Architect plan work via batching units of work together in 'Migration Waves'.
+Step-3 is focused on helping a Project Manager plan work via batching units of work together in 'Migration Waves'.
 
 Optionally, this step will allow integration with an external issue tracking system.  The expected workflow is that
 integration with an external system, such as Jira for example, would allow a Jira Story/Task to be created per
