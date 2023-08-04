@@ -12,7 +12,7 @@ approvers:
   - "@ibolton336"
   - "@jwmatthews"
 creation-date: 2023-08-02
-last-updated: 2023-08-02
+last-updated: 2023-08-04
 status: provisional
 see-also:
   -   
@@ -80,6 +80,10 @@ The administrator for the tool that has access to some application-wide configur
 
 A technical lead for the migration project that can create and modify applications and information related to them.
 
+#### Migrator
+
+A developer that should be allowed to run analysis, but not to assess, create or modify applications in the portfolio.
+
 
 ### User Stories
 
@@ -125,6 +129,18 @@ A technical lead for the migration project that can create and modify applicatio
 
 *As an Administrator I want to be able to get a YAML template of a questionnaire*
 
+##### ASM006
+
+*As an Administrator I want to be able to define answers that automatically tag an application*
+
+##### ASM007
+
+*As an Administrator I want to be able to define answers that should be automatically chosen based on the existing tags associated to an application or archetype*
+
+##### ASM008
+
+*As an Administrator I want to be able to define conditional questions based on the existing tags associated to an application or archetype*
+
 #### Assessment process
 
 ##### ASP001
@@ -156,6 +172,11 @@ A technical lead for the migration project that can create and modify applicatio
 *As an Architect I want to be able to view archived questionnaires that were already answered*
 
 
+##### ASP008
+
+*As an Architect I want to be able to view reports for all different required questionnaires*
+
+
 ### Functional Specification
 
 #### Archetype management view
@@ -175,9 +196,9 @@ A technical lead for the migration project that can create and modify applicatio
 
 ##### Description
 
-###### Main view
+###### Archetypes Main view
 
-A new top level option called "Archetypes" will be added in the left menu from the Migration perspective. This will lead to a new view that will allow architects to manage archetypes:
+A new top level option called *Archetypes* will be added in the left menu from the Migration perspective. This will lead to a new view that will allow architects to manage archetypes:
 
 ![Archetypes view](images/archetypes-main.png?raw=true "Archetypes view")
 
@@ -194,13 +215,14 @@ The header of the archetypes table will include filters that include Name, Descr
 Each row will have a menu with the following options:
 
 - **Assess**: Launches the assessment for a given archetype.
+- **Review**: Navigates to the review view for the archetype.
 - **Edit**: Opens a modal window to edit an existing archetype.
 - **Delete**: Deletes the archetype.
 
 
 ###### Creating new archetypes
 
-New archetypes can be created by clicking on the "Create new archetype" button at the top menu. This will open a modal window with the following fields:
+New archetypes can be created by clicking on the *Create new archetype* button at the top menu. This will open a modal window with the following fields:
 
 - **Name**: String
 - **Description**: String (Optional)
@@ -225,9 +247,9 @@ Clicking on "Create archetype" will create the archetype, close the modal and re
 
 ###### Editing archetypes
 
-Existing custom migration targets can be edited by clicking on the kebab at the right side of the corresponding row and selecting the option "Edit".
+Existing custom migration targets can be edited by clicking on the kebab at the right side of the corresponding row and selecting the option *Edit*.
 
-This will open a modal window similar to the one used for creating archetypes, but with a "Save" button instead of the "Create archetype" one. **If the list of tags that define the archetype changes, the process to calculate the applications the archetype is associated with should be triggered again**.
+This will open a modal window similar to the one used for creating archetypes, but with a *Save* button instead of the *Create archetype* one. **If the list of tags that define the archetype changes, the process to calculate the applications the archetype is associated with should be triggered again**.
 
 ###### Deleting archetypes
 
@@ -252,6 +274,9 @@ For example, if archetype 1 is defined by tags (a,b), archetype 2 is defined by 
 - [ASM003](#ASM003)
 - [ASM004](#ASM004)
 - [ASM005](#ASM005)
+- [ASM006](#ASM006)
+- [ASM007](#ASM007)
+- [ASM008](#ASM008)
 
 
 ##### Involved Personas
@@ -263,14 +288,14 @@ For example, if archetype 1 is defined by tags (a,b), archetype 2 is defined by 
 
 ###### Main view
 
-A new top level option called "Assessment" will be added in the left menu from the Administration perspective. This will lead to a new view that will allow administrators to manage questionnaires:
+A new top level option called *Assessment* will be added in the left menu from the Administration perspective. This will lead to a new view that will allow administrators to manage questionnaires:
 
-![Set targets screen](images/assessment-management-main.png?raw=true "Set targets screen")
+![Assessment Management](images/assessment-management-main.png?raw=true "Assessment Management")
 
 The Assessment management view provides administrators with a range of actions and important information about their questionnaires. Each row represents a questionnaire and includes the following fields:
 
 - **Required**: Administrators can turn questionnaires on or off to define the questionnaires required to consider an application as assessed. At least one questionnaire should be required.
-- **Name**: Name of the questionnaire. A lock icon will be displayed alongside the name for system bundled questionnaires that cannot be deleted, ensuring their integrity.
+- **Name**: Name of the questionnaire (unique). A lock icon will be displayed alongside the name for system bundled questionnaires that cannot be deleted, ensuring their integrity.
 - **Questions**:  The number of questions within each questionnaire.
 - **Rating**: The different percentage thresholds to consider the risk level of an application to belong to a certain risk category (Red, Yellow, Green and Unknown).
 - **Date imported**: The date of questionnaire importation is shown, helping track the timeline of updates.
@@ -292,6 +317,310 @@ Each row in the table will include a kebab menu that offers the following option
 
 >**Note**: If while a questionnaire is required it gets answered for any application and/or archetype, and then the questionnaire transitions to non required, the answered questionnaires for those applications and/or archertypes will remain stored in the system and will be considered *archived* and accessible in view only mode.
 
+###### Importing Questionnaires
+
+Administrators can import YAML questionnaires by clicking on the *Import questionnaire* button at the header of the questionnaires table.
+
+![Assessment Management](images/assessment-management-import.png?raw=true "Assessment Management")
+
+This will open a modal window with a single file upload field. The uploaded YAML file will be validated for the following:
+
+- Correct YAML syntax. See the [YAML Syntax](#yaml-syntax) section for more details.
+- The previous existence of tags referenced by the questionnaire in conditional questions or autotag answers. If any of the referenced tags doesn't exist in the system, validation will fail and the user will be prompted with a validation message explaining it and providing the list of missing tags.
+- Correctness in the percentages expressed in the *thresholds* section.
+
+Once the file is validated, the "Import" button will be enabled and the user will be able to import the file as a new questionnaire.
+
+###### Exporting Questionnaires
+
+Existing questionnaires will be exportable as YAML files. For that, the user will have to click on the *Export* option from the kebab menu available on the row that represents the existing questionnaire the user wants to export. After clicking on *Export*, the system will generate the YAML file and initiate the download in the browser.
+
+###### Editing Questionnaires
+
+For practical reasons, **it won't be possible to edit existing questionnaires**. Administrators that want to modify a questionnaire will have to export it, make modifications and reimport it with a new name. Then, to replace one questionnaire with the other for architects assessing applications from the portfolio, the original one should be marked as non required (*Required*: Disabled) and the modified one should be marked as required (*Required*: Enabled). This will archive any previously answered questionnaires from the original one, which would be accessible in read only mode, and prompt the modified one as not answered.
+
+###### Viewing Questionnaires
+
+It will be possible for the Administrator to get a rendered view of the questionnaire once it listed in the questionnaires table. Clicking on the *View* option from the kebab menu of a row from the questionnaires table will navigate to a new view that renders the given questionnaire:
+
+![Assessment Management](images/assessment-management-view.png?raw=true "Assessment Management")
+
+As in the assessment view from the application inventory, questions are arranged in different sections accessible trough a set of vertical tabs. Each question in a section is represented as an expandable section, which once expanded will display the available answers for that question:
+
+![Assessment Management](images/assessment-management-view-expanded.png?raw=true "Assessment Management")
+
+Risk levels (Red, Yellow, Green) will be displayed as icons on each answer under the *Risk* column. Answers that imply autotagging will have an additional section below the choice text that will include the list of tags to be applied using labels to render each tag. The same applies for answers that would be automatically selected, rendering the list of tags that would trigger the selection of the answer. Conditional questions will have a *Conditional* label before the formulation text:
+
+![Assessment Management](images/assessment-management-view-conditional.png?raw=true "Assessment Management")
+
+Upon expanding a conditional question, an additional section will be displayed above the list of answers, providing information about the condition. This could be either *Include if present* or *Skip if present* followed by a list of tags rendered using labels.
+
+###### Deleting Questionnaires
+
+Questionnaire can be deleted by selecting the *Delete* option from the kebab menu in the questionnaire row. This should open a modal window displaying the following text:
+
+*Deleting a questionnaire will cascade into the deletion of all answered questionnaires associated to applications and/or archetypes. This action cannot be undone. Please enter the name of the questionnaire below to confirm:*
+
+Below that, a text field your be displayed for users to enter the name of the questionnaire to be deleted. The *Delete* button in the modal won't be enabled until the user enters the right name.
+
+###### YAML Syntax
+
+The YAML syntax for questionnaire definition aims at helping users simplify questionnaire authoring, while providing additional tools that allow a more dynamic behavior for the questionnaire based on tags associated to the target application or archetype. The questionnaire is structured with the following fields and sections:
+
+- **name**: *String. Required. Unique, questionnaire import will fail if the another questionnaire with the same name exists already.* Name of the questionnaire.
+- **description**: *String. Optional.* A short description of the questionnaire.
+- **sections**: *List. Required.* List of sections that the questionnaire will include. Each section is defined with the following fields:
+  - **name**: *String. Required.* Name to be displayed for the section.
+  - **questions**: *List. Required.* List of questions that belong to the section. Each question is defined with the following fields:
+   - **formulation**: *String. Required.* Formulation of the question to be asked.
+   - **explanation**: *String. Optional.* Additional explanation for the question.
+   - **include_if_tags_present**: *List. Optional.* Defines that a question should be displayed only if any of the tags included in the list is present in the target application or archetype (OR logic). Each tag is defined by the following:
+      - **category**: *String. Required.* Category of the target tag.
+      - **tag**: *String. Required.* Tag definition for the target tag.
+    - **skip_if_tags_present**: *List. Optional.* Defines that a question should be skipped if any of the tags included in the list is present in the target application or archetype (OR logic). Each tag is defined by the following:
+      - **category**: *String. Required.* Category of the target tag.
+      - **tag**: *String. Required* Tag definition for the target tag.
+    - **answers**: *List. Required.* List of answers for the given question. Each answer is defined by the following fields:
+      - **choice**: *String. Required.* The actual answer for the question.
+      - **risk**: *String, limited values: red, yellow, green, unknown. Required*. The risk level the current answer implies.
+      - **rationale**: *String. Optional.** An explanation of the rationale behind the answer being considered a risk.
+      - **mitigation**: *String. Optional.* An explanation of the potential mitigation strategy for the risk implied by this answer.
+      - **autotag**: *List. Optional.* Defines a list of tags to be automatically applied to the assessed application or archetype if this answer is selected. Each tag is defined by the following:
+        - **category**: *String. Required.* Category of the target tag.
+        - **tag**: *String. Required* Tag definition for the target tag.
+      - **autoanswer_if_tags_present**: *List. Optional.* Defines a list of tags that will lead to this answer being automatically selected when the application or archetype is assessed. Each tag is defined by the following:
+        - **category**: *String. Required.* Category of the target tag.
+        - **tag**: *String. Required.* Tag definition for the target tag.
+- **thresholds**: *Map. Required.* The threshold definition for each risk category for the application or the archetype to be considered affected by that risk level. The higher risk level always takes precedence. For example, if yellow threshold is established in 30% and red in 5%, and the answers for an application or archetype have 35% yellow and 6% red, the risk level for the application or archetype will be red. The threshold map is defined by the following fields:
+    - **red**: *Numeric. Percentage. Required.* Percentage of red answers the questionnaire can have until the risk level is considered red.
+    - **yellow**: *Numeric. Percentage. Required.* Percentage of yellow answers the questionnaire can have until the risk level is considered yellow.
+    - **unknown**: *Numeric. Percentage. Required.* Percentage of unknown answers the questionnaire can have until the risk level is considered unknown.
+- **risk_messages**: *Map. Required.* The messages to be displayed in reports for each risk category. The risk_messages map is defined by the following fields:
+  - **red**: *String. Required* The message to display in reports for the red risk level.
+  - **yellow**: *String. Required* The message to display in reports for the yellow risk level.
+  - **green**: *String. Required* The message to display in reports for the green risk level.
+  - **unknown**: *String. Required* The message to display in reports for the unknown risk level.
+
+The following is a sample questionnaire using the previously defined YAML syntax:
+
+```yaml
+name: Cloud Native
+description: |
+  Questionnaire that includes the Twelve Factor Application principles.
+sections:
+  - name: Application technologies
+    questions:
+      - formulation: What is the main technology in your application?
+        explanation: What would you describe as the main framework used to build your application.
+        answers:
+          - choice: Unknown
+            rationale: This is a problem because of the uncertainty.
+            mitigation: Gathering more information about this is required.
+            risk: unknown
+          - choice: Quarkus
+            risk: green
+            autoanswer_if_tags_present:
+              - category: Technology
+                tag: Quarkus
+            autotag:
+              - category: Technology
+                tag: Quarkus
+          - choice: Spring Boot
+            risk: green
+            autoanswer_if_tags_present:
+              - category: Technology
+                tag: Spring Boot
+            autotag:
+              - category: Technology
+                tag: Spring Boot
+          - choice: Java EE
+            rationale: This might not be the most cloud friendly technology.
+            mitigation: Maybe start thinking about migrating to Quarkus or Jakarta EE.
+            risk: yellow
+            autoanswer_if_tags_present:
+              - category: Technology
+                tag: Java EE
+            autotag:
+              - category: Technology
+                tag: Java EE
+          - choice: J2EE
+            rationale: This is obsolete.
+            mitigation: Maybe start thinking about migrating to Quarkus or Jakarta EE.
+            risk: red
+            autoanswer_if_tags_present:
+              - category: Technology
+                tag: J2EE
+            autotag:
+              - category: Technology
+                tag: J2EE
+      - formulation: "What version of Java EE does the application use?"
+        explanation: "What version of the Java EE specification is your application using?"
+        answers:
+          - choice: Below 5.
+            rationale: This technology stack is obsolete.
+            mitigation: Consider migrating to at least Java EE 7.
+            risk: red
+          - choice: 5 or 6
+            rationale: This is a mostly outdated stack.
+            mitigation: Consider migrating to at least Java EE 7.
+            risk: yellow
+          - choice: "7"
+            risk: green
+        include_if_tags_present:
+          - category: Technology
+            tag: Java EE
+      - formulation: Does your application use any caching mechanism?
+        answers:
+          - choice: Yes
+            rationale: This could be problematic in containers and Kubernetes.
+            mitigation: Review the clustering mechanism to check compatibility and support for container environments.
+            risk: yellow
+            autoanswer_if_tags_present:
+              - category: Caching
+                tag: Infinispan
+              - category: Caching
+                tag: Datagrid
+              - category: Caching
+                tag: eXtreme Scale
+              - category: Caching
+                tag: Coherence
+          - choice: No
+            risk: green
+          - choice: Unknown
+            rationale: This is a problem because of the uncertainty.
+            mitigation: Gathering more information about this is required.
+            risk: unknown
+      - formulation: What implementation of JAX-WS does your application use?
+        answers:
+          - choice: Apache Axis
+            rationale: This version is obsolete
+            mitigation: Consider migrating to Apache CXF
+            risk: red
+          - choice: Apache CXF
+            risk: green
+          - choice: Unknown
+            rationale: This is a problem because of the uncertainty.
+            mitigation: Gathering more information about this is required.
+            risk: unknown
+        skip_if_tags_present:
+          - category: Technology
+            tag: Spring Boot
+          - category: Technology
+            tag: Quarkus
+thresholds:
+  red: 1%
+  yellow: 30%
+  unknown: 15%
+risk_messages:
+  red: Application requires deep changes in architecture or lifecycle
+  yellow: Application is Cloud friendly but requires some minor changes
+  green: Application is Cloud Native
+  unknown: More information about the application is required
+```
+
+#### Changes in the Assessment process
+
+##### Related Use Cases
+
+- [ASP001](#ASP001)
+- [ASP002](#ASP002)
+- [ASP003](#ASP003)
+- [ASP004](#ASP004)
+- [ASP005](#ASP005)
+- [ASP006](#ASP006)
+- [ASP007](#ASP007)
+- [ASP008](#ASP008)
+
+##### Involved Personas
+
+- [Architect](#architect)
+
+
+##### Description
+
+###### Assessment flow for applications
+
+Since this enhancement introduces the possibility of requiring multiple questionnaires to be answered for an application to be considered assessed, it requires the introduction of some changes in the overall process. Clicking on the *Assess* button for an application will now lead to an intermediate view in which the user will be presented with the list of required questionnaires.
+
+
+![Assessment Process](images/assessment-process-start.png?raw=true "Assessment Process")
+
+If no questionnaire has been answered yet, only the *Take* button will be available. Clicking on it will kickstart the usual assessment flow with no major changes from the previous single questionnaire approach, aside from the fact that visual cues will be offered for those questions that have been automatically answered (**Mockup missing**). Once a questionnaire is completed, more options will be available for the user for it:
+
+ ![Assessment Process](images/assessment-process-completed.png?raw=true "Assessment Process")
+
+ - *Retake* will prompt the questionnaire again with all the previous answers already selected, similar to editing an already answered questionnaire.
+ - *View* will render a read only view of the questionnaire highlighting the selected questions.
+ - *Delete* will, upon confirmation, delete the provided answers for a questionnaire and bring it back to the original unanswered state.
+
+ As stated before, both applications and archetypes can be assessed. Applications associated with an archetype will *inherit* its assessment. Nevertheless, individual applications that are associated to an archetype can also have a dedicated assessment that overrides the one inherited from the archetype. Clicking on "Assess" for an application that is associated to an archetype will open a confirmation modal to override the inherited assessment:
+
+  ![Assessment Process](images/assessment-process-override.png?raw=true "Assessment Process")
+
+Deleting the dedicated assessment of an application associated to an assessed archetype will bring that application back to its previous state of inheriting the archetype assessment.
+
+###### Assessment flow for archetypes
+
+Archetypes will be assessable by clicking on the *Assess* option from the kebab menu from a row in the table from the [archetypes view](#archetypes-main-view). Doing that will lead to the questionnaire list view and kickstart the assessment process in the exact same way described before for applications.
+
+> **Note**: Conditional questions on a questionnaire belonging to the assessment of an archetype will only take into account tags directly associated with the archetype, and will ignore tags coming from applications associated to that archetype.
+
+> **Note**:  Tags in the assessment source of an application coming from the assessment of an associated archetype are transitive. If the application stops being associated to the archetype or the archetype is deleted, the tags will be removed from the application.
+
+#### Changes in the Review process
+
+##### Related Use Cases
+
+- [ASM002](#ARM002)
+- [ASP003](#ASM003)
+
+##### Involved Personas
+
+- [Architect](#architect)
+
+##### Description
+
+The review flow will stay mostly the same, but now architects should be able to review both archetypes from the *Archetypes* view or individual applications from the **Application inventory* view. As with assessments, applications associated to an archetype that has been reviewed will inherit the review, and it will be possible to override it with a dedicated review as well.
+
+The Review view will require some small changes (**Mockup missing**):
+
+- The Assessment summary table should display risks coming from all the questionnaires and allocate a way to display rationale and mitigation data.
+
+#### Changes in the Application Profile view
+
+##### Related Use Cases
+
+- [ARM004](#ARM004)
+- [ASM006](#ASM006)
+
+##### Involved Personas
+
+- [Architect](#architect)
+- [Migrator](#migrator)
+
+##### Description
+
+(**Mockup missing**)
+
+The application profile side drawer will include information about the associated archetypes, if any. Aside from that, a new source called *Assessment* will be available in the Tags tab from the application profile side drawer.
+
+> **Note**:  Tags in the assessment source of an application coming from the assessment of an associated archetype are transitive. If the application stops being associated to the archetype or the archetype is deleted, the tags will be removed from the application.
+
+#### Changes in the Application Reports view
+
+##### Related Use Cases
+
+- [ARM004](#ARM004)
+- [ASM006](#ASM006)
+
+##### Involved Personas
+
+- [Architect](#architect)
+- [Migrator](#migrator)
+
+##### Description
+
+TBD
 
 ### Implementation Details/Notes/Constraints
 
