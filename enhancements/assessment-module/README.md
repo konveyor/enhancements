@@ -12,7 +12,7 @@ approvers:
   - "@ibolton336"
   - "@jwmatthews"
 creation-date: 2023-08-02
-last-updated: 2023-08-04
+last-updated: 2023-08-30
 status: provisional
 see-also:
   -   
@@ -66,7 +66,7 @@ This enhancement aims to provide the following solution to these problems:
 
 ### Non-Goals
 
-- Have a fully UI supported way to author questionnaires.
+- Have a fully UI-supported way to author questionnaires.
 
 ## Proposal
 
@@ -206,11 +206,11 @@ Each row will represent an existing archetype, containing the following informat
 
 - **Name**: Name of the archetype
 - **Description**: Brief description of the archetype
-- **Tags**: The list of tags that define the archetype.
+- **Criteria Tags**: The list of tags that define the archetype.
 - **Maintainers**: List of stakeholders and stakeholder groups that maintain the archetype in the organization. This is metainformation that could be useful to navigate the organization and reach out to key people when more information about an archetype is needed.
-- **Applications**: List of applications that are associated with the archetype. Association happens automatically via a match of the tags that define with the archetype with the ones that are associated with the application.
+- **Applications**: List of applications that are associated with the archetype. Association happens automatically via a match of the criteria tags that define with the archetype with the ones that are associated with the application.
 
-The header of the archetypes table will include filters that include Name, Description, Tags and Maintainers as criteria. Alongside the filtering, a button will be displayed to create a new archetype.
+The header of the archetypes table will include filters that include Name, Description, Criteria Tags and Maintainers as criteria. Alongside the filtering, a button will be displayed to create a new archetype.
 
 Each row will have a menu with the following options:
 
@@ -219,6 +219,13 @@ Each row will have a menu with the following options:
 - **Edit**: Opens a modal window to edit an existing archetype.
 - **Delete**: Deletes the archetype.
 
+Clicking on a row will open a side drawer that will include additional fields:
+
+![Archetypes view](images/archetypes-drawer.png?raw=true "Archetypes view")
+
+- **Archetype Tags**: The list of tags that will be applied to applications that are associated to the archetype in the *Archetype* source.
+- **Assessment Tags**: The list of tags, coming from the assessment of the Archetype via automated tagging, that will be applied to applications that are associated to the archetype in the *Assessment* source.
+
 
 ###### Creating new archetypes
 
@@ -226,11 +233,12 @@ New archetypes can be created by clicking on the *Create new archetype* button a
 
 - **Name**: String
 - **Description**: String (Optional)
-- **Tags**: Dropdown, multi selection. All selected options will be displayed as removable labels.
+- **Criteria Tags**: Dropdown, multi selection. All selected options will be displayed as removable labels.
+- **Archetype Tags**: Dropdown, multi selection. All selected options will be displayed as removable labels.
 - **Stakeholders**: Dropdown, multi selection. All selected options will be displayed as removable labels. (Optional)
 - **Stakeholder group(s)**: Dropdown, multi selection. All selected options will be displayed as removable labels. (Optional)
 
-![New archetype modal](images/archetype-create-filling.png?raw=true "New archetype modal")
+![New archetype modal](images/archetype-create.png?raw=true "New archetype modal")
 
 All dropdown fields will have an autocomplete behavior. Tags appearing in the Tags field will be arranged by their corresponding categories:
 
@@ -242,14 +250,16 @@ Once values are entered in the dropdown, they will be displayed as removable lab
 
 Clicking on "Create archetype" will create the archetype, close the modal and refresh the archetypes view to include the newly created archetype.
 
-**Creating a new archetype should trigger a process to calculate the applications the archetype is associated with.** If the user remains in the Archetype view, it should be automatically refreshed once the process ends to reflect the associated applications.
+**Creating a new archetype should trigger a process to calculate the applications the archetype is associated with based on the Criteria Tags.** If the user remains in the Archetype view, it should be automatically refreshed once the process ends to reflect the associated applications.
+
+>**Note**: Tags from sources Archetype and Assessment will be ignored when calculating the archetype match for applications.
 
 
 ###### Editing archetypes
 
 Existing custom migration targets can be edited by clicking on the kebab at the right side of the corresponding row and selecting the option *Edit*.
 
-This will open a modal window similar to the one used for creating archetypes, but with a *Save* button instead of the *Create archetype* one. **If the list of tags that define the archetype changes, the process to calculate the applications the archetype is associated with should be triggered again**.
+This will open a modal window similar to the one used for creating archetypes, but with a *Save* button instead of the *Create archetype* one. **If the list of Criteria Tags that define the archetype changes, the process to calculate the applications the archetype is associated with should be triggered again**.
 
 ###### Deleting archetypes
 
@@ -345,7 +355,7 @@ It will be possible for the Administrator to get a rendered view of the question
 
 ![Assessment Management](images/assessment-management-view.png?raw=true "Assessment Management")
 
-As in the assessment view from the application inventory, questions are arranged in different sections accessible trough a set of vertical tabs. Each question in a section is represented as an expandable section, which once expanded will display the available answers for that question:
+As in the assessment view from the application inventory, questions are arranged in different sections accessible through a set of vertical tabs. Each question in a section is represented as an expandable section, which once expanded will display the available answers for that question:
 
 ![Assessment Management](images/assessment-management-view-expanded.png?raw=true "Assessment Management")
 
@@ -385,7 +395,7 @@ The YAML syntax for questionnaire definition aims at helping users simplify ques
       - **risk**: *String, limited values: red, yellow, green, unknown. Required*. The risk level the current answer implies.
       - **rationale**: *String. Optional.** An explanation of the rationale behind the answer being considered a risk.
       - **mitigation**: *String. Optional.* An explanation of the potential mitigation strategy for the risk implied by this answer.
-      - **autotag**: *List. Optional.* Defines a list of tags to be automatically applied to the assessed application or archetype if this answer is selected. Each tag is defined by the following:
+      - **autotag**: *List. Optional.* Defines a list of tags to be automatically applied to the assessed application or archetype (as transitive tags) if this answer is selected. Each tag is defined by the following:
         - **category**: *String. Required.* Category of the target tag.
         - **tag**: *String. Required* Tag definition for the target tag.
       - **autoanswer_if_tags_present**: *List. Optional.* Defines a list of tags that will lead to this answer being automatically selected when the application or archetype is assessed. Each tag is defined by the following:
@@ -553,19 +563,34 @@ If no questionnaire has been answered yet, only the *Take* button will be availa
  - *View* will render a read only view of the questionnaire highlighting the selected questions.
  - *Delete* will, upon confirmation, delete the provided answers for a questionnaire and bring it back to the original unanswered state.
 
- As stated before, both applications and archetypes can be assessed. Applications associated with an archetype will *inherit* its assessment. Nevertheless, individual applications that are associated to an archetype can also have a dedicated assessment that overrides the one inherited from the archetype. Clicking on "Assess" for an application that is associated to an archetype will open a confirmation modal to override the inherited assessment:
+ As stated before, both applications and archetypes can be assessed. Applications associated with an archetype will *inherit* its assessment(s). Nevertheless, individual applications that are associated to an archetype can also have a dedicated assessment that overrides the one(s) inherited from the archetype. Clicking on "Assess" for an application that is associated to an archetype will open a confirmation modal to override the inherited assessment:
 
   ![Assessment Process](images/assessment-process-override.png?raw=true "Assessment Process")
 
-Deleting the dedicated assessment of an application associated to an assessed archetype will bring that application back to its previous state of inheriting the archetype assessment.
+Deleting the dedicated assessment of an application associated to an assessed archetype will bring that application back to its previous state of inheriting the archetype assessment(s).
 
 ###### Assessment flow for archetypes
 
 Archetypes will be assessable by clicking on the *Assess* option from the kebab menu from a row in the table from the [archetypes view](#archetypes-main-view). Doing that will lead to the questionnaire list view and kickstart the assessment process in the exact same way described before for applications.
 
-> **Note**: Conditional questions on a questionnaire belonging to the assessment of an archetype will only take into account tags directly associated with the archetype, and will ignore tags coming from applications associated to that archetype.
+> **Note**: Conditional questions on a questionnaire belonging to the assessment of an archetype will only take into account tags directly associated with the archetype in both Criteria and Archetype tags, and will ignore tags coming from applications associated to that archetype.
 
 > **Note**:  Tags in the assessment source of an application coming from the assessment of an associated archetype are transitive. If the application stops being associated to the archetype or the archetype is deleted, the tags will be removed from the application.
+
+###### Assessment questionnaire
+
+The assessment questionnaire displayed to the user to provide answers will remain mostly the same, aside from the fact that visual cues will be included to inform the user about autoanswered questions:
+
+  ![Assessment Process](images/assessment-autoanswer.png?raw=true "Assessment Process")
+
+Aside from the icon, there will be a tooltip explaining why the answer was automatically selected:
+
+*Selected based on tag(s) X associated to archetype/application Y*
+
+The user will be able to change the selection, but the icon will remain on the previously autoselected answer.
+
+
+If the application has tags that would qualify for more than one answer in a question, no answer would be selected, but the icon would be displayed for each potential autoselected answer, with different tooltips explaining the origin of each answer.
 
 #### Changes in the Review process
 
@@ -580,13 +605,15 @@ Archetypes will be assessable by clicking on the *Assess* option from the kebab 
 
 ##### Description
 
-The review flow will stay mostly the same, but now architects should be able to review both archetypes from the *Archetypes* view or individual applications from the **Application inventory* view. As with assessments, applications associated to an archetype that has been reviewed will inherit the review, and it will be possible to override it with a dedicated review as well.
+The review flow will stay mostly the same, but now architects should be able to review both archetypes from the *Archetypes* view or individual applications from the *Application inventory* view. As with assessments, applications associated to an archetype that has been reviewed will inherit the review, and it will be possible to override it with a dedicated review as well.
 
-The Review view will require some small changes (**Mockup missing**):
+The main change in the *Review* view will be related to the way risks are displayed. The *Assessment summary* section will be rearranged to accommodate *Rationale* and *Mitigation strategies* data as expandable rows:
 
-- The Assessment summary table should display risks coming from all the questionnaires and allocate a way to display rationale and mitigation data.
+![Review](images/review-risks.png?raw=true "Review")
 
-#### Changes in the Application Profile view
+Only answers that contain *Rationale* and *Mitigation strategies* data will be displayed as expandable. Risk will be displayed with the same icons used in the questionnaire views instead of the labels that were used before. Filter criteria should now include Category (text), Question (text), Answer (text) and Risk (High, Medium, Low, Unknown).
+
+#### Changes in the Application Inventory view
 
 ##### Related Use Cases
 
@@ -600,11 +627,59 @@ The Review view will require some small changes (**Mockup missing**):
 
 ##### Description
 
-(**Mockup missing**)
+###### Main view
 
-The application profile side drawer will include information about the associated archetypes, if any. Aside from that, a new source called *Assessment* will be available in the Tags tab from the application profile side drawer.
+The *Assess* button in the top menu from the Assessment tab will be removed, and the *Assess* action will be made available as an option in the kebab menu for each row. This will leave the kebab menu with the following options:
 
-> **Note**:  Tags in the assessment source of an application coming from the assessment of an associated archetype are transitive. If the application stops being associated to the archetype or the archetype is deleted, the tags will be removed from the application.
+- **Assess**: Highlight in yellow if the application has any inherited assessments coming from associated archetypes, white background otherwise.
+- **Review**:  Highlight in yellow if the application has any inherited reviews coming from associated archetypes, white background otherwise.
+- **Discard assessment**: Only available if the application has been assessed individually. This will revert back to the inherited assessment(s) if the application is associated with any archetype(s).
+- **Discard review**: Only available if the application has been reviewed individually. This will revert back to the inherited review(s) if the application is associated with any archetype(s).
+- **View assessment**: Only available when the application or any of its associated archetypes have been assessed.
+- **Manage dependencies**: Always white background.
+- **Delete**: Always highlighted in red.
+
+The options *Copy assessment* and *Copy assessment and review* available in previous releases will be removed from the kebab menu, as these actions are no longer available.
+
+###### Side drawer
+
+The application profile side drawer will include the list of associated archetypes in the *Archetypes* field. If no archetypes are associated to the application, the field will display "None".
+
+![Side drawer](images/drawer-multiple-reviews.png?raw=true "Side drawer")
+
+Aside from that, since applications can be associated with multiple archetypes, and those archetypes can potentially have a review for each of them, the *Proposed action*, *Effort estimate*, *Business Criticality* and *Work priority* fields will display the values for each archetype that has been reviewed, adding the name of the corresponding archetype in parenthesis. If the application is only associated with one archetype or if it has been reviewed directly, the name of the archetype won't be rendered alongside the value for each of these fields.
+
+To calculate the aggregated risk level for an application, the following formula, inherited from the previous Pathfinder module, should be applied:
+
+- Any Red means overall risk level is Red.
+- Yellow above 30% means overall risk level is Yellow.
+- Unknown above 20% means overall risk level is Red.
+- Any other percentages mean overall risk level is Green.
+
+**This rule applies both for questionnaires inside an assessment and multiple assessments indirectly associated to an application**. Making these thresholds configurable could be explored in future releases.
+
+**Two new sources will be available in the Tags tab**: *Assessment* and *Archetype*, which will include transitive tags coming from associated archetypes.
+
+> **Note**:  Tags in the **Assessment** and **Archetype** sources of an application coming from an associated archetype are transitive. If the application stops being associated to the archetype or the archetype is deleted, the tags will be removed from the application.
+
+
+###### View Assessment
+
+The *View assessment* view will allow users to browse the answers provided on the different questionnaires that belong to the assessments(s) associated with an application directly or transitively through archetype(s). Clicking on the *View assessment* option in the kebab menu for a given application will navigate away from the inventory view to another view in which the user will see the list of questionnaires available for the assessment for a given archetype in case there are many.
+
+![Assessment View](images/assessment-view-assessment-questionnaires.png?raw=true "Assessment View")
+
+The *Archetype* dropdown at the top will display the list of archetypes associated to the current application. If the application is not associated with any archetype (the application has been assessed individually), this dropdown won't be rendered.
+
+Clicking on the *View* button for any questionnaire will navigate to a different view that renders the questionnaire, highlighting the answers that were provided for each question:
+
+![Assessment View](images/assessment-view-assessment-view.png?raw=true "Assessment View")
+
+Highlighted answers will also include their associated risk level, which won't be displayed for the other choices that hadn't been selected for each question.
+
+The user will be able to filter questions using a search box. Each vertical tab corresponding with categories will highlight the number of matches for the query:
+
+![Assessment View](images/assessment-view-assessment-view-filter.png?raw=true "Assessment View")
 
 #### Changes in the Application Reports view
 
@@ -620,7 +695,32 @@ The application profile side drawer will include information about the associate
 
 ##### Description
 
-TBD
+Some changes will be required in the *Current landscape* and *Identified risks* from the *Reports* view. Firstly, in order to accommodate data from multiple questionnaires, the *Current landscape* section will include a dropdown to select the questionnaire for the data to be displayed, with "All questionnaires" selected by default.
+
+![Reports](images/reports-overview.png?raw=true "Reports")
+
+To calculate the aggregated risk level for an application, the following formula, inherited from the previous Pathfinder module, should be applied:
+
+- Any Red means overall risk level is Red.
+- Yellow above 30% means overall risk level is Yellow.
+- Unknown above 20% means overall risk level is Red.
+- Any other percentages mean overall risk level is Green.
+
+**This rule applies both for questionnaires inside an assessment and multiple assessments indirectly associated to an application**. Making these thresholds configurable could be explored in future releases.
+
+If the user selects a concrete questionnaire, the *risk_messages* data will be displayed below each risk level, and data on the doughnut charts will be updated to reflect the specific values for the selected questionnaire:
+
+![Reports](images/reports-questionnaire-selected.png?raw=true "Reports")
+
+
+The *Identified risks* section will be rearranged to accommodate *Rationale* and *Mitigation strategies* data as expandable rows:
+
+![Reports](images/reports-risks.png?raw=true "Reports")
+
+Only answers that contain *Rationale* and *Mitigation strategies* data will be displayed as expandable. Risk will be displayed with the same icons used in the questionnaire views instead of the labels that were used before. Filter criteria should now include Application (text, multiselect), Category (text), Question (text), Answer (text) and Risk (High, Medium, Low, Unknown).
+
+
+The number of applications displayed in the *Applications* row on the table will be static text and not a link, which could be explored in future releases.
 
 ### Implementation Details/Notes/Constraints
 
