@@ -63,6 +63,10 @@ Please comment on the enhancement issue to:
 - update status of the enhancement effort
 - link to relevant issues in other repos
 
+## Roadmap
+The community maintains a [ROADMAP.md](ROADMAP.md) to communicate what's next for considerations to work.
+* For new ideas, please open Request For Enhancements (RFEs) via https://github.com/konveyor/enhancements/issues/new
+
 ## Code of Conduct
 Refer to Konveyor's Code of Conduct [here](https://github.com/konveyor/community/blob/main/CODE_OF_CONDUCT.md).
 
