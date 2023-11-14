@@ -51,7 +51,7 @@ Cover downstream testing.
 
 Let's start with kinds of tests relevant for us:
 - Component/repository specific **unit tests**
-  - Tests **logic** of a single Konveyor component (hub, UI, …), doesn’t require running whole Konveyor installation or other components (like Keycloak) to be executed, but either doesn’t need it or mocking it.
+  - Tests **logic** of a single Konveyor component (hub, UI, …), doesn’t require running whole Konveyor installation or other components (like Keycloak SSO) to be executed, but either doesn’t need it or mocking it.
   - Test technology/framework depends on technology used in a given component.
   - Unit tests are optional and if existed should be placed in the component repository.
 
@@ -91,19 +91,17 @@ An ideal workflow on developers&QE cooperation on a new feature work:
 
 | Kind of test | Primary Responsible | Presence | Executed on | Trigger (min.required) | Source code in |
 |---|---|---|---|---|---|
-| **unit** | Developers | optional | Component | PRs&push | Component repo |
-| **integration** | Developers | required | Component+Konveyor | PRs&push | Component repo |
-| **application E2E** | QE | required | Running Konveyor | time-based schedule | E2E test suite repos |
+| **unit** | Developers | optional | Component | PRs, push | Component repo |
+| **integration** | Developers | required | Component+Konveyor | PRs, push | Component repo |
+| **application E2E** | QE | required | Running Konveyor | PR, push, nightly | E2E test suite repos |
 
 #### More specific matrix as a starting point for Konveyor Hub and E2E tests
 
 | Kind of test | Responsible | Description | Tests code | Trigger (min.required) |
 |---|---|---|---|---|
-| **integration** Hub | Hub developers | REST API coverage tests, applications import, [more](https://github.com/konveyor/tackle2-hub/discussions/241) | https://github.com/konveyor/tackle2-hub/... | PR&push (+time anyway?) |
-| **integration** addon-windup | Addon developers | Bash-scripted windup analysis | https://github.com/konveyor/tackle2-addon-windup/blob/main/hack/test-e2e.sh | PR&push (+time anyway?) |
-||||||
-| **application E2E** API | QE&Developers | Golang API test suite (WIP), focusing on sanity checks | https://github.com/konveyor/go-konveyor-tests | time-based schedule |
-| **application E2E** UI | QE&Developers | Existing QE-maintained UI test suite using cypress framework | https://github.com/konveyor/tackle-ui-tests | time-based schedule |
+| **integration** Hub | Hub developers | REST API coverage tests, applications import, [more](https://github.com/konveyor/tackle2-hub/discussions/241) | https://github.com/konveyor/tackle2-hub/... | PR, push, nightly |
+| **application E2E** API | QE&Developers | Golang API test suite (WIP), focusing on sanity checks | https://github.com/konveyor/go-konveyor-tests | PR, push, nightly |
+| **application E2E** UI | QE&Developers | Existing QE-maintained UI test suite using cypress framework | https://github.com/konveyor/tackle-ui-tests | PR, push, nightly |
 
 ### What Konveyor org expects from its components
 - Decide if unit tests are relevant for given component, if so, write it and maintain it.
@@ -115,20 +113,15 @@ An ideal workflow on developers&QE cooperation on a new feature work:
 - Provide tools for automated Konveyor installation setup (locally as well as with github actions) ready for running their integration tests on PRs (use Konveyor CI repo as a starting point).
 - Provide working&stable Konveyor builds (partially ensured by e2e tests).
 
-### Execution and project status
+### Execution and project status - CI
 
 Konveyor CI repository is https://github.com/konveyor/ci
 
-The CI repo doesn't execute test suites itself, it just display status of application E2E or components tests runs.
+The CI repo doesn't execute test suites itself, but provides re-usable workflows that can orchestrate Konveyor build, execute relevant tests and display overall status.
 
-Overall CI status is:
-- GREEN if all application E2E test suites and all reporting components tests are passing.
-- YELLOW if all application E2E test suites are passing, but some of components reporting tests are failing.
-- RED if some of application E2E test suites is failing.
+Part of the CI are also "gate" jobs for PRs in component repositories that executes tests on Konveyor built with given PR changes.
 
-### Implementation Details/Notes/Constraints [optional]
-
-TBD technologies&resources to for re-use
+The CI functionality should be provided for main as well as other supported release branches.
 
 ### Security, Risks, and Mitigations
 
