@@ -123,6 +123,12 @@ Part of the CI are also "gate" jobs for PRs in component repositories that execu
 
 The CI functionality should be provided for main as well as other supported release branches.
 
+#### Test tiers
+
+Tests can be divided to and executed by _tiers_. The idea behind is to differentiate critical tests for Konveyor core functionality from test for unstable or experimental features.
+
+The most important tests are executed in _tier0_. Standard features test should be included in _tier1_  and _tier2_ contains test for unstable or experimental features.
+
 ### Security, Risks, and Mitigations
 
 Upstream test suite must not contain any company internal information not customer data (not even as a sample data).
