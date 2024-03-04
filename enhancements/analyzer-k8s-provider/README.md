@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2024-02-05
-last-updated: 2024-02-05
+last-updated: 2024-03-04
 status: implementable
 ---
 
@@ -22,8 +22,9 @@ status: implementable
 
 ## Summary
 
-Create a Kubernetes provider for the Konveyor analyzer to perform in-cluster analysis of a live application and its environment. Initially this will include collection and analysis
-of resources in the application's home namespace, followed by analysis of image manifests.
+Create a Kubernetes provider for the Konveyor analyzer to perform in-cluster analysis of live applications and their deployment environments. This will include collection and analysis
+of a configurable list of namespace-scoped resources. Discovery and analysis of cluster-scoped resources and image manifests could be explored as a follow-up.
+The provider will conform to the Konveyor analyzer provider gRPC interface.
 
 ## Motivation
 
@@ -68,7 +69,7 @@ as its rules evaluation engine. Rego is expressive, easy to read, and well suite
 Leveraging OPA/Rego allows us to focus on implementing the specifics of cluster analysis and allows rules
 authors to write simple rules that are oriented to the data rather than the form in which it is stored (json, yaml, etc).
 
-The provider will initially surface two rule capabilities: One that is oriented towards ease-of-authorship in exchange for limited expressiveness (`rego.expr`), and one that permits freeform authoring of complex Rego modules (`rego.module`).
+The provider will initially surface two rule capabilities: One that is oriented towards ease-of-authorship in exchange for limited expressiveness (`rego_expr`), and one that permits freeform authoring of complex Rego modules (`rego_module`).
 Ideally, the simpler rule format will strike a balance that enables most rules to be written in it. To facilitate the use of the simpler rule capability,
 we will provide a built-in inventory of Rego rules that can be referred to by user-provided rules.
 
@@ -80,7 +81,7 @@ effort: 1
 category: optional
 message: "Low replica count"
 when:
-  rego.module:
+  k8s-resource.rego_module:
     policy: |
       package policy
       import data.lib.konveyor
@@ -102,7 +103,7 @@ effort: 1
 category: optional
 message: "Low replica count"
 when:
-  rego.expr:
+  k8s-resource.rego_expr:
     collection: deployments
     expression: item.spec.replicas < 2
 ```
@@ -115,6 +116,7 @@ pull the manifests and OPA can be used as the policy engine.
 
 In order to perform live cluster analysis, the provider will need to be furnished with cluster credentials
 that have read access to the relevant resources. The provider must tolerate limited permissions to the extent possible.
+`list` and `get` permission on the resource types to be inspected should be sufficient.
 
 ## Design Details
 
@@ -123,7 +125,13 @@ that have read access to the relevant resources. The provider must tolerate limi
 Functionality of the provider itself can be tested with a single-node cluster (seeded with known resources)
 and test rulesets that run each capability. It is of greater importance to ensure that each of the rulesets 
 that the provider runs are thoroughly tested. This will require configuration of resources on the cluster that
-are specific to the rules to be tested. 
+are specific to the rules to be tested.
+
+## Open Questions
+
+Should image manifest analysis be a capability of this provider? A big benefit of doing it in this provider would be that
+this provider is already able to discover what images are in use, and it would be able to analyze manifests in the context of the workloads using them.
+However, it is unclear how complex accessing the image manifests will be.
 
 ## Implementation History
 
