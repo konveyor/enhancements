@@ -39,6 +39,7 @@ With a growing interest in application modernization, tools such as kantra that 
 ### Non-Goals
 
 - Further discussion of community providers and rulesets
+- Support for reaching providers by other methods than what is used today (e.g. URL endpoint)
 
 ## Proposal
 
@@ -197,21 +198,18 @@ metadata:
   name: kantra
 spec:
   containers:
-	command:
-	- /usr/local/bin/java-provider
-    args:
-    - "--provider-settings=/opt/settings.json", "--rules=/opt/rulesets/java"
-	image: quay.io/konveyor/java-provider:latest
-	name: java-provider
-	ports:
-	- containerPort: 80
-  	hostPort: 8080
-    volumeMounts:
-    - name: java-volume
-      mountPath: /rulesets/java
-  volumes:
-  - name: java-volume
-    emptyDir: {}
+    - name: analyzer-lsp
+      image: quay.io/konveyor/analyzer-lsp:latest
+      command:
+      - /usr/local/bin/analyzer-lsp
+      args:
+      - "--provider-settings=/opt/settings.json", "--rules=/opt/rulesets/java"
+    - name: java-provider
+      image: quay.io/konveyor/java-provider:latest
+      command:
+      - /usr/local/bin/java-provider
+      args:
+      - "--port=8080"
 ```
 
 If a user wishes to run a community provider, or override a supported provider, they must provide a yaml with the container definition. This can be passed in from a new flag such as `--unsupported-provider`. This configuration will then be added to the podman pod spec during kantra's runtime.
@@ -232,7 +230,7 @@ kantra analyze --input=<rust_app> --output=<output_dir> --rules=<custom_rule_dir
 ### Default Rulesets for Supported Providers
 
 As of now, we have a set of default rules for the Java provider: https://github.com/konveyor/rulesets/
-We will want to add more default rulesets for each provider, such as `rulesets/golang` and `rulesets/java`. For delivery of these rulesets, they will be packaged in a known location in each providers' Dockerfile. In kantra, this/these path(s) will be set to `--rules`, unless this default behavior is disabled by the user.
+We will want to add more default rulesets for each provider. For delivery of these rulesets, they will be packaged in a known location in each providers' Dockerfile. In kantra, this/these path(s) will be set to `--rules`, unless this default behavior is disabled by the user.
 
 There will be some rules that can be applicable to multiple providers. For example: 
 
@@ -242,10 +240,11 @@ description: This is a ruleset for Windows operating system specific rules while
   to Linux operating system.
 ```
 
-These multi-use rulesets can be found in `rulesets/common` and can use labels such as `konveyor.io/provider=go` and `konveyor.io/provider=java` to filter the common rules for relevant providers. For each running provider, their individual rulesets can be evaluated, as well as searching in `rulesets/common` for any rules with these provider labels. 
+These multi-use rulesets can use labels such as `konveyor.io/provider=go` and `konveyor.io/provider=java` to filter the common rules for relevant providers. For each running provider, their individual rulesets can be evaluated, as well as searching in `rulesets/common` for any rules with these provider labels. 
 
 
 ## Open Questions/Thoughts
 
 - Conditions that support multiple providers
 - Community rulesets
+- Location of providers' default rulesets
