@@ -82,7 +82,7 @@ category: optional
 message: "Low replica count"
 when:
   k8s-resource.rego_module:
-    policy: |
+    module: |
       package policy
       import data.lib.konveyor
       import future.keywords
@@ -106,6 +106,42 @@ when:
   k8s-resource.rego_expr:
     collection: deployments
     expression: item.spec.replicas < 2
+---
+ruleID: unmounted-claims
+effort: 1
+category: optional
+message:
+when:
+  k8s-resource.rego_module:
+    module: |
+      package policy
+      import data.lib.konveyor
+      import future.keywords
+
+      pvcs[pvc] {
+        some list in input.namespaces[_]
+        some item in list.items
+        item.kind == "PersistentVolumeClaim"
+        pvc := item
+      }
+      
+      mounted_claims[claim] {
+        some pod in data.lib.konveyor.pods
+        some volume in pod.spec.volumes
+        claim := volume.persistentVolumeClaim.claimName
+      }
+
+      incidents[msg] {
+        some pvc in pvcs
+        claim := pvc.metadata.name
+        not mounted_claims[claim]
+        msg := {
+          "apiVersion": pvc.apiVersion,
+          "namespace": pvc.metadata.namespace,
+          "kind": pvc.kind,
+          "name": pvc.metadata.name,
+        }
+      }
 ```
 
 Following after the initial two capabilities should be a third to inspect image manifests that belong to the application
@@ -122,10 +158,10 @@ that have read access to the relevant resources. The provider must tolerate limi
 
 ### Test Plan
 
-Functionality of the provider itself can be tested with a single-node cluster (seeded with known resources)
-and test rulesets that run each capability. It is of greater importance to ensure that each of the rulesets 
-that the provider runs are thoroughly tested. This will require configuration of resources on the cluster that
-are specific to the rules to be tested.
+Aside from the provider's cluster connection and resource gathering, all the provider's behavior could be tested
+with mock Kubernetes resources and simplified test rulesets that exercise each capability. To permit easy testing of the
+capabilities, and to make it possible for ruleset authors to test their rules, it needs to be possible to drop in an
+alternative k8s client (or resource collection abstraction) that is loaded with known resources.
 
 ## Open Questions
 
