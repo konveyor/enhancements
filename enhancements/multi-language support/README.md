@@ -13,7 +13,7 @@ approvers:
   - "@shawn-hurley"
   - "@pranavgaikwad"
 creation-date: 2024-02-14
-last-updated: 2024-02-14
+last-updated: 2024-03-07
 status: implementable
 ---
 
@@ -149,13 +149,13 @@ The Java provider image will need to build with https://github.com/konveyor/java
 
 Part of enabling external providers will entail each provider having their own `provider`, `capabilities`, and `serviceClient` to interface with. These struct fields can be modified for each provider, depending on certain requirements and features for each language and language server. Example JavaScript provider:
 
-```
+```go
 type JavaScriptProvider struct {
 	ctx context.Context
 }
 ```
 
-```
+```go
 func (p *JavaScriptProvider) Capabilities() []provider.Capability {
 	return []provider.Capability{
 		{
@@ -170,7 +170,7 @@ func (p *JavaScriptProvider) Capabilities() []provider.Capability {
 }
 ```
 
-```
+```go
 type JavaScriptServiceClient struct {
 	rpc        *jsonrpc2.Conn
 	cancelFunc context.CancelFunc
@@ -183,15 +183,59 @@ type JavaScriptServiceClient struct {
 
 The `provider`s can then independently run as a server listenting for gRPC calls on a certain port, and the `serviceClient` will provide its language server-dependent `capabilities` to the provider server. These will most likely be different for each provider as many will support different methods.
 
-#### Kantra Changes
+### Kantra Changes
 
-In kantra, we can run a podman pod with a container for the analyzer-lsp engine, as well as an additional container for each provider that is found during the initial discovery process.
+#### New Flags
+
+A new flag can be introduced that will list the default supported providers: `kantra analyze --list-providers`
+
+ ```sh
+java-external-provider
+python-external-provider
+yaml-external-provider
+...
+..
+ ```
+
+To disable a provider, we can support an additional option `--disable-provider`. This will accept default supported providers, such as `--disable-provider java-external-provider`.
+For example, for a Java and TypeScript application analysis (assuming both are default providers), but we only want to run a TypeScript analysis, the default Java provider can be disabled. 
+
+To allow a user to run a community provider, as well as override a supported provider, `--unsupported-provider` will be available. This flag will be a mapping of the provider name to a yaml with the provider's container definition, and will be added to the podman pod spec during kantra's runtime (discussed more below).
+
+`--unsupported-provider javaProvider="java_prov.yaml",rustProvider="rust_prov.yaml"`
+
+#### Provider Mapping
+
+In order to initialize the necessary providers for an application analysis, there will need to be a default mapping of providers to the language(s) found during the discovery process. 
+
+```go
+const (
+  JavaExternalProvider = "java-external-provider"
+  PythonExternalProvider = "python-external-provider"
+)
+```
+
+```go
+// used to map default provider to discovery language
+var defaultProvidersFromDiscovery = map[string]string{
+  JavaExternalProvider: "java",
+  PythonExternalProvider: "python"
+}
+```
+
+If a provider mapping is not found, kantra will look for `--unsupported-provider`. 
+
+If a language is discovered that does not have a supported provider mapping, and `--unsupported-provider` is not set for this provider, kantra will log a warning and continue analysis with other providers.
+
+#### Running the providers
+
+To run each provider, we can start a podman pod with a container for the analyzer-lsp engine as well as an additional container for each provider that is found during the initial discovery process.
 
 For each found provider, kantra will dynamically build a `providerSettings[]` config file at runtime. For providers supported by Konveyor, a `providerSettings` config will be kept in kantra for simple use. In the case of community providers, we will also require an additional flag to be set such as `--provider-settings` in which the user can set the appropriate config. 
 
-Alongside the `providerSettings`, a yaml file will also be dynamically created to define the podman pod and each provider container.
+Alongside the `providerSettings`, a yaml file will also be dynamically created to define the podman pod and each provider container. 
 
-```
+```yaml
 apiVersion: v1
 kind: Pod
 metadata:
@@ -212,7 +256,7 @@ spec:
       - "--port=8080"
 ```
 
-If a user wishes to run a community provider, or override a supported provider, they must provide a yaml with the container definition. This can be passed in from a new flag such as `--unsupported-provider`. This configuration will then be added to the podman pod spec during kantra's runtime.
+As discussed previosuly, if using `--unsupported-provider`, this configuration will be added to the podman pod spec for community providers, and override the configuraton for supported providers.
 
 Example analyze for a Java application, which would use a supported provider:
 
@@ -223,8 +267,8 @@ kantra analyze --input=<java_app> --output=<output_dir> --rules=<custom_rule_dir
 Example analyze for a Rust application, which would use a community provider:
 
 ```
-kantra analyze --input=<rust_app> --output=<output_dir> --rules=<custom_rule_dir> --provider-settings=<community_provider_settings>
-    --unsupported-provider=<container_yaml>
+kantra analyze --input <rust_app> --output <output_dir> --rules <custom_rule_dir> --provider-settings <community_provider_settings>
+    --unsupported-provider rustProvider="rust_prov.yaml"
 ```
 
 ### Default Rulesets for Supported Providers
@@ -234,7 +278,7 @@ We will want to add more default rulesets for each provider. For delivery of the
 
 There will be some rules that can be applicable to multiple providers. For example: 
 
-```
+```yaml
 name: os/windows
 description: This is a ruleset for Windows operating system specific rules while migrating
   to Linux operating system.
