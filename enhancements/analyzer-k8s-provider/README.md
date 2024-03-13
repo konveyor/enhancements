@@ -23,7 +23,7 @@ status: implementable
 ## Summary
 
 Create a Kubernetes provider for the Konveyor analyzer to perform in-cluster analysis of live applications and their deployment environments. This will include collection and analysis
-of a configurable list of namespace-scoped resources. Discovery and analysis of cluster-scoped resources and image manifests could be explored as a follow-up.
+of a configurable list of namespace-scoped resources. The provider should also be able to run in a disconnected fashion by pointing at a directory of YAML objects. Discovery and analysis of cluster-scoped resources and image manifests could be explored as a follow-up.
 The provider will conform to the Konveyor analyzer provider gRPC interface.
 
 ## Motivation
@@ -37,6 +37,7 @@ migration was successful and that the new deployment is adhering to best practic
 ### Goals
 
 * Enable users to perform live analysis of applications hosted in a Kubernetes cluster.
+* Enable users to perform disconnected analysis of Kubernetes resources stored in YAML.
 * Enable users to write Kubernetes analysis rules in a concise, expressive, and easy-to-read format.
 
 ### Non-Goals
@@ -45,7 +46,7 @@ migration was successful and that the new deployment is adhering to best practic
 
 ## Proposal
 
-The Kubernetes provider must be able to retrieve resources out of a live cluster, evaluate rules against those
+The Kubernetes provider must be able to retrieve resources out of a live cluster, evaluate rules against
 resources, and return the evaluation results with all the details necessary to act on them (resource coordinates, apiVersions, guidance, etc).
 It needs to be easy to write rules so that domain experts are more willing to contribute the time and effort to do so,
 and the rules language needs to be both expressive and familiar.
@@ -58,6 +59,10 @@ As an application migrator I want to learn about issues with my live application
 to successfully migrate or modernize it.
 
 #### Story 2
+
+As an application developer I want to learn about issues with YAML resources in a disconnected context.
+
+#### Story 3
 
 As a domain expert I want to write suites of analysis rules to furnish migrators with the
 details they need to successfully migrate or modernize their applications.
@@ -159,9 +164,8 @@ that have read access to the relevant resources. The provider must tolerate limi
 ### Test Plan
 
 Aside from the provider's cluster connection and resource gathering, all the provider's behavior could be tested
-with mock Kubernetes resources and simplified test rulesets that exercise each capability. To permit easy testing of the
-capabilities, and to make it possible for ruleset authors to test their rules, it needs to be possible to drop in an
-alternative k8s client (or resource collection abstraction) that is loaded with known resources.
+with mock Kubernetes resources and simplified test rulesets that exercise each capability. The offline analysis
+mechanism provides a way for ruleset authors to rapidly and easily test rulesets against a known set of resources.
 
 ## Open Questions
 
