@@ -204,6 +204,8 @@ To allow a user to run a community provider, as well as override a supported pro
 
 `--unsupported-provider javaProvider="java_prov.yaml",rustProvider="rust_prov.yaml"`
 
+Lastly, `--port` will be added to override a provider's port (discussed more below).
+
 #### Provider Mapping
 
 In order to initialize the necessary providers for an application analysis, there will need to be a default mapping of providers to the language(s) found during the discovery process. 
@@ -229,7 +231,7 @@ If a language is discovered that does not have a supported provider mapping, and
 
 #### Running the providers
 
-To run each provider, we can start a podman pod with a container for the analyzer-lsp engine as well as an additional container for each provider that is found during the initial discovery process.
+To run each provider, we can start a podman pod with a container for the analyzer-lsp engine, as well as an additional container for each provider that is found during the initial discovery process. Providers' ports will be set as an enviroment variable in their respective Dockerfiles, and can be overriden with `--port`.
 
 For each found provider, kantra will dynamically build a `providerSettings[]` config file at runtime. For providers supported by Konveyor, a `providerSettings` config will be kept in kantra for simple use. In the case of community providers, we will also require an additional flag to be set such as `--provider-settings` in which the user can set the appropriate config. 
 
@@ -252,8 +254,6 @@ spec:
       image: quay.io/konveyor/java-provider:latest
       command:
       - /usr/local/bin/java-provider
-      args:
-      - "--port=8080"
 ```
 
 As discussed previosuly, if using `--unsupported-provider`, this configuration will be added to the podman pod spec for community providers, and override the configuraton for supported providers.
