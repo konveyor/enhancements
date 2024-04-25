@@ -75,7 +75,7 @@ Constraints:
   - separate containers
 - Must support _remote_ providers running outside the cluster.
 - Must ensure all containers are terminated when analysis has completed.
-- Must provide the user with provider container logs.
+- Must provide the user with provider output/logs.
 - Must provide credentials to through provider settings. Example: maven settings.
 - Must support TCP port assignment which is injected to the provider settings.
 - Must support provider specific settings.
