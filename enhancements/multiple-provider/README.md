@@ -70,7 +70,7 @@ Testing with the API is simpler.  The user would add the Extension, and submit a
 ### Implementation Details/Notes/Constraints
 
 Constraints:
-- Must support running the analyzer (addon) and providers in:
+- Must support running the analyzer (addon) and providers in either:
   - same container
   - separate containers
 - Must support _remote_ providers running outside the cluster.
