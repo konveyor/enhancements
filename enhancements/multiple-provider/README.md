@@ -79,6 +79,11 @@ Testing with the API is simpler.  The user would add the Extension, and submit a
 
 ### User Stories
 
+As a user,  my analysis tasks should not be delayed by system automated tasks. Example: A user has imported 2500 applications which results in automatically creating 5000 low priority discovery tasks.
+One light/fast task to do language discovery. Another much heavier task that does technologies discovery using
+the analyzer. Then, the user decides to run off an analysis. The user experience should not be that their analysis
+is stuck at _Scheduled_ because it's queued up behind system (automated) tasks.
+
 ### Implementation Details/Notes/Constraints
 
 Constraints:
