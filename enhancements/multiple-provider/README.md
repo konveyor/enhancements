@@ -312,7 +312,7 @@ Tasks will be run in order of:
 - priority
 - id
 
-Pods are created with the appropriate _PriorityClass_ to ensure node scheduling matches. Task dependencies will be escalated as needed to prevent priority inversion. When (dep) tasks are already scheduled (Pending), the pod will be recreated referencing the updated priority class.
+Task dependencies will be escalated as needed to prevent priority inversion. When (dep) tasks are already scheduled (Pending), the pod will be recreated referencing the updated priority class.
 
 When the nodes are saturated and task pods are phase=Pending, the task manager may reschedule (delete) task  with lower priority in an effort for higher priority pods to be run by the node scheduler.  PriorityClass preemption should handle this.
 
