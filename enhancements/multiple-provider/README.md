@@ -142,7 +142,7 @@ spec:
   metadata (object):
 ```
 Fields:
-- `extension` - declares compatibility with addons.
+- `addon` - declares compatibility with addons.
 - `container` - defines the extension container.
 - `selector` - defines selector for inclusion in the addon task pod.
 - `metadata` - defines unstructured information.
