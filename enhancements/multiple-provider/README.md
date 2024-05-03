@@ -315,11 +315,51 @@ Add a new read-only endpoints.
 
 Tasks will be run in order of:
 - priority
-- id
+- id (order created)
 
-Task dependencies will be escalated as needed to prevent priority inversion. When (dep) tasks are already scheduled (Pending), the pod will be recreated referencing the updated priority class.
+##### Priority Escalation #####
+Task dependencies will be escalated as needed to prevent priority inversion. Tasks in need of escalation with pods
+in with phase=Pending will be recreated. Running tasks are not affected.
 
-When the nodes are saturated and task pods are phase=Pending, the task manager may reschedule (delete) task  with lower priority in an effort for higher priority pods to be run by the node scheduler.  PriorityClass preemption should handle this.
+##### Task Preemption #####
+
+On resource saturated clusters, Running pods associated with lower priority tasks can prevent higher priority
+pods from running. When this is detected, pods _may_ be preempted by the task manager.  When a task is preempted,
+it's associated (running) pod is deleted and rescheduled after a short delay. This is attempt to free up a node
+to run higher priority tasks.  The preemption algorithm goals is priority order.
+
+1. Prevent thrashing.
+2. Minimize delay of higher priority tasks blocked by lower priority tasks.
+3. Maximized throughput.
+
+Rules:
+
+The `preemptable` task must be:
+ - state=Running.
+ - lower priority.
+
+A task determined to be `blocked` and trigger preemption must be:
+ - higher priority
+ - pod blocked by quota or in phase=pending for a defined period (default 1 minute).
+
+Preempt order:
+ - priority (lowest).
+ - age (oldest).
+
+Preempt rate: 10% per second.
+
+A preempted task is delayed for a defined period (default 1 minute) to prevent thrashing.
+
+A bit of effort has gone into tuning this algorithm and is still in progress. They are likely to be adjusted.
+
+The preemption feature is configurable through hub environment variables.
+- TASK_PREEMPT_ENABLED - (bool) preempt enabled.
+- TASK_PREEMPT_DELAYED - (seconds) duration a task must be blocked before triggering preemption.
+- TASK_PREEMPT_POSTPONED - (seconds) delay before a preempted task is ready to be rescheduled.
+- TASK_PREEMPT_RATE - (percent/second) percent of eligible tasks preempted per second.
+
+These settings should be exposed through the Tackle CR.
+
 
 Addon (adaptor)
 ---
