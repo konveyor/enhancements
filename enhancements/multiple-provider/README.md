@@ -70,7 +70,12 @@ Targets will be filtered and Providers will be selected by `Language` tag(s).  T
  An Addon Extension is primarily an optional container definition along with criteria defined by a new CR. Providers will be defined to the hub as an Addon Extension.  The first supported selection criteria will be by application tag matching.
 
 #### Task Pod ####
-The task pod will be configured with a _main_ container for the addon and a _sidecar_ container for each of the providers.  All containers will mount an `EmptyDir` volume into /shared for sharing files such as credentials and source code trees.
+The task pod will be configured with a _main_ container for the addon and a _sidecar_ container for each of the providers.
+All containers will mount an `EmptyDir` volume into /shared for sharing files such as credentials and source code trees.
+
+The task manager will configure the pod as appropriate for the operating system.
+- Mount points/paths must be appropriate for the operating system.
+- Configured with a `nodeSelector` as needed. Example: `kubernetes.io/os: windows`.
 
 #### Custom Providers ####
 Users may define new providers for testing using the UI by added a new Extension CR that is mapped to a new Language tag.  Then, add/replace the language tag so that extension (provider) is selected. 
@@ -96,18 +101,21 @@ Constraints:
 - Must provide credentials to through provider settings. Example: maven settings.
 - Must support TCP port assignment which is injected to the provider settings.
 - Must support provider specific settings.
+- Must support Linux and Windows containers.
 
 ### Security, Risks, and Mitigations
 
 ## Design Details (core)
 
-Support optional addon _Extensions_. Each extension is a (sidecar) container and most likely a _service_.  For example: an RDBMS or LSP provider.  All containers within a task pod are injected with the same items as the _main_ addon contianer:
+Support optional addon _Extensions_. Each extension is a (sidecar) container and most likely a _service_.
+For example: an RDBMS or LSP provider.  All containers within a task pod are injected with the same items as 
+the _main_ addon container:
 - Shared (EmptyDir) volume.
 - Security token.
 - Task (id).
 
 Both addon and extension selection may be either:
-- explicit - (specified on the task)
+- explicit (specified on the task)
 - determined by matched criteria.
 
 #### Selection ####
@@ -129,6 +137,11 @@ selector: ! tag:Language=
 
 Java and Linux
 selector:  tag:Language=Java && tag:OperatingSystem=Linux
+
+Java and Linux
+selector:  tag:Language=Java && tag:OperatingSystem=Windows
+
+Note: The operating system compatibility is determined by tag for both addons and extensions.
 
 #### Addon & Extension CRs ####
 
@@ -314,8 +327,11 @@ Add a new read-only endpoints.
 #### Task Priority ####
 
 Tasks will be run in order of:
-- priority
+- priority (integer)
 - id (order created)
+
+Task priorities are integers. Zero(0) is the lowest and the default when not specified. 
+Priorities are meant to be used as buckets. Tasks of similar priority should have same priority.
 
 ##### Priority Escalation #####
 Task dependencies will be escalated as needed to prevent priority inversion. Tasks in need of escalation with pods
@@ -344,7 +360,7 @@ A task determined to be `blocked` and trigger preemption must be:
 
 Preempt order:
  - priority (lowest).
- - age (oldest).
+ - age (newest).
 
 Preempt rate: 10% per second.
 
@@ -353,10 +369,14 @@ A preempted task is delayed for a defined period (default 1 minute) to prevent t
 A bit of effort has gone into tuning this algorithm and is still in progress. They are likely to be adjusted.
 
 The preemption feature is configurable through hub environment variables.
-- TASK_PREEMPT_ENABLED - (bool) preempt enabled.
+- TASK_PREEMPT_ENABLED - (bool) system-wide preemption enabled.
 - TASK_PREEMPT_DELAYED - (seconds) duration a task must be blocked before triggering preemption.
 - TASK_PREEMPT_POSTPONED - (seconds) delay before a preempted task is ready to be rescheduled.
 - TASK_PREEMPT_RATE - (percent/second) percent of eligible tasks preempted per second.
+
+Tasks may be configured with:
+- Preemptable: (bool) Task may be preempted by higher priority task (default: true).
+- Preemptor: (bool) Task may trigger preemption when blocked (default: false).
 
 These settings should be exposed through the Tackle CR.
 
