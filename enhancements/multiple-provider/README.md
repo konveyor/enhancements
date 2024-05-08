@@ -374,12 +374,13 @@ The preemption feature is configurable through hub environment variables.
 - TASK_PREEMPT_POSTPONED - (seconds) delay before a preempted task is ready to be rescheduled.
 - TASK_PREEMPT_RATE - (percent/second) percent of eligible tasks preempted per second.
 
+These settings should be exposed through the Tackle CR.
+
 Tasks may be configured with:
 - Preemptable: (bool) Task may be preempted by higher priority task (default: true).
 - Preemptor: (bool) Task may trigger preemption when blocked (default: false).
 
-These settings should be exposed through the Tackle CR.
-
+Both preemptable and preemptor may be changed by the user after the task is submitted.
 
 Addon (adaptor)
 ---
