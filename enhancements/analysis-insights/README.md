@@ -94,6 +94,8 @@ Incidents along with their variables are a powerful way to express information a
         message: "consider upgrading to go 1.22"
 ```
 
+The _message_ field in the example above won't always be created. See [this section](#rules-that-generate-insights) to understand when it will be created.
+
 For reference, see the full _Violation_ type below:
 
 ```go
@@ -139,13 +141,6 @@ type RuleSet struct {
 }
 ```
 
-The rules that satisfy the following conditions will generate incidents in the insights section of the output:
-
-1. Rules that use the _tag_ action to generate tags
-  * These rules will generate tags as well as insights
-2. Rules that don't have an effort and category defined
-  * These rules will generate insights
-
 ### Changes to static report
 
 We will introduce a new tab in the application details page:
@@ -153,6 +148,22 @@ We will introduce a new tab in the application details page:
 ![](./AppInsights.png)
 
 The page is similar to issues page except theres no category or effort.
+
+### Rules that generate insights
+
+_Rules that do not have an effort value defined or have an effort value of 0, will generate insights._
+
+Depending on what rule actions they define, the output will look different. See following table for all scenarios:
+
+| <rule>.effort | <rule>.tag | <rule>.message |  Description |
+| --- | --- | --- | --- |
+| 0 | Defined | Not Defined | Rule creates _tags_ and an _insight_. Insight does not contain _message_. |
+| 0 | Defined | Defined | Rule creates _tags_ and an _insight_. Insight contains _message_. | 
+| 0 | Not Defined | Defined | Rule creates an _insight_. Insight contains _message_. | 
+| 1 | Defined | Defined | Rule creates _tags_ and a _violation_. No insights here as effort is non-zero. |
+
+Note that every insight that was crated by a tagging rule, will be tied back to that tag using a label `konveyor.io/tag=<val>`. This allows us to have filtering logic in the UI based on labels.
+
 
 ## Implementation Details / Concerns
 
