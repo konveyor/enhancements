@@ -31,7 +31,7 @@ As Konveyor's user base increases, the need to support Gradle has become evident
 ### Goals
 
 - The ability to analyze the code of Java Gradle projects
-- The ability to asses the dependencies of Java Gradle projects
+- The ability to identify the dependencies of Java Gradle projects
 - The ability to analyze the dependencies of Java Gradle projects
 - The ability to be as backwards compatible as possible in relation to Gradle versions
 
@@ -41,12 +41,12 @@ As Konveyor's user base increases, the need to support Gradle has become evident
 
 ## Proposal
 
-The two main areas concerning support for Gradle are the analysis of the source code, done by Konveyor's rules engine through the usage of a language server, and the assessment of the dependencies of the project (also required for certain features of the rules engine).
+The two main areas concerning support for Gradle are the analysis of the source code, done by Konveyor's rules engine through the usage of a language server, and the identification of the dependencies of the project (also required for certain features of the rules engine).
 
 ### User Stories
 
 - As a user, I want to be able to analyze the source code of my Gradle Java project.
-- As a user, I want to be able to get an assessment of the dependencies used by my Gradle Java project, both direct and transitive.
+- As a user, I want to be able to identify the dependencies used by my Gradle Java project, both direct and transitive.
 - As a user, I want the ability to analyze the source code of the dependencies of my Gradle Java project.
 - As a user, I want to be able to analyze a project that uses an old Gradle version
 - As a user, I want to be able to run Konveyor for my Gradle project within a constrained environment
@@ -56,7 +56,7 @@ The two main areas concerning support for Gradle are the analysis of the source 
 #### Java language server (JDTLS) and Gradle
 The Java language server that Konveyor uses (the [Java Development Tool's Language server](https://github.com/eclipse-jdtls/eclipse.jdt.ls)) supports Gradle out-of-the-box through the use of [Buildship](https://github.com/eclipse/buildship), its Gradle integration. This means that the LS is automatically capable of loading the project and analyzing its files, just like it would with a Maven project.
 
-#### Dependency assessment
+#### Dependency identification
 Gradle has [a built-in task](https://docs.gradle.org/current/userguide/viewing_debugging_dependencies.html) which enables the user to get a tree with all the dependencies, both direct and transitive, of the project. This tree can contain multiple levels of nesting, representing the depth of transitivity of each dependency.
 
 #### Sources download
