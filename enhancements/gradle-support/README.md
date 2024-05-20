@@ -71,19 +71,20 @@ On the other hand, it is a widely used convention to include a [Gradle wrapper](
 
 #### Backwards compatibility
 As mentioned previously, Gradle often releases new versions. This increases the difficulty of having backwards [compatibility](https://docs.gradle.org/current/userguide/compatibility.html) with older versions of Gradle.
+Information about backwards compatibility will have to be added to the docs, potentially in the form of a table.
 
 Since Konveyor is a Migration & Modernization framework, we should make the enhancement as *backwards compatible as possible*. Projects that use older versions of Gradle are expected.
 
 ### Security, Risks, and Mitigations
 
 #### Constrained development environments
-Some users might work within environments constrained in different forms, usually for security reasons. While the usage of Konveyor within such environments doesn't imply a security risk, the enhancement should provide the possibility of adapting to them.
+Some users might work within environments constrained in different forms, usually for security reasons. While the usage of Konveyor within such environments doesn't imply a security risk, the enhancement should provide the possibility of adapting to them. The hub will probably have to adapt to working in these conditions with Gradle.
 
 ## Design Details
 
 ### Test Plan
 
-TBD when targeting release
+- e2e test to be added to the [tests repo](https://github.com/konveyor/go-konveyor-tests).
 
 ## Implementation History
 TBD
