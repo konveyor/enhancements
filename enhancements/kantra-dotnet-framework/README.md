@@ -65,8 +65,10 @@ user friendly is the motivation for this enhancement.
 
 ### Goals
 
-* Propose the publishing of Windows containers for the essential command-line analysis components.
-* Propose modifications to Kantra to support running Windows containers to perform the analysis.
+* Propose the publishing of Windows containers for the essential command-line
+  analysis components.
+* Propose modifications to Kantra to support running Windows containers to
+  perform the analysis.
 
 ### Non-Goals
 
@@ -75,13 +77,16 @@ user friendly is the motivation for this enhancement.
 
 ## Proposal
 
-Introduce a new .NET Provider for Kantra. Using
-[alizer](https://github.com/devfile/alizer) to determine the language and
+Introduce a new .NET Provider for Kantra. We will do this by providing
+dotnet-external-provider, analyzer-lsp, and kantra as windows container images.
+Using [alizer](https://github.com/devfile/alizer) to determine the language and
 frameworks used, we can differentiate between .NET projects that can be
 analyzed in a Linux container versus .NET Framework projects that must be
-analyzed in a Windows container. With this knowledge, we simply start the
-dotnet-external-provider as a Windows container when appropriate, perform the
-analysis, and retrieve the results.
+analyzed in a Windows container. With this knowledge, when we encounter a
+Windows-only .NET Project, we will break away from the normal `analyze`
+subcommand flow and analyze the application using the dotnet-external-provider
+and kantra Windows containers. Once we execute the analysis, we can retrieve
+and output the results.
 
 ### User Stories
 
@@ -95,16 +100,12 @@ projects in this category and constructing the provider settings correctly.
 
 #### Analyze Windows-only .NET Project (.NET Framework 4.5 through .NET Framework 4.8)
 
-This story is **fundamentally** different than how Kantra runs today, in that, it requires Kantra
-to start a Windows container that only `docker` supports. Additionally, communication between
-the Kantra Linux container and dotnet-external-provider Windows container must be established
-for the analysis to be run to completion.
+This story is **fundamentally** different than how Kantra runs today.
+First, this mode requires `docker` to be installed + ready to run Windows containers.
+When we detect we are looking at a Windows-only .NET Project, we'll run the remainder
+of the containerized workloads using Windows containers.
 
 ### Implementation Details
-
-What are the caveats to the implementation? What are some important details that
-didn't come across above. Go in to as much detail as necessary here. This might
-be a good place to talk about core concepts and how they relate.
 
 ## Drawbacks
 
@@ -115,8 +116,5 @@ basic assumptions of the analysis procedure.
 
 ## Alternatives
 
-In the case that the proposed changes drastically increase the complexity of the
-`kantra analyze` command OR sharing of either container networks and volumes is not possible
-between Linux and Windows containers, it may be better for contributors and users alike
-to pursue a whole new subcommand (or flag) for analyzing Windows only projects. This could drastically
-reduce the maintenance burden and allow for different workloads to be treated differently.
+More detail can be found in the [discussion doc](./discussion.md) created to
+discuss some of the alternative means of reaching the goal.
