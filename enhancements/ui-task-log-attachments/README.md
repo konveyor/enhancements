@@ -10,8 +10,7 @@ creation-date: 2024-05-15
 last-updated: 2024-05-16
 status: implementable
 see-also:
-  - "[tackle2-ui PR1072](https://github.com/konveyor/tackle2-ui/pull/1072)"
-  - "[tackle2-ui PR1629](https://github.com/konveyor/tackle2-ui/pull/1629)"
+  - "N/A"
 replaces:
   - "N/A"
 superseded-by:
@@ -183,6 +182,14 @@ SSH_AUTH_SOCK=/tmp/agent.1; export SSH_AUTH_SOCK;
 SSH_AGENT_PID=14; export SSH_AGENT_PID;
 echo Agent pid 14;
 ```
+
+### Previous Relevant Work
+
+  - [tackle2-ui PR1072](https://github.com/konveyor/tackle2-ui/pull/1072) &rarr; Initial work to
+    display analysis details in the app
+
+  - [tackle2-ui PR1629](https://github.com/konveyor/tackle2-ui/pull/1629) &rarr; Add the attached
+    files merged view to the analysis details display
 
 
 ## Design Details
