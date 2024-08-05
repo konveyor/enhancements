@@ -70,7 +70,7 @@ A technical lead for the migration project that can create and modify applicatio
 
 #### Migrator
 
-A developer that should be allowed to run assessments and analysis, but not to assess, create or modify applications in the portfolio.
+A developer that should be allowed to run analysis, but not to assess, create or modify applications in the portfolio.
 
 
 #### Organization Administrator

@@ -58,7 +58,7 @@ A technical lead for the migration project that can import, create, modify and d
 
 #### Migrator
 
-A developer that should be allowed to run assessments and analysis, but not to assess, create, modify or delete applications in the portfolio.
+A developer that should be allowed to run analysis, but not to assess, create, modify or delete applications in the portfolio.
 
 ### User Stories
 
