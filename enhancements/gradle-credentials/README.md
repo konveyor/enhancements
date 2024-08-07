@@ -64,8 +64,7 @@ I can have multiple credentials files for different applications.
 1. A new type of credential, named **"Gradle properties file"**, will be added to the "New credential" dialog form
 that appears by clicking on the "Create new" button of the "Credentials" page under the "Administration" section.
 2. Upon upload, the credential will be added to the list of credentials.
-3. For analysis, the `gradle.properties` file will be added to the project folder.
-4. If a `gradle.properties` file already exists, it can be placed under `$HOME/.gradle/`.
+3. The `gradle.properties` file should be placed under `$HOME/.gradle/`.
 
 
 ### Security, Risks, and Mitigations
