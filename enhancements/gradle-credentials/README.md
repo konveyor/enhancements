@@ -76,7 +76,7 @@ correctly handled.
 ## Design Details
 
 ### Test Plan
-To test this, the Gradle version of the tackle-testapp-public can be used, which contains a dependency hosted in a private repository.
+To test this, the `gradle` branch of the [tackle-testapp-public](https://github.com/konveyor/tackle-testapp-public/tree/gradle) can be used, which contains a dependency hosted in a private repository.
 - The analysis should succeed.
 - The full list of dependencies should appear.
 
@@ -87,9 +87,7 @@ This can be compared with the analysis of the same application under its main br
 N/A
 
 ## Implementation History
-
-Major milestones in the life cycle of a proposal should be tracked in `Implementation
-History`.
+N/A
 
 ## Drawbacks
 N/A
