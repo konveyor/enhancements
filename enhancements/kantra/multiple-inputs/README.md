@@ -36,7 +36,7 @@ This enhancement introduces feature of kantra to analyze multiple input applicat
 
 Konveyor consists of the main cloud-native installation driven by _Hub_ that provides advanced features of application analysis execution including analysis task scheduling, parallel tasks executions. And more lighweight command line tool called _kantra_, that can analyze just a single input application on its command execution.
 
-Users community requested add support for multiple inputs to kantra, that would match to previous _mta-cli_ tool multiple inputs feature.
+Users community requested add support for multiple inputs to kantra, that would match to previous _mta-cli_ tool multiple inputs feature. In order to accomplish that, kantra will be updated to accept multiple ```--input``` args and handle analysis for all those inputs.
 
 ## Motivation
 
@@ -64,10 +64,6 @@ $ kantra analyze --input ApplicationA --input ApplicationB --input ApplicationC 
 ```
 
 ### Implementation Details/Notes/Constraints
-
-What are the caveats to the implementation? What are some important details that
-didn't come across above. Go in to as much detail as necessary here. This might
-be a good place to talk about core concepts and how they relate.
 
 ### Security, Risks, and Mitigations
 
