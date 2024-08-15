@@ -45,6 +45,7 @@ Quotas are the Kubernetes mechanism to achieve this.
 ### Goals
 
 Maximize task manger scheduling features.
+Minimize clutter in the namespace.
 Be a better citizen on the cluster.
 
 ### Non-Goals
