@@ -1,5 +1,5 @@
 ---
-title: neat-enhancement-idea
+title: dismiss-issues
 authors:
   - "@shawn-hurley"
 reviewers:
@@ -44,8 +44,8 @@ An architect may consider that certain incidents are not on the migration path, 
 ### Goals
 
 1. Allow users to filter incidents that they do not believe are important for their migration.
-2. Persist this filter across runs of analysis in both kantra and the hub.
-3. Allow users to see the dismissed analysis report and via the UI (both tackle-ui and static-report)
+2. Persist this filter across runs of analysis in both Kantra and the hub.
+3. Allow users to see the dismissed analysis report via the UI (both tackle-ui and static-report)
 
 ### Non-Goals
 
@@ -66,7 +66,7 @@ As an architect, I would want the dismissed incidents to persist over subsequent
 
 #### Story 3
 
-As an architect, I would like to be able to export the dismissed rules to be used with a local run of kantra.
+As an architect, I would like to be able to export the dismissed incidents to be used with a local run of Kantra.
 
 #### Story 4
 
@@ -74,7 +74,7 @@ As an architect, I would like to see the dismissed issues for an analysis.
 
 #### Story 5
 
-As an architect, I would like to export a set of dismissed issues from a static report to be used in subsequent analysis runs of kantra.
+As an architect, I would like to export a set of dismissed issues from a static report to be used in subsequent analysis runs of Kantra.
 
 #### Story 6
 
@@ -85,25 +85,24 @@ This will be implemented across the portfolio, and the implementation will need 
 
 #### Analyzer-LSP
 
-In the analyzer, we will implement a new input format, that identifies dismissed issues by a combonation of:
-rule-id, file uri and line number. Today, this combination is already unique for an incident in the analysis run, so it is a good combonation that is already tested to represent a single issue. The command should be able to take more than one dismissed incident files(DIF from here on out).
+In the analyzer, we will implement a new input format, that identifies dismissed issues by a combination of ruleset, rule-id, URI and line number. Today, this combination is already unique for an incident in the analysis run, so it is a good combination that is already tested to represent a single issue. The command should be able to take more than one dismissed incident files(DIF from here on out).
 
-The analysis engine, will create a new output list, `dismissed`, that will contain for each combination found above, the same incident as if it were a violation/incident. The output will be the exact same as if it was in the violations.
+The analysis engine will create a new output list, `dismissed`, that will contain for each combination found above, the same incident as if it were a violation/incident. The output will be the same as if it was in the violations.
 
 #### Kantra & Static Report
 
-For kantra we will need to do two things. The first thing, is enhance the static reports to be able to dismiss incidents as well allow a user to download the DIF to the file system for future use. 
-The second thing we will need to do, is have a consistant way to map applications to the DIF. This file will need to be able to be shared between the hub and kantra.
+For Kantra we will need to do two things. The first thing is to enhance the static reports to be able to dismiss incidents as well as allow a user to download the DIF to the file system for future use. 
+The second thing we will need to do is have a consistent way to map applications to the DIF. This file will need to be able to be shared between the hub and Kantra.
 
 ##### Labeling Applications for Shared Reconigtion
 
-For java applications the most obvious answer is the maven identifier for `<group>.<artifact>.<version>` and potentially ignoring the version in this case. This will not work for other applications or platforms. In the hub we have an identifier for an Application (the Application ID) that would consistant for a single hub instance but that would mean nothing to the kantra user, who only has a filepath to either source code or a binary. Mandating a connection the hub in this case would be disaster as primary use case of kantra is to test out analysis before deploying a hub. 
+For Java applications, the most obvious answer is the maven identifier for `<group>.<artifact>.<version>` and potentially ignoring the version in this case. This will not work for other applications or platforms. In the hub, we have an identifier for an Application (the Application ID) that would be consistent for a single hub instance but that would mean nothing to the Kantra user, who only has a file path to either source code or a binary. Mandating a connection to the hub in this case would be a blocker as the primary use case of Kantra is to test out analysis before deploying a hub. 
 
-Given all of these constraints specified above, I do not believe that we can do anthing automatically, we will need user input.
+Given all of these constraints specified above, I do not believe that we can do anything automatically, we will need user input.
 
-##### Kantra specific application and dismisssed incidents label
+##### Kantra specific application and dismissed incidents label
 
-One goal should be that a user, once they make these dismissals, they will not need to do this on each subsequent run. To achieve this, we should have a new subcommand that will manage the DIF for a given application. 
+One goal should be that a user, once they make these dismissals, will not need to do this on each subsequent run. To achieve this, we should have a new subcommand that will manage the DIF for a given application. 
 
 ```kantra dismissed-incidents
 
@@ -113,9 +112,23 @@ abs-path-to-file        <path to DIF>
 abs-path-to-file        <path to DIF>
 ```
 
-On the run of an analysis, kantra will look at the abs path to input and determine if there is a DIF(s). We will then  use those files during the analysis of the applications. 
+This will need to have extra subcommands for CRUD like `add, remove, update`.
 
-Kantra will also allow a one time use of the DIF(s), using a new flag on analyze:
+```
+kantra dismissed-incidents add <path-to-file> <path-to-DIF>
+```
+
+```
+kantra dismissed-incidents remove <path-to-file> <optional path-to-DIF>
+```
+
+```
+kantra dismissed-incidents update <path-to-file> <path-to-old-DIF> <path-to-new-DIF>
+```
+
+On the run of analysis, Kantra will look at the abs path to input and determine if there is a DIF(s). We will then use those files during the analysis of the applications. 
+
+Kantra will also allow a one-time use of the DIF(s), using a new flag on analyze:
 
 ```
 kantra analyze -i <path> -t <targets> -o <out> --overwrite --dismissed-incidents <path> --dismissed-incidents <path>
@@ -126,9 +139,9 @@ Note that this WILL NOT tie the DIF's to the application input path.
 ##### Static Report
 
 The static report will be enhanced in three ways:
-1. It will now understand the new output of `dismissed` from the analysis results. This make them viewable in the UI, under a new tab or navigation window. 
-2. It will allow NEW incidents to be dissmissed. This will remove them from the main incidents view, and move them to the dimissed view. 
-3. The dismissed view, will allow the user to download the DIF. 
+1. It will now understand the new output `dismissed` from the analysis results. This makes them viewable in the UI, under a new tab or navigation window. 
+2. It will allow NEW incidents to be dismissed. This will remove them from the main incidents view, and move them to the dismissed view. 
+3. The dismissed view will allow the user to download the DIF. 
 
 #### Hub and Tackle UI
 
@@ -136,9 +149,9 @@ The Hub and Tackle UI will be enhanced in a couple of ways to achieve a similar 
 
 ##### Hub
 
-The hub will now allow a DIF to be attached to application. The analyzer-addon will be responsible for pulling this file when running anlysis. This will follow a similar pattern to other application information that is passed to the addon, and the pulling of the file will follow a similar pattern to pulling the rulesets. (@jortel can you verify that this makes sense or how you would do it?).
+The hub will now allow a DIF to be attached to an application. The analyzer-addon will be responsible for pulling this file when running the analysis. This will follow a similar pattern to other application information that is passed to the addon, and the pulling of the file will follow a similar pattern to pulling the rulesets. 
 
-The Hub will also have a to dynamically create and append this DIF as the UI dismisses incidents. To achive this, I propose a new field on incidents, called dismissed that is a boolean. This new incident update API will allow for the UI to tell the hub when an incident has been dismissed. When this happens the hub will need to:
+The Hub will also have to dynamically create and append this DIF as the UI dismisses incidents. To achieve this, I propose a new field on incidents, called dismissed that is a boolean. This new incident update API will allow for the UI to tell the hub when an incident has been dismissed. When this happens the hub will need to:
 1. Move the incident to dismissed
 2. Add the incident to the either already existing DIF or create one and add it.
 
