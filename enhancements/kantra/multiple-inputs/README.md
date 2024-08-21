@@ -25,7 +25,7 @@ This enhancement introduces feature of kantra to analyze multiple input applicat
 
 - [x] Enhancement is `implementable`
 - [ ] Design details are appropriately documented from clear requirements
-- [ ] Test plan is defined
+- [x] Test plan is defined
 - [ ] User-facing documentation is created
 
 ## Open Questions
@@ -36,11 +36,13 @@ This enhancement introduces feature of kantra to analyze multiple input applicat
 
 Konveyor consists of the main cloud-native installation driven by _Hub_ that provides advanced features of application analysis execution including analysis task scheduling, parallel tasks executions. And more lighweight command line tool called _kantra_, that can analyze just a single input application on its command execution.
 
-Users community requested add support for multiple inputs to kantra, that would match to previous _mta-cli_ tool multiple inputs feature. In order to accomplish that, kantra will be updated to accept multiple ```--input``` args and handle analysis for all those inputs.
+We want to add support for multiple inputs to kantra, that would match to previous _mta-cli_ tool multiple inputs feature. In order to accomplish that, kantra will be updated to accept multiple ```--input``` args and handle analysis for all those inputs.
 
 ## Motivation
 
-This enhancement should close a feature gap to "original" mta-cli multiple input option and increase usability of kantra tool.
+This enhancement should close a feature gap to "original" mta-cli multiple input option and help users with a large portfolio of applications, who run kantra on these individually.
+
+That is time a consuming process that leads them to have multiple different static reports. So, having a single static report for all the local applications they are working on will greatly increase the visability of known issues across the local portfolio.
 
 ### Goals
 
@@ -73,9 +75,11 @@ There is a possibility to overload local machine (CPU or memory) that executes t
 
 It would be nice to generate static-report after each input application analysis completion to have some static-report available before finishing all inputs or for a case that analysis crash or an unexpected termination.
 
+When analysis of one of inputs fails, kantra will stop its execution. Potential following inputs will not be analyzed (however static report and results generated before the failure will be kept).
+
 ### Limitations
 
-All analysis options are the same for all input applications and there is no plan to implement different source/targets/... for different input applications.
+All analysis options are the same for all input applications and there is no plan to implement different source/targets/... for different input applications. This limitation needs to be mentioned in docs.
 
 ### Test Plan
 
