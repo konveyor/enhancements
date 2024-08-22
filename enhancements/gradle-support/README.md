@@ -12,7 +12,7 @@ approvers:
   - "@shawn-hurley"
 creation-date: 2024-05-10
 last-updated: 2024-05-10
-status: implementable
+status: implemented
 ---
 
 # Gradle support
