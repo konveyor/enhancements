@@ -79,7 +79,11 @@ To test this, the `gradle` branch of the [tackle-testapp-public](https://github.
 - The analysis should succeed.
 - The full list of dependencies should appear.
 
-This can be compared with the analysis of the same application under its main branch, which uses Maven. They must be similar.
+This can be compared with the analysis of the same application under its main branch, which uses Maven. They must be the same.
+
+#### e2e testing
+With the previously mentioned application (tackle-testapp-public), an e2e test should be added to the go-konveyor-tests
+repository.
 
 
 ### Upgrade / Downgrade Strategy
