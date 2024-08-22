@@ -58,15 +58,15 @@ As a developer, I want to set up CI/CD pipelines with kantra using tools such as
 
 ### Requirements
 
-Users will be expected to have or install several tools onto their machines, such as OpenJDK, Maven, fernflower, and tar. We will produce and ship our [rulesets](https://github.com/konveyor/rulesets/), JDTLS, and the [Java Bundle](https://github.com/konveyor/java-analyzer-bundle).
+Users will be expected to have or install several tools onto their machines, such as OpenJDK, Maven, fernflower, and tar. We will produce and ship our [rulesets](https://github.com/konveyor/rulesets/), JDTLS, and the [Java Bundle](https://github.com/konveyor/java-analyzer-bundle) as release artifacts.
 
-The user will be instructed to set these packaged binaries and rules in a known location, such as `$HOME/.kantra/`. Alternatively, an install script can set these.
+The user will be instructed to set these packaged binaries and rules in a known location, such as `$HOME/.kantra/`, which they will also need to include in their PATH. Alternatively, an install script can set these.
 
 ## Design Details
 
 ### Technical Implmentation
 
-A new analyze subcommand can be introduced for kantra to recognize when to start the containerized version of analysis versus the non-containerized option. This could look like `kantra analyze-java-only <options>`. Another option for starting the analyze subcommand without running containers would be to detect existing packaged requirements at the expected location discussed in the [requirements](#requirements). However, in this case, we would want to provide an option to disable this behavior.
+A new analyze subcommand can be introduced for kantra to recognize when to start the containerized version of analysis versus the non-containerized option. This could look like `kantra analyze-bin --provider=java <options>`. Another option for starting the analyze subcommand without running containers would be to detect existing packaged requirements at the expected location discussed in the [requirements](#requirements). However, in this case, we would want to provide an option to disable this behavior.
 
 There will be a new package in kantra, `no-container`, that will be added for this case. This package will import the [analyzer](https://github.com/konveyor/analyzer-lsp), [external Java provider](https://github.com/konveyor/analyzer-lsp/tree/main/external-providers/java-external-provider), and the [static-report](https://github.com/konveyor/static-report). 
 
