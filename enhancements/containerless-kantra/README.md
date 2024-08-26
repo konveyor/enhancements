@@ -32,9 +32,8 @@ This enhancement will discuss a new implementation of kantra that does not requi
 ## Motivation
 
 Kantra currently requires a container runtime. This presents problems for some users. 
-For example, an organization may have a strict regulations that do not allow installation of container runtimes on company computers. This results in the kantra CLI being unavailable to assist these companies with konveyor analysis.
 
-There is also the issue that the current implementation of kantra is incompatible with some CI/CD tools such as Jenkins container agents and Tekton tasks.
+For example, an organization may have a strict regulations that do not allow installation of container runtimes on company computers. This results in the kantra CLI being unavailable to assist these companies with konveyor analysis.
 
 ### Goals
 
@@ -51,8 +50,6 @@ There is also the issue that the current implementation of kantra is incompatibl
 ### User Stories 
 
 As a user, I want to run a Java application analysis using kantra that does not require installation of a container runtime.
-
-As a developer, I want to set up CI/CD pipelines with kantra using tools such as Jenkins.
 
 ## Implementation Details
 
