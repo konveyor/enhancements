@@ -159,9 +159,9 @@ For the Hub it may make sense that the DIF is actually a new table in the databa
 
 ##### UI
 
-The UI will now have a new button to add to a given incident page. This button will allow the user to dismiss an incident. 
-The UI will also need to add a new page for a given application, that will allow you to see the "dismissed" incidents for that application. 
-The UI will also need to have the ability to download the DIF. This will allow for the user to give to someone running kantra locally.
+The UI will now have a new button to add to a given incident page. This button will allow the user to dismiss an incident. The user will also be able to see with dynamic filters/queries the dimissed issues in this page, and will be able to re-enable them with a similar button.
+The UI will also need to add a new page for a given application, that will allow you to see the DIF entries for that application, this is where you can download or import a DIF file as well.
+
 
 ### Security, Risks, and Mitigations
 
