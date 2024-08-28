@@ -1,5 +1,5 @@
 ---
-title: neat-enhancement-idea
+title: Operator Managed Quota
 authors:
   - "@jortel"
 reviewers:
