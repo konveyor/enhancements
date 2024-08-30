@@ -43,26 +43,26 @@ N/A
 
 ## Summary
 
-Application archetypes will be enhanced to be able to store groups of migration
-targets together as a __target platform__.  The __target platforms__ will only
+Application archetypes will be enhanced to be able to store groups of analysis
+target labels together as a __target platform__.  The __target platforms__ will only
 exist on the archetype and are not intended to be first class entities.
 
 Various tools that generate analysis tasks will be able to use the target platforms
-from the application's archetype to inform what analysis targets should be applied
+from the application's archetype to inform what analysis target labels should be applied
 without requiring a user to select them individually.
 
 This enhancement only calls for adding CRUD functionality to the archetype edit screen
-for target platforms as groupings of known analysis targets.
+for target platforms as groupings of known analysis target labels.
 
 
 ## Motivation
 
-Allowing a Migrator user to select specific migration targets for analysis is not
+Allowing a Migrator user to select specific migration target labels for analysis is not
 useful at scale.  At scale, for Konveyor to be useful, there needs to be a way for
 Architect users to define a group of migration targets to be used together.
 
 This will also allow the developer hub integration to present a bundle of analysis
-targets to a user, allowing a simplification of analysis configuration.
+target labels to a user, allowing a simplification of analysis configuration.
 
 
 ### Goals
@@ -70,7 +70,7 @@ targets to a user, allowing a simplification of analysis configuration.
   - Allow an archetype to be configured with a set of target platforms that exist only
     for that archetype.
 
-  - Allow multiple migration targets to be collected together under an archetype's
+  - Allow multiple migration target labels to be collected together under an archetype's
     target platform.
 
 
@@ -89,11 +89,6 @@ users.  Migrator users will be able to view configured target platforms.
 
 ### User Stories
 
-Detail the things that people will be able to do if this is implemented.
-Include as much detail as possible so that people can understand the "how" of
-the system. The goal here is to make this feel real for users without getting
-bogged down.
-
 
 #### Story 1
 
@@ -102,7 +97,7 @@ As an __architect__, I want to manage target platforms defined on an archetype.
 
 #### Story 2
 
-As an __architect__, I want to manage the migration targets contained within an
+As an __architect__, I want to manage the migration target labels contained within an
 archetype's target platform.
 
 
@@ -117,13 +112,19 @@ targets are contained in each.
 Only definition of the target platforms on the archetype will be supported.  Consideration
 of target platforms on the wider system will not be considered.
 
+
 #### HUB
 
   - The archetype endpoint needs to be enhanced to record a set of target platforms
     per archetype.
 
   - Since the target platforms are simply attributes of an archetype, an explicit
-    `/targetplatform` endpoint is not required.
+    `/targetplatform` endpoint is __not__ required.
+
+  - Using the existing `/targets` endpoint and entities does not provide enough
+    fine grained control.  Specific versions of targets (e.g. OpenJDK, Version 21)
+    are to be selected and stored.  This mirrors the current way an analysis is
+    started with individual labels and not the full target.
 
   - Allowing editing of the target platforms via a PATCH request would help simplify
     the CRUD functions on the UI and avoid potential collisions with archetype
@@ -137,7 +138,7 @@ Potential partial structure on the archetype entity:
   "targetPlatforms": [
     {
       "name": "Kubernetes",
-      "targets": [
+      "labels": [
         "konveyor.io/target=cloud-readiness",
         "konveyor.io/target=openjdk21",
         "konveyor.io/target=eap8"
@@ -145,7 +146,7 @@ Potential partial structure on the archetype entity:
     },
     {
       "name": "Traditional Standalone",
-      "targets": [
+      "labels": [
         "konveyor.io/target=openjdk21",
         "konveyor.io/target=eap8"
       ]
@@ -160,7 +161,9 @@ Potential partial structure on the archetype entity:
   - The existing archetype table and edit modals will remain.
 
   - An extra section on the edit modal will be added to support the target
-    platform functions.
+    platform functions.  This section could work in a way similar to the "Set targets"
+    step of the analysis wizard.  All of the targets in the system are displayed
+    and specific versions of the targets are what is actually selected.
 
   - The archetype table could have a new column added to display a count of
     target platforms defined.
