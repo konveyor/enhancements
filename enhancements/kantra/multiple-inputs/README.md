@@ -11,7 +11,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2024-08-13
-last-updated: 2024-08-14
+last-updated: 2024-09-04
 status: implementable
 see-also:
   - "https://github.com/konveyor/enhancements/issues/194"  
@@ -24,13 +24,10 @@ This enhancement introduces feature of kantra to analyze multiple input applicat
 ## Release Signoff Checklist
 
 - [x] Enhancement is `implementable`
-- [ ] Design details are appropriately documented from clear requirements
+- [x] Design details are appropriately documented from clear requirements
 - [x] Test plan is defined
 - [ ] User-facing documentation is created
 
-## Open Questions
-
-- `--input-bin-dir` support and its relation to multiple `--input` args (or exclusivity of usage)
 
 ## Summary
 
@@ -51,6 +48,8 @@ Analyze multiple applications with a single kantra command execution.
 ### Non-Goals
 
 Implement an analysis task scheduler within the kantra or parallel application analysis execution similar to Hub features.
+
+Support `--input-bin-dir` option, however it could be added later.
 
 ## Proposal
 
@@ -76,6 +75,8 @@ There is a possibility to overload local machine (CPU or memory) that executes t
 It would be nice to generate static-report after each input application analysis completion to have some static-report available before finishing all inputs or for a case that analysis crash or an unexpected termination.
 
 When analysis of one of inputs fails, kantra will stop its execution. Potential following inputs will not be analyzed (however static report and results generated before the failure will be kept).
+
+The analyze loop over multiple inputs might re-create provider containers, volumes etc. which introdudes some inefficiency, however allows easier maintenance of the codebase in future kantra development.
 
 ### Limitations
 
