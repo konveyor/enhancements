@@ -10,7 +10,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2024-08-09
-last-updated: 2024-08-15
+last-updated: 2024-09-30
 status: implementable
 ---
 
@@ -55,9 +55,16 @@ As a user, I want to run a Java application analysis using kantra that does not 
 
 ### Requirements
 
-Users will be expected to have or install several tools onto their machines, such as OpenJDK, Maven, fernflower, and tar. We will produce and ship our [rulesets](https://github.com/konveyor/rulesets/), JDTLS, and the [Java Bundle](https://github.com/konveyor/java-analyzer-bundle) as release artifacts.
+Users will be expected to have or install `OpenJDK` and `Maven` onto their machines. As release artifacts, we will produce and ship:
 
-The user will be instructed to set these packaged binaries and rules in a known location, such as `$HOME/.kantra/`, which they will also need to include in their PATH. Alternatively, an install script can set these.
+- `fernflower`
+- `jar`  
+- `JDTLS`
+- [rulesets](https://github.com/konveyor/rulesets/)
+- [Java bundle](https://github.com/konveyor/java-analyzer-bundle)
+- [static report](https://github.com/konveyor/static-report) (including the build directory)
+
+The user will be instructed to set these packaged requirements in a known location, such as `$HOME/.kantra/`.
 
 ## Design Details
 
