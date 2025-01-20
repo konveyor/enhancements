@@ -24,14 +24,21 @@ see-also:
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
 
+
+## Open Questions
+1. Do we need an interactive mode where users can preview and modify
+   configurations during discovery or generation?
+2. Should the CLI provide validation against Kubernetes best practices
+   (e.g., resource limits, liveness probes) during artifact generation?
+
 ## Summary
 
 This proposal introduces enhancements to the existing Kantra tool to support the
-discovery and transformation of resources from Cloud Foundry (Cloud Foundry) to
+discovery and transformation of resources from Cloud Foundry to
 Kubernetes. The goal is to create a modular CLI that outputs a canonical
 representation of resources and generates deployment artifacts (e.g., Helm
 charts). The enhancement will provide a foundational capability for platform
-migrations, enabling a tech-preview release in version 7.3 of Kantra and
+migrations, enabling a tech-preview release in an upcoming version of Kantra and
 integration into downstream workflows.
 
 ## Motivation
@@ -59,8 +66,10 @@ integration with other tools and workflows.
 - Extend Kantra to support:
   - `discover` command: Output a YAML/JSON representation of Cloud Foundry resources.
   - `generate` command: Produce Helm charts for deployment to Kubernetes.
-- Utilize the canonical configuration enhancement to serve as a consistent
+- Utilize the [canonical configuration enhancement](link: TODO) to serve as a consistent
   intermediary for platform transformations.
+- Enhance logging and error reporting for better user experience and debugging.
+- Provide detailed documentation and examples for both commands to facilitate adoption.
 
 ### Non-Goals
 
@@ -105,6 +114,10 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
       - Outputs a structured canonical representation containing metadata (e.g.,
         application name, instances, routes), runtime information (e.g., memory,
         disk), and deployment settings.
+    - **Error Handling:**
+      - Detect and report missing or malformed input files with detailed error messages.
+      - Provide retry options for transient errors during discovery.
+
   - `generate`: This command takes a canonical representation and a Helm
     template to produce deployment-ready Helm charts. Details:
     - **Flags and Options:**
@@ -122,19 +135,28 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
       - Applies the provided Helm template to generate deployment artifacts for
         Kubernetes.
       - Validates the generated artifacts for completeness and correctness.
+    - **Error Handling:**
+      - Log errors when applying Helm templates.
+      - Support a dry-run mode to identify potential issues without generating artifacts.
 
 - **Library Architecture:**
   - Implement the core functionality as a standalone library in Go for reuse in
     Kantra and other projects.
   - Modularize the functionality to support future enhancements. 
 - **Integration Path:**
-  - Release as part of Kantra 7.3 in tech preview.
+  - Release as part of upcoming Kantra/Konveyor in tech preview.
 
 ### Security, Risks, and Mitigations
 
 - Conduct code reviews with security specialists to mitigate risks.
 - Validate CLI outputs to prevent injection vulnerabilities in generated
   artifacts.
+
+#### **Risks**
+1. Generated artifacts may not match user expectations.
+   - **Mitigation:** Provide comprehensive logs and validation steps.
+2. Modularity increases the maintenance burden.
+   - **Mitigation:** Maintain clear documentation and well-defined APIs for each module.
 
 ## Design Details
 
@@ -146,10 +168,15 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
 
 ### Upgrade/Downgrade Strategy
 
-Add versioning to canonical configuration files to ensure backward
+1. Add versioning to canonical configuration files to ensure backward
 compatibility.
+2. Provide migration scripts for users upgrading from earlier Kantra versions.
 
-Provide migration scripts for users upgrading from earlier Kantra versions.
+### Documentation
+
+1. User-facing documentation with examples for both discover and generate commands.
+2. Developer guide for extending the CLI with new platforms or output formats.
+3. Troubleshooting guide for common errors and issues.
 
 ## Implementation History
 
@@ -164,8 +191,15 @@ Provide migration scripts for users upgrading from earlier Kantra versions.
 
 ## Alternatives
 
-- Develop a completely new tool instead of enhancing Kantra.
+1. **Develop a New Tool:**
+   - Pros: Tailored design for the intended functionality.
+   - Cons: Longer time-to-market and additional user onboarding efforts.
+
+2. **Enhance Move2Kube:**
+   - Pros: Builds on an existing migration tool.
+   - Cons: Limited flexibility and potential user confusion due to overlapping scopes.
 
 # Infrastructure Needed
 
-N/A
+- **CI/CD Pipelines:** For testing and releasing the CLI.
+- **Sample Cloud Foundry Applications:** To validate discovery and generation.
