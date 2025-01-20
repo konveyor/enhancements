@@ -236,6 +236,7 @@ First class entity in Konveyor to wrap templates. Fields include:
 - _Generator Type_: Will only include Helm for the moment, but in the future we could include other types like Ansible or other templating engines. Generator type will determine the image that gets used to handle the generator task.
 - _Description_
 - Repository containing the template files:
+  - _Repository type_ (Git/SVN)
   - _URL_
   - _Root Path_
   - _Branch_
