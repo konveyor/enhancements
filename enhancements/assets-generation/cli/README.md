@@ -8,7 +8,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2025-01-20
-last-updated: 2025-01-20
+last-updated: 2025-01-22
 status: provisional
 see-also:
   - "https://github.com/konveyor/enhancements/pull/210"
@@ -104,6 +104,9 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
     - **Flags and Options:**
       - `--platform=<platform>` (required): Specifies the platform to discover.
         Supported value for MVP: cf.
+      - `--application=<name>` (optional): Specifies the application to be analyzed.
+      - `--use-agent=<agent_name>` (optional): Enables agent-based discovery for extracting data.
+      - `--use-live-connection` (optional): Uses live platform connections for real-time discovery.
       - `--output=<file>` (optional): Writes the output to a specified file.
         Defaults to standard output.
       - `--verbose` (optional): Provides additional details about the discovery
@@ -114,9 +117,35 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
       - Outputs a structured canonical representation containing metadata (e.g.,
         application name, instances, routes), runtime information (e.g., memory,
         disk), and deployment settings.
-    - **Error Handling:**
-      - Detect and report missing or malformed input files with detailed error messages.
-      - Provide retry options for transient errors during discovery.
+      - **Error Handling:**
+        - Detect and report missing or malformed input files with detailed error messages.
+        - Provide retry options for transient errors during discovery.
+      - **Discovery Methods:**
+        - Via live connections using APIs or other supported interfaces.
+        - Through filesystem access to the platform's installation paths (e.g., for Application Servers
+          or Servlet Containers), implemented as an agent on the host.
+          
+  - `agent`: This command provides management capabilities for platform agents.
+     Details:
+    - **Subcommands:**
+      - `deploy-agent`: Deploys the agent to the target platform host.
+        - **Flags and Options:**
+          - `--platform=<platform>` (required): Specifies the platform to deploy the agent to.
+          - `--agent-name=<name>` (required): Name of the agent.
+          - `--config=<file>` (optional): Specifies a configuration file for the agent.
+      - `check-status`: Reports the health and operational status of the deployed agent.
+        - **Flags and Options:**
+          - `--platform=<platform>` (required): Specifies the platform for which the agent status should be checked.
+          - `--agent-name=<name>` (required): Specifies the agent's name.
+      - `remove-agent`: Deletes the agent and removes all associated files.
+        - **Flags and Options:**
+          - `--platform=<platform>` (required): Specifies the platform from which the agent should be removed.
+          - `--agent-name=<name>` (required): Specifies the agent to remove if multiple agents exist on the platform.
+          - `--force` (optional): Forces the removal of the agent, bypassing confirmation prompts.
+    - **Behavior:**
+      - Provides seamless lifecycle management for agents, including deployment, health monitoring, and removal.
+      - Ensures agent interactions are logged for traceability and troubleshooting.
+      - Fetches data about the platform and/or application.
 
   - `generate`: This command takes a canonical representation and a Helm
     template to produce deployment-ready Helm charts. Details:
