@@ -28,35 +28,6 @@ superseded-by:
 
 # Cloud Foundry Application Discovery to canonical form
 
-This is the title of the enhancement. Keep it simple and descriptive. A good
-title can help communicate what the enhancement is and should be considered as
-part of any review.
-
-The YAML `title` should be lowercased and spaces/punctuation should be
-replaced with `-`.
-
-To get started with this template:
-1. **Pick a domain.** Find the appropriate domain to discuss your enhancement.
-1. **Make a copy of this template.** Copy this template into the directory for
-   the domain.
-1. **Fill out the "overview" sections.** This includes the Summary and
-   Motivation sections. These should be easy and explain why the community
-   should desire this enhancement.
-1. **Create a PR.** Assign it to folks with expertise in that domain to help
-   sponsor the process.
-1. **Merge at each milestone.** Merge when the design is able to transition to a
-   new status (provisional, implementable, implemented, etc.). View anything
-   marked as `provisional` as an idea worth exploring in the future, but not
-   accepted as ready to execute. Anything marked as `implementable` should
-   clearly communicate how an enhancement is coded up and delivered. If an
-   enhancement describes a new deployment topology or platform, include a
-   logical description for the deployment, and how it handles the unique aspects
-   of the platform. Aim for single topic PRs to keep discussions focused. If you
-   disagree with what is already in a document, open a new PR with suggested
-   changes.
-
-The `Metadata` section above is intended to support the creation of tooling
-around the enhancement process.
 
 ## Release Signoff Checklist
 
@@ -64,13 +35,6 @@ around the enhancement process.
 - [ ] Design details are appropriately documented from clear requirements
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
-
-## Open Questions [optional]
-
-This is where to call out areas of the design that require closure before deciding
-to implement the design.  For instance,
- > 1. This requires exposing previously private resources which contain sensitive
-  information.  Can we do this?
 
 ## Summary
 
@@ -92,7 +56,7 @@ resources, as it is not well known and requires an additional effort to master,
 
 The challenge brought by the templating language severely impacts the usability
 and acceptance of the tool. Thus the existence of this enhancement to provide a
-similar tool to MTA, extensible, and that improves on the templating engine, so
+similar tool to Konveyor, extensible, and that improves on the templating engine, so
 that it offers a pluggable design that can be used to implement well known
 templating engines.
 
@@ -115,7 +79,7 @@ To migrate applications from Cloud Foundry to Kubernetes, it is essential to
 translate these manifests into an intermediate format, or canonical form, that
 captures the intent and configuration of the CF manifest. This intermediate
 manifest serves as a bridge, retaining critical deployment configurations while
-adapting them to Kubernetes-native practices. The format needs to be designed 
+adapting them to Kubernetes-native practices. The format needs to be designed
 as platform-agnostic and compatible with multiple templating engines like Helm
 or Ansible, enabling flexibility in how the deployment configurations are
 generated and managed.
@@ -124,9 +88,9 @@ These structures are intended to abstract the CF application manifest format
 so that changes to the CF manifest are contained.
 
 ### Cloud Foundry specification
-This section outlines the Cloud Foundry (CF) schema fields as documented in the 
+This section outlines the Cloud Foundry (CF) schema fields as documented in the
 [official CF documentation](https://v3-apidocs.cloudfoundry.org/version/3.163.0/#concepts).
-It serves as a reference point for comparing and understanding the mappings 
+It serves as a reference point for comparing and understanding the mappings
 presented in the [Proposal Specification](#proposal-specification) section.
 
 #### Space-level configuration
@@ -208,7 +172,7 @@ worker: bundle exec rake workers:start
 In a Procfile, you declare one process type per line and use the syntax
 `PROCESS_TYPE: COMMAND`.
 
-* `PROCESS_TYPE` defines the type of the process.  
+* `PROCESS_TYPE` defines the type of the process.
 * `COMMAND` is the command line to launch the process.
 
 ###### Procfile use cases
@@ -222,7 +186,7 @@ For example, a buildpack may provide a `worker` process type that runs the
 `worker` process type, but a different command such as `rake custom:start`, the
 `rake custom:start` command will be used.
 
-Some buildpacks, such as Python, that work on a variety of frameworks, do not 
+Some buildpacks, such as Python, that work on a variety of frameworks, do not
 attempt to provide a default start command. For these cases, a Procfile should
 be used to specify any necessary commands for the app.
 
@@ -267,8 +231,8 @@ Example:
 
 #### [Service-level configuration](https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#services-block)
 
-This configuration is *creating* new service bindings between the app and a 
-service instance. The `services` field can take either an array of service 
+This configuration is *creating* new service bindings between the app and a
+service instance. The `services` field can take either an array of service
 instance name strings or an array of the following service-level fields.
 
 ##### Definition
