@@ -79,6 +79,8 @@ integration with other tools and workflows.
 - Automatic detection of application archetypes.
 - Full compatibility with the Konveyor add-on process.
 - Immediate support for platforms beyond Cloud Foundry and Kubernetes.
+- Actual agent implementation. we will have stubs for the `agent` 
+  subcommand for initial mvp.
 
 ## Proposal
 
@@ -146,6 +148,7 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
       - Provides seamless lifecycle management for agents, including deployment, health monitoring, and removal.
       - Ensures agent interactions are logged for traceability and troubleshooting.
       - Fetches data about the platform and/or application.
+  **_NOTE_**: This subcommand will not be a part of initial MVP. 
 
   - `generate`: This command takes a canonical representation and a Helm
     template to produce deployment-ready Helm charts. Details:
