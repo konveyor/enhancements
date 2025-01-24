@@ -123,7 +123,7 @@ This configuration is specified per application and applies to all of the applic
 | **stack** | string | The root filesystem to use with the buildpack, for example `cflinuxfs4` |
 | **metadata.labels** | array of k/v pairs | Labels applied to the app |
 | **metadata.annotations** | array of k/v pairs | Annotations applied to the app |
-| **timeout** | integer | **Maximum time it can take an application to startup before CF considers it as failed. Measured in seconds** |
+| **timeout** | integer | Maximum time it can take an application to startup before CF considers it as failed. Measured in seconds |
 
 [^1] This allows Cloud Foundry to run pre-built Docker images. When staging an
 app with this lifecycle, the Docker registry is queried for metadata about the
@@ -263,9 +263,9 @@ it does not already exist.
 
 | Name | Mapped (Y/N) | Canonical Form | Description |
 | ----- | :---: | ----- | ----- |
-| **applications** | N |  | Direct mapping to a slice of canonical form manifests, each one representing the discovery results of a CF application. See [app-level specification](#application-specification) |
+| **applications** | Y | Application | Direct mapping to a slice of canonical form manifests, each one representing the discovery results of a CF application. See [app-level specification](#application-specification) |
 | **space** | Y | Metadata.Space | See [metadata specification](#metadata-specification). This field is only populated at runtime. |
-| **version** | N |  | The manifest schema version; currently the only valid version is 1, defaults to 1 if not provided |
+| **version** | Y | Metadata.Version | The manifest schema version; currently the only valid version is 1, defaults to 1 if not provided. This field is only populated at runtime. |
 
 #### Application specification
 
@@ -273,7 +273,7 @@ it does not already exist.
 | ----- | :---: | ----- | ----- |
 | **name** | Y | Metadata.Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format.
 See [metadata specification](#metadata-specification). |
-| **buildpacks** | N |  | These fields in CF specify how to build your application (e.g., "nodejs\_buildpack", "java\_buildpack"). The canonical form should focus on "what" to deploy, not "how" to build it |
+| **buildpacks** | Y | BuildPacks | This field in CF specify how to build your application (e.g., "nodejs\_buildpack", "java\_buildpack"). |
 | **docker** | Y | Process.Image | The value of the docker image pullspec is captured for each \`Process\` in the `Image` field. See [process specification](#process-specification). |
 | **env** | Y | Env | Direct mapping from the application's `Env` field |
 | **no-route** | Y | Routes | Processes will have no route information in the canonical form manifest. See [route specification](#route-specification). |
@@ -311,6 +311,8 @@ type Application struct {
   // the deployment as failed. The default value is 60 seconds.
   // https://github.com/cloudfoundry/docs-dev-guide/blob/96f19d9d67f52ac7418c147d5ddaa79c957eec34/deploy-apps/  large-app-deploy.html.md.erb#L35
   StartupTimeout uint `json:"startupTimeout,omitempty"`
+  // BuildPacks capture the buildpacks defined in the CF application manifest.
+  BuildPacks []string `json:"buildPacks,omitempty"`
 }
 ```
 
@@ -341,14 +343,14 @@ type Sidecar struct {
 
 ### Service specification
 
-Maps to Spec.Services in the canonical form. Only \`name\` and \`parameters\` CF
-fields are captured since \`binding\_name\` is only used when defining a service
-and not applicable to a Kubernetes application.
+Maps to Spec.Services in the canonical form. Only \`name\`, \`parameters\`, and `bindng\_name` CF
+fields are captured.
 
 | Name | Mapped  | Canonical Form | Description |
 | ----- | :---: | ----- | ----- |
 | **name** | Y | Name | Name of the service required by the application |
 | **parameters** | Y | Parameters | key/value pairs for the application to use when connecting to the service. |
+| **binding\_name** | Y | BindingName | Name of the service to bind to. |
 
 ```go
 type Service struct {
@@ -359,6 +361,8 @@ type Service struct {
   Name string `json:"name"`
   // Parameters contain the k/v relationship for the aplication to bind to the service
   Parameters map[string]interface{} `json:"parameters,omitempty"`
+  // BindingName captures the name of the service to bind to.
+  BindingName string `json:"bindingName,omitempty"`
 }
 ```
 
@@ -370,6 +374,8 @@ type Service struct {
 | **Space.name** | Y | Space | Captured at runtime only and it contains the name of the space where the application is deployed. |
 | **labels** | Y | Labels |  Labels capture the labels as defined in the `labels` field in the CF application manifest |
 | **annotations** | Y | Annotations | Annotations as defined in the `annotations` field in the CF application manifest |
+| **Space.version** | Y | Version | Captured at runtime and it defaults to 1. |
+
 
 ```go
 type Metadata struct {
@@ -382,6 +388,9 @@ type Metadata struct {
   Labels map[string]string `json:"labels,omitempty"`
   // Annotations capture the annotations as defined in the `labels` field in the CF application manifest
   Annotations map[string]string `json:"annotations,omitempty"`
+  // Version captures the version of the manifest containing the resulting CF application manifests list retrieved via REST API.
+  // Only version 1 is supported at this moment. See https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#manifest-schema-version
+  Version string `json:"version"`
 }
 ```
 
@@ -626,7 +635,7 @@ N/A
 
 - CI/CD pipelines for building and unit/integration testing.
 - CI/CD pipelines for E2E testing for QE and releasing.
-- Hosting provider for binaries and documentation for releases.
+- Hosting provider for code, binaries and documentation for releases.
 - Project Management tools for tasks, issues and bugs.
 - If REST API discovery is implemented, a Korifi instance on a Kubernetes cluster for E2E
   testing with a suite of samples that cover the acceptance test criteria.
