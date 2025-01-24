@@ -261,31 +261,31 @@ it does not already exist.
 
 #### Space specification
 
-| Name | Mapped (Y/N) | Canonical Form | Description |
-| ----- | :---: | ----- | ----- |
-| **applications** | Y | Application | Direct mapping to a slice of canonical form manifests, each one representing the discovery results of a CF application. See [app-level specification](#application-specification) |
-| **space** | Y | Metadata.Space | See [metadata specification](#metadata-specification). This field is only populated at runtime. |
-| **version** | Y | Metadata.Version | The manifest schema version; currently the only valid version is 1, defaults to 1 if not provided. This field is only populated at runtime. |
+| Name |  Canonical Form | Description |
+| ----- | ----- | ----- |
+| **applications** | Application | Direct mapping to a slice of canonical form manifests, each one representing the discovery results of a CF application. See [app-level specification](#application-specification) |
+| **space** | Metadata.Space | See [metadata specification](#metadata-specification). This field is only populated at runtime. |
+| **version** | Metadata.Version | The manifest schema version; currently the only valid version is 1, defaults to 1 if not provided. This field is only populated at runtime. |
 
 #### Application specification
 
-| Name | Mapped  | Canonical Form | Comments |
-| ----- | :---: | ----- | ----- |
-| **name** | Y | Metadata.Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format.
+| Name | Canonical Form | Comments |
+| ----- | ----- | ----- |
+| **name** | Metadata.Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format.
 See [metadata specification](#metadata-specification). |
-| **buildpacks** | Y | BuildPacks | This field in CF specify how to build your application (e.g., "nodejs\_buildpack", "java\_buildpack"). |
-| **docker** | Y | Process.Image | The value of the docker image pullspec is captured for each \`Process\` in the `Image` field. See [process specification](#process-specification). |
-| **env** | Y | Env | Direct mapping from the application's `Env` field |
-| **no-route** | Y | Routes | Processes will have no route information in the canonical form manifest. See [route specification](#route-specification). |
-| **processes** | Y | Processes | See [process specification](#process-specification) |
-| **random-route** | Y | Routes | See [route specification](#route-specification). |
-| **routes** | Y | Routes | See [route specification](#route-specification). |
-| **services** | Y | Services | See [service specification](#service-specification). |
-| **sidecars** | Y | Sidecars | See [sidecar specification](#sidecar-specification). |
-| **metadata** | Y | Metadata | See [metadata specification](#metadata-specification). |
-| **timeout** | Y | StartupTimeout | Maximum time allowed for an application to respond to readiness or health checks during startup.If the application does not respond within this time, the platform will mark the deployment as failed. |
-| **instances** | Y | Replicas | Number of CF application instances |
-| **stack** | Y | Stack | Stack is derived from the `stack` field in the application manifest. The value is captured for information purposes because it has no relevance in Kubernetes. |
+| **buildpacks** | BuildPacks | This field in CF specify how to build your application (e.g., "nodejs\_buildpack", "java\_buildpack"). |
+| **docker** | Process.Image | The value of the docker image pullspec is captured for each \`Process\` in the `Image` field. See [process specification](#process-specification). |
+| **env** | Env | Direct mapping from the application's `Env` field |
+| **no-route** | Routes | Processes will have no route information in the canonical form manifest. See [route specification](#route-specification). |
+| **processes** | Processes | See [process specification](#process-specification) |
+| **random-route** | Routes | See [route specification](#route-specification). |
+| **routes** | Routes | See [route specification](#route-specification). |
+| **services** | Services | See [service specification](#service-specification). |
+| **sidecars** | Sidecars | See [sidecar specification](#sidecar-specification). |
+| **metadata** | Metadata | See [metadata specification](#metadata-specification). |
+| **timeout** | StartupTimeout | Maximum time allowed for an application to respond to readiness or health checks during startup.If the application does not respond within this time, the platform will mark the deployment as failed. |
+| **instances** | Replicas | Number of CF application instances |
+| **stack** | Stack | Stack is derived from the `stack` field in the application manifest. The value is captured for information purposes because it has no relevance in Kubernetes. |
 
 ```go
 type Application struct {
@@ -318,12 +318,12 @@ type Application struct {
 
 ### Sidecar specification
 
-| Name | Mapped  | Canonical Form | Description |
-| ----- | :---: | ----- | ----- |
-| **name** | Y | Name | Name of the sidecar |
-| **process\_types** | Y | ProcessTypes | ProcessTypes captures the different process types defined for the sidecar. Compared to a Process, which has only one type, sidecar processes can accumulate more than one type. See [processtype specification](#processtype-specification).|
-| **command** | Y | Command | Command to run this sidecar |
-| **Memory** | Y | Memory | (Optional) The amount of memory to allocate to the sidecar. |
+| Name | Canonical Form | Description |
+| ----- | ----- | ----- |
+| **name** | Name | Name of the sidecar |
+| **process\_types** | ProcessTypes | ProcessTypes captures the different process types defined for the sidecar. Compared to a Process, which has only one type, sidecar processes can accumulate more than one type. See [processtype specification](#processtype-specification).|
+| **command** | Command | Command to run this sidecar |
+| **Memory** | Memory | (Optional) The amount of memory to allocate to the sidecar. |
 
 ```go
 type Sidecar struct {
@@ -346,11 +346,11 @@ type Sidecar struct {
 Maps to Spec.Services in the canonical form. Only \`name\`, \`parameters\`, and `bindng\_name` CF
 fields are captured.
 
-| Name | Mapped  | Canonical Form | Description |
-| ----- | :---: | ----- | ----- |
-| **name** | Y | Name | Name of the service required by the application |
-| **parameters** | Y | Parameters | key/value pairs for the application to use when connecting to the service. |
-| **binding\_name** | Y | BindingName | Name of the service to bind to. |
+| Name | Canonical Form | Description |
+| ----- | ----- | ----- |
+| **name** | Name | Name of the service required by the application |
+| **parameters** | Parameters | key/value pairs for the application to use when connecting to the service. |
+| **binding\_name** | BindingName | Name of the service to bind to. |
 
 ```go
 type Service struct {
@@ -368,13 +368,13 @@ type Service struct {
 
 ### Metadata specification
 
-| Name | Mapped  | Canonical Form | Description |
-| ----- | :---: | ----- | ----- |
-| **Application.name** | Y | Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format. |
-| **Space.name** | Y | Space | Captured at runtime only and it contains the name of the space where the application is deployed. |
-| **labels** | Y | Labels |  Labels capture the labels as defined in the `labels` field in the CF application manifest |
-| **annotations** | Y | Annotations | Annotations as defined in the `annotations` field in the CF application manifest |
-| **Space.version** | Y | Version | Captured at runtime and it defaults to 1. |
+| Name | Canonical Form | Description |
+| ----- | ----- | ----- |
+| **Application.name** | Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format. |
+| **Space.name** | Space | Captured at runtime only and it contains the name of the space where the application is deployed. |
+| **labels** | Labels |  Labels capture the labels as defined in the `labels` field in the CF application manifest |
+| **annotations** | Annotations | Annotations as defined in the `annotations` field in the CF application manifest |
+| **Space.version** | Version | Captured at runtime and it defaults to 1. |
 
 
 ```go
@@ -396,24 +396,24 @@ type Metadata struct {
 
 ### Process specification
 
-| Name | Mapped | Canonical Form | Comments |
-| ----- | :---: | ----- | ----- |
-| **type** | Y | Type | Only web or worker types are supported. |
+| Name | Canonical Form | Comments |
+| ----- | ----- | ----- |
+| **type** | Type | Only web or worker types are supported. |
 | **Application.docker** |  | Image | Pull specification of the container image. This field is derived from the docker’s field in the application spec. See [application specification](https://docs.google.com/document/d/1zYBWSe6WYQzv6eLozi6jBL-TYVpOKktuzv2no92tG30/edit?pli=1&tab=t.0#heading=h.5vxln8xxilyw). |
-| **command** | Y | Command | The command used to start the process. |
-| **disk\_quota** | Y | DiskQuota | Example: 1G unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case
+| **command** | Command | The command used to start the process. |
+| **disk\_quota** | DiskQuota | Example: 1G unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case
 Note: In CF, limit for all instances of the **web** process; |
-| **memory** | Y | Memory | The value at the application level defines the default memory requirements for all processes in the application, when not specified by the process itself. The discovery process will consolidate the amount of memory specific to each process based on the information either in the application or the process fields. Example: 128MB unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case. Note: In CF, limit for all instances of the **web** process; |
+| **memory** | Memory | The value at the application level defines the default memory requirements for all processes in the application, when not specified by the process itself. The discovery process will consolidate the amount of memory specific to each process based on the information either in the application or the process fields. Example: 128MB unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case. Note: In CF, limit for all instances of the **web** process; |
 | **health-check-http-endpoint** | Y  | Probe.Endpoint | health-check fields are captured in a Probe structure, common with the readiness-heath-check. See [Probe specification](#probe-specification). |
-| **health-check-invocation-timeout** | Y | Probe.Timeout | See [Probe specification](#probe-specification). |
-| **health-check-interval** | Y | Probe.Interval | See [Probe specification](#probe-specification). |
+| **health-check-invocation-timeout** | Probe.Timeout | See [Probe specification](#probe-specification). |
+| **health-check-interval** | Probe.Interval | See [Probe specification](#probe-specification). |
 | **health-check-type** | N |  | Type of health check to perform; `none` is deprecated and an alias to `process` |
-| **readiness-check-http-endpoint** | Y | Probe.Endpoint | See [Probe specification](#probe-specification). |
-| **readiness-check-invocation-timeout** | Y | Probe.Timeout | See [Probe specification](#probe-specification). |
-| **readiness-check-interval** | Y | Probe.Interval | See [Probe specification](#probe-specification). |
+| **readiness-check-http-endpoint** | Probe.Endpoint | See [Probe specification](#probe-specification). |
+| **readiness-check-invocation-timeout** | Probe.Timeout | See [Probe specification](#probe-specification). |
+| **readiness-check-interval** | Probe.Interval | See [Probe specification](#probe-specification). |
 | **readiness-health-check-type** | N |  | Type of health check to perform; `none` is deprecated and an alias to `process` |
-| **instances** | Y | Replicas | This field determines how many instances of the process will run in the application. |
-| **log-rate-limit-per-second** | Y | LogRateLimit | The log rate limit for all the instances of the process; unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case, or -1 or 0 |
+| **instances** | Replicas | This field determines how many instances of the process will run in the application. |
+| **log-rate-limit-per-second** | LogRateLimit | The log rate limit for all the instances of the process; unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case, or -1 or 0 |
 
 ```go
 type Process struct {
@@ -459,11 +459,11 @@ const (
 
 ## Probe specification
 
-| Name | Mapped  | Canonical Form | Description |
-| ----- | :---: | ----- | ----- |
-| **health-check-http-endpoint** | Y | Endpoint | HTTP endpoint to be used for health checks, specifying the path to be monitored. |
-| **health-check-invocation-timeout** | Y | Timeout | Maximum time allowed for each health check invocation to complete. |
-| **health-check-interval** | Y | Interval | Interval at which health checks are performed to monitor the application’s status. |
+| Name | Canonical Form | Description |
+| ----- | ----- | ----- |
+| **health-check-http-endpoint** | Endpoint | HTTP endpoint to be used for health checks, specifying the path to be monitored. |
+| **health-check-invocation-timeout** | Timeout | Maximum time allowed for each health check invocation to complete. |
+| **health-check-interval** | Interval | Interval at which health checks are performed to monitor the application’s status. |
 | **health-check-type** | N |  | Specifies the type of health check to perform (`none`, `http`, `tcp`, or `process`). Note: `none` is deprecated and an alias for process. |
 
 ```go
@@ -497,10 +497,10 @@ Examples:
 	\- route: www.example.com/foo
 	\- route: tcp-example.com:1234
 
-| Name | Mapped  | Canonical Form | Description |
-| ----- | :---: | ----- | ----- |
-| **url** | Y | URL  | `URL as defined in the route field value.`  |
-| **protocol** | Y | Protocol | It can be `HTTP`, `HTTPS` or `TCP`. |
+| Name | Canonical Form | Description |
+| ----- | ----- | ----- |
+| **url** | URL  | `URL as defined in the route field value.`  |
+| **protocol** | Protocol | It can be `HTTP`, `HTTPS` or `TCP`. |
 
 ```go
 type Route struct {
