@@ -294,13 +294,13 @@ type Application struct {
   // Env captures the `env` field values in the CF application manifest.
   Env map[string]string `json:"env,omitempty"`
   // Routes represent the routes that are made available by the application.
-  Routes Routes `json:"routes,omitempty"`
+  Routes []Route `json:"route,omitempty"`
   // Services captures the `services` field values in the CF application manifest.
-  Services Services `json:"services,omitempty"`
+  Services []Service `json:"service,omitempty"`
   // Processes captures the `processes` field values in the CF application manifest.
-  Processes Processes `json:"processes,omitempty"`
+  Processes []Process `json:"process,omitempty"`
   // Sidecars captures the `sidecars` field values in the CF application manifest.
-  Sidecars Sidecars `json:"sidecars,omitempty"`
+  Sidecars []Sidecar `json:"sidecar,omitempty"`
   // Stack represents the `stack` field in the application manifest.
   // The value is captured for information purposes because it has no relevance
   // in Kubernetes.
@@ -332,7 +332,7 @@ type Sidecar struct {
   // ProcessTypes captures the different process types defined for the sidecar.
   // Compared to a Process, which has only one type, sidecar processes can
   // accumulate more than one type.
-  ProcessTypes ProcessTypes `json:"processTypes"`
+  ProcessTypes []ProcessType `json:"processType"`
   // Command captures the command to run the sidecar
   Command []string `json:"command"`
   // Memory represents the amount of memory to allocate to the sidecar.
