@@ -274,7 +274,7 @@ it does not already exist.
 | **name** | Metadata.Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format.
 See [metadata specification](#metadata-specification). |
 | **buildpacks** | BuildPacks | This field in CF specify how to build your application (e.g., "nodejs\_buildpack", "java\_buildpack"). |
-| **docker** | Process.Image | The value of the docker image pullspec is captured for each \`Process\` in the `Image` field. See [process specification](#process-specification). |
+| **docker** | Docker | The value of the docker image pullspec and the username. See [docker specification](#docker-specification). |
 | **env** | Env | Direct mapping from the application's `Env` field |
 | **no-route** | Routes | Processes will have no route information in the canonical form manifest. See [route specification](#route-specification). |
 | **processes** | Processes | See [process specification](#process-specification) |
@@ -313,6 +313,22 @@ type Application struct {
   StartupTimeout *uint `json:"startupTimeout,omitempty"`
   // BuildPacks capture the buildpacks defined in the CF application manifest.
   BuildPacks []string `json:"buildPacks,omitempty"`
+}
+```
+
+### Docker specification
+
+| Name | Canonical Form | Description |
+| ----- | ----- | ----- |
+| **image** | Image | Pullspec of the container image. |
+| **username** | Username | (Optional) Username to authenticate against the container registry.|
+
+```go
+type Docker struct {
+  // Image represents the pullspect where the container image is located.
+  Image string `json:"image" validate:"required"`
+  // Username captures the username to authenticate against the container registry.
+  Username string `json:"username,omitempty"`
 }
 ```
 
