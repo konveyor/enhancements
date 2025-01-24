@@ -227,7 +227,7 @@ Example:
 | Name | Type | Description |
 | ----- | ----- | ----- |
 | **route** | string | **(Required)** The route URI |
-| **protocol** | string | (Optional) Protocol to use for this route. Valid protocols are `http1`, `http2`, and `tcp`. |
+| **protocol** | string | (Optional) Protocol to use for this route. Valid protocols are `http`, `http2`, and `tcp`. |
 
 #### [Service-level configuration](https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#services-block)
 
@@ -290,7 +290,7 @@ See [metadata specification](#metadata-specification). |
 ```go
 type Application struct {
   // Metadata captures the name, labels and annotations in the application.
-  Metadata Metadata `json:",inline"`
+  Metadata Metadata `json:",inline" validate:"required"`
   // Env captures the `env` field values in the CF application manifest.
   Env map[string]string `json:"env,omitempty"`
   // Routes represent the routes that are made available by the application.
@@ -309,8 +309,8 @@ type Application struct {
   // respond to readiness or health checks during startup.
   // If the application does not respond within this time, the platform will mark
   // the deployment as failed. The default value is 60 seconds.
-  // https://github.com/cloudfoundry/docs-dev-guide/blob/96f19d9d67f52ac7418c147d5ddaa79c957eec34/deploy-apps/  large-app-deploy.html.md.erb#L35
-  StartupTimeout uint `json:"startupTimeout,omitempty"`
+  // https://github.com/cloudfoundry/docs-dev-guide/blob/96f19d9d67f52ac7418c147d5ddaa79c957eec34/deploy-apps/large-app-deploy.html.md.erb#L35
+  StartupTimeout *uint `json:"startupTimeout,omitempty"`
   // BuildPacks capture the buildpacks defined in the CF application manifest.
   BuildPacks []string `json:"buildPacks,omitempty"`
 }
@@ -328,13 +328,13 @@ type Application struct {
 ```go
 type Sidecar struct {
   // Name represents the name of the Sidecar
-  Name string `json:"name"`
+  Name string `json:"name" validate:"required"`
   // ProcessTypes captures the different process types defined for the sidecar.
   // Compared to a Process, which has only one type, sidecar processes can
   // accumulate more than one type.
-  ProcessTypes []ProcessType `json:"processType"`
+  ProcessTypes []ProcessType `json:"processType" validate:"required,oneof=worker web"`
   // Command captures the command to run the sidecar
-  Command []string `json:"command"`
+  Command []string `json:"command" validate="required"`
   // Memory represents the amount of memory to allocate to the sidecar.
   // It's an optional field.
   Memory string `json:"memory,omitempty"`
@@ -358,7 +358,7 @@ type Service struct {
   // application. This field represents the runtime name of the service, captured
   // from the 3 different cases where the service name can be listed.
   // For more information check https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#services-block
-  Name string `json:"name"`
+  Name string `json:"name" validate:"required"`
   // Parameters contain the k/v relationship for the aplication to bind to the service
   Parameters map[string]interface{} `json:"parameters,omitempty"`
   // BindingName captures the name of the service to bind to.
@@ -380,7 +380,7 @@ type Service struct {
 ```go
 type Metadata struct {
   // Name capture the `name` field int CF application manifest
-  Name string `json:"name"`
+  Name string `json:"name" validate:"required"`
   // Space captures the `space` where the CF application is deployed at runtime. The field is empty if the
   // application is discovered directly from the CF manifest. It is equivalent to a Namespace in Kubernetes.
   Space string `json:"space,omitempty"`
@@ -429,11 +429,11 @@ type Process struct {
   // Memory represents the amount of memory requested by the process.
   Memory string `json:"memory,omitempty"`
   // HealthCheck captures the health check information
-  HealthCheck Probe `json:"healthCheck"`
+  HealthCheck *Probe `json:"healthCheck,omitempty"`
   // ReadinessCheck captures the readiness check information.
-  ReadinessCheck Probe `json:"readinessCheck"`
+  ReadinessCheck *Probe `json:"readinessCheck,omitempty"`
   // Replicas represents the number of instances for this process to run.
-  Replicas uint `json:"replicas"`
+  Replicas uint `json:"replicas" validate:"required"`
   // LogRateLimit represents the maximum amount of logs to be captured per second.
   LogRateLimit string `json:"logRateLimit,omitempty"`
 }
@@ -464,17 +464,19 @@ const (
 | **health-check-http-endpoint** | Endpoint | HTTP endpoint to be used for health checks, specifying the path to be monitored. |
 | **health-check-invocation-timeout** | Timeout | Maximum time allowed for each health check invocation to complete. |
 | **health-check-interval** | Interval | Interval at which health checks are performed to monitor the application’s status. |
-| **health-check-type** | N |  | Specifies the type of health check to perform (`none`, `http`, `tcp`, or `process`). Note: `none` is deprecated and an alias for process. |
+| **health-check-type** | Type  | Specifies the type of health check to perform (`none`, `http`, `tcp`, or `process`). Note: `none` is deprecated and an alias for process. |
 
 ```go
 type Probe struct {
   // Endpoint represents the URL location where to perform the probe check.
-  Endpoint string `json:"endpoint"`
+  Endpoint string `json:"endpoint" validate:"required"`
   // Timeout represents the number of seconds in which the probe check can be considered as timedout.
   // https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#timeout
-  Timeout uint `json:"timeout"`
+  Timeout uint `json:"timeout" validate:"required"`
   // Interval represents the number of seconds between probe checks.
-  Interval uint `json:"interval"`
+  Interval uint `json:"interval" validate:"required"`
+  // Type specifies the type of health check to perform
+  Type string `json:"type" validate:"required,oneof=http tcp process"`
 }
 ```
 
@@ -499,23 +501,23 @@ Examples:
 
 | Name | Canonical Form | Description |
 | ----- | ----- | ----- |
-| **url** | URL  | `URL as defined in the route field value.`  |
-| **protocol** | Protocol | It can be `HTTP`, `HTTPS` or `TCP`. |
+| **route** | Route  | `Route as defined in the route field value.`  |
+| **protocol** | Protocol | It can be `http`, `http2` or `tcp`. |
 
 ```go
 type Route struct {
-  // URL captures the FQDN, path and port of the route.
-  URL string `json:"url"`
+  // Route captures the domain name, port and path of the route.
+  Route string `json:"url" validate:"required"`
   // Protocol captures the protocol type: http, http2 or tcp. Note that the CF `protocol` field is only available
   // for CF deployments that use HTTP/2 routing.
-  Protocol RouteProtocol `json:"protocol"`
+  Protocol RouteProtocol `json:"protocol" validate:"required,oneof=http http2 tcp"`
 }
 
 type RouteProtocol string
 
 const (
 	HTTP  RouteProtocol = "http"
-	HTTPS RouteProtocol = "https"
+	HTTP2 RouteProtocol = "http2"
 	TCP   RouteProtocol = "tcp"
 )
 ```
