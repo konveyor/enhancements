@@ -350,7 +350,7 @@ type Sidecar struct {
   // accumulate more than one type.
   ProcessTypes []ProcessType `json:"processType" validate:"required,oneof=worker web"`
   // Command captures the command to run the sidecar
-  Command []string `json:"command" validate="required"`
+  Command []string `json:"command" validate:"required"`
   // Memory represents the amount of memory to allocate to the sidecar.
   // It's an optional field.
   Memory string `json:"memory,omitempty"`
