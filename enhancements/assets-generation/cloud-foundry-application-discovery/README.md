@@ -436,8 +436,6 @@ type Process struct {
   // Type captures the `type` field in the Process specification.
   // Accepted values are `web` or `worker`
   Type ProcessType `json:"type,omitempty"`
-  // Image represents the pull spec of the container image.
-  Image string `json:"image"`
   // Command represents the command used to run the process.
   Command []string `json:"command,omitempty"`
   // DiskQuota represents the amount of persistent disk requested by the process.
