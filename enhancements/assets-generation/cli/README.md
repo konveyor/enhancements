@@ -30,13 +30,15 @@ see-also:
    configurations during discovery or generation?
 2. Should the CLI provide validation against Kubernetes best practices
    (e.g., resource limits, liveness probes) during artifact generation?
+   Note: yaml provider in the analyzer that has this capability.
+   We could leverage that if needed.
 
 ## Summary
 
 This proposal introduces enhancements to the existing Kantra tool to support the
 discovery and transformation of resources from Cloud Foundry to
 Kubernetes. The goal is to create a modular CLI that outputs a canonical
-representation of resources and generates deployment artifacts (e.g., Helm
+representation of resources and generates deployment assets (e.g., Helm
 charts). The enhancement will provide a foundational capability for platform
 migrations, enabling a tech-preview release in an upcoming version of Kantra and
 integration into downstream workflows.
@@ -108,12 +110,14 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
     - **Flags and Options:**
       - `--platform=<platform>` (required): Specifies the platform to discover.
         Supported value for MVP: cf.
-      - `--application=<name>` (optional): Specifies the application to be analyzed.
+      - `--input=<name>` (optional): Specifies the application to be analyzed.
       - `--use-agent=<agent_name>` (optional): Enables agent-based discovery for extracting data.
       - `--use-live-connection` (optional): Uses live platform connections for real-time discovery.
       - `--output=<file>` (optional): Writes the output to a specified file.
         Defaults to standard output.
-      - `--verbose` (optional): Provides additional details about the discovery
+      - `--list-platforms` (optional): Lists the available discovery providers.
+        For mvp, it defaults to `cf`
+      - `--log-level` (optional): Provides additional details about the discovery
         process in the logs.
     - **Behavior:**
       - Scans the provided application input (e.g., Cloud Foundry manifest
