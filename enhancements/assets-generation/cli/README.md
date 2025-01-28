@@ -65,7 +65,9 @@ integration with other tools and workflows.
 - Create a standalone library for integration with other tools and workflows.
 - Extend Kantra to support:
   - `discover` command: Output a YAML/JSON representation of Cloud Foundry resources.
-  - `generate` command: Produce Helm charts for deployment to Kubernetes.
+  - `generate` command: Produce Helm charts for deployment to Kubernetes. For the mvp,
+    the we will generate a values.yaml file based on the CF discovery manifest,
+     and combine it with the user's templates to generate a helm chart
 - Utilize the [canonical configuration enhancement](link: TODO) to serve as a consistent
   intermediary for platform transformations.
 - Enhance logging and error reporting for better user experience and debugging.
@@ -117,8 +119,8 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
       - Scans the provided application input (e.g., Cloud Foundry manifest
         files) and extracts relevant configuration details.
       - Outputs a structured canonical representation containing metadata (e.g.,
-        application name, instances, routes), runtime information (e.g., memory,
-        disk), and deployment settings.
+        application name, instances, routes), runtime information (e.g., route, etc ),
+        and deployment settings.
       - **Error Handling:**
         - Detect and report missing or malformed input files with detailed error messages.
         - Provide retry options for transient errors during discovery.
@@ -158,14 +160,14 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
       - `--template=<path>` (required): Path to the Helm template to use for
         chart generation.
       - `--output-dir=<directory>` (optional): Directory to save the generated
-        Helm chart. Defaults to the current directory.
+        Helm chart. Defaults to stdio.
       - `--type=<type>` (optional): Specifies the type of generator. MVP
-        supports helm.
+        supports helm. Defaults to `Helm`
     - **Behavior:**
       - Reads the canonical representation file to extract configuration
         details.
-      - Applies the provided Helm template to generate deployment artifacts for
-        Kubernetes.
+      - Applies the provided Helm template to the canonical form and the user provided templates,
+        and generates Kubernetes manifests.
       - Validates the generated artifacts for completeness and correctness.
     - **Error Handling:**
       - Log errors when applying Helm templates.
@@ -185,9 +187,7 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
   artifacts.
 
 #### **Risks**
-1. Generated artifacts may not match user expectations.
-   - **Mitigation:** Provide comprehensive logs and validation steps.
-2. Modularity increases the maintenance burden.
+1. Modularity increases the maintenance burden.
    - **Mitigation:** Maintain clear documentation and well-defined APIs for each module.
 
 ## Design Details
@@ -196,7 +196,7 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
 
 1. Unit tests for the discover and generate commands.
 2. Integration tests for end-to-end workflows (Cloud Foundry -> canonical -> Helm charts).
-3. Manual validation with sample Cloud Foundry applications.
+3. Automated validation with sample Cloud Foundry applications.
 
 ### Upgrade/Downgrade Strategy
 
