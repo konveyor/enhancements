@@ -437,7 +437,7 @@ Note: In CF, limit for all instances of the **web** process; |
 type Process struct {
   // Type captures the `type` field in the Process specification.
   // Accepted values are `web` or `worker`
-  Type ProcessType `json:"type,omitempty"`
+  Type ProcessType `json:"type" validate:"required"`
   // Command represents the command used to run the process.
   Command []string `json:"command,omitempty"`
   // DiskQuota represents the amount of persistent disk requested by the process.
@@ -523,7 +523,7 @@ Examples:
 ```go
 type Route struct {
   // Route captures the domain name, port and path of the route.
-  Route string `json:"url" validate:"required"`
+  Route string `json:"route" validate:"required"`
   // Protocol captures the protocol type: http, http2 or tcp. Note that the CF `protocol` field is only available
   // for CF deployments that use HTTP/2 routing.
   Protocol RouteProtocol `json:"protocol" validate:"required,oneof=http http2 tcp"`
