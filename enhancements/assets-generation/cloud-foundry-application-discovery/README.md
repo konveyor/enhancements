@@ -305,12 +305,12 @@ type Application struct {
   // The value is captured for information purposes because it has no relevance
   // in Kubernetes.
   Stack string `json:"stack,omitempty"`
-  // StartupTimeout specifies the maximum time allowed for an application to
+  // Timeout specifies the maximum time allowed for an application to
   // respond to readiness or health checks during startup.
   // If the application does not respond within this time, the platform will mark
   // the deployment as failed. The default value is 60 seconds.
   // https://github.com/cloudfoundry/docs-dev-guide/blob/96f19d9d67f52ac7418c147d5ddaa79c957eec34/deploy-apps/large-app-deploy.html.md.erb#L35
-  StartupTimeout *uint `json:"startupTimeout,omitempty"`
+  Timeout *uint `json:"timeout,omitempty"`
   // BuildPacks capture the buildpacks defined in the CF application manifest.
   BuildPacks []string `json:"buildPacks,omitempty"`
   // Docker captures the Docker specification in the CF application manifest.
