@@ -283,8 +283,8 @@ See [metadata specification](#metadata-specification). |
 | **services** | Services | See [service specification](#service-specification). |
 | **sidecars** | Sidecars | See [sidecar specification](#sidecar-specification). |
 | **metadata** | Metadata | See [metadata specification](#metadata-specification). |
-| **timeout** | StartupTimeout | Maximum time allowed for an application to respond to readiness or health checks during startup.If the application does not respond within this time, the platform will mark the deployment as failed. |
-| **instances** | Replicas | Number of CF application instances |
+| **timeout** | Timeout | Maximum time allowed for an application to respond to readiness or health checks during startup.If the application does not respond within this time, the platform will mark the deployment as failed. |
+| **instances** | Instances | Number of CF application instances |
 | **stack** | Stack | Stack is derived from the `stack` field in the application manifest. The value is captured for information purposes because it has no relevance in Kubernetes. |
 
 ```go
@@ -315,6 +315,8 @@ type Application struct {
   BuildPacks []string `json:"buildPacks,omitempty"`
   // Docker captures the Docker specification in the CF application manifest.
   Docker *Docker `json:"docker,omitempty"`
+  // Instances captures the number of instances to run concurrently for this application
+  Instances *uint `json:"instances,omitempty"`
 }
 ```
 
