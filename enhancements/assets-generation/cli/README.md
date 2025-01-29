@@ -189,6 +189,8 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
 - Conduct code reviews with security specialists to mitigate risks.
 - Validate CLI outputs to prevent injection vulnerabilities in generated
   artifacts.
+- Validate that access to CF platform credentials and RBAC access rights don't
+  violate pre-existing policies.
 
 #### **Risks**
 1. Modularity increases the maintenance burden.
