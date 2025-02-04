@@ -36,17 +36,16 @@ see-also:
 ## Summary
 
 This proposal introduces enhancements to the existing Kantra tool to support the
-discovery and transformation of resources from Cloud Foundry to
-Kubernetes. The goal is to create a modular CLI that outputs a canonical
+discovery and transformation of resources from a source platform to a target platform
+(eg: Cloudfoundry -> Kubernetes). The goal is to create a modular CLI that outputs a canonical
 representation of resources and generates deployment assets (e.g., Helm
 charts). The enhancement will provide a foundational capability for platform
-migrations, enabling a tech-preview release in an upcoming version of Kantra and
-integration into downstream workflows.
+migrations, enabling a tech-preview release in an upcoming version of Kantra.
 
 ## Motivation
 
-Organizations migrating workloads from Cloud Foundry to Kubernetes require
-reliable tools to simplify resource discovery and deployment transformation.
+Organizations migrating workloads from one platform to another (e.g. Cloud Foundry to Kubernetes) 
+require reliable tools to simplify resource discovery and deployment transformation.
 Existing tools like Move2Kube (M2K) provide limited flexibility and lack a
 modular approach, resulting in suboptimal user experiences. This enhancement
 addresses these gaps by extending the Kantra CLI with commands for discovery and
@@ -66,9 +65,9 @@ integration with other tools and workflows.
 
 - Create a standalone library for integration with other tools and workflows.
 - Extend Kantra to support:
-  - `discover` command: Output a YAML/JSON representation of Cloud Foundry resources.
-  - `generate` command: Produce Helm charts for deployment to Kubernetes. For the mvp,
-    the we will generate a values.yaml file based on the CF discovery manifest,
+  - `discover` command: Output a YAML representation of source platform resources.
+  - `generate` command: Produce assets for deployment to the target plaform. For the mvp,
+     we will generate a values.yaml file based on the source platform config,
      and combine it with the user's templates to generate a helm chart
 - Utilize the [canonical configuration enhancement](link: TODO) to serve as a consistent
   intermediary for platform transformations.
@@ -133,29 +132,6 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
         - Through filesystem access to the platform's installation paths (e.g., for Application Servers
           or Servlet Containers), implemented as an agent on the host.
           
-  - `agent`: This command provides management capabilities for platform agents.
-     Details:
-    - **Subcommands:**
-      - `deploy-agent`: Deploys the agent to the target platform host.
-        - **Flags and Options:**
-          - `--platform=<platform>` (required): Specifies the platform to deploy the agent to.
-          - `--agent-name=<name>` (required): Name of the agent.
-          - `--config=<file>` (optional): Specifies a configuration file for the agent.
-      - `check-status`: Reports the health and operational status of the deployed agent.
-        - **Flags and Options:**
-          - `--platform=<platform>` (required): Specifies the platform for which the agent status should be checked.
-          - `--agent-name=<name>` (required): Specifies the agent's name.
-      - `remove-agent`: Deletes the agent and removes all associated files.
-        - **Flags and Options:**
-          - `--platform=<platform>` (required): Specifies the platform from which the agent should be removed.
-          - `--agent-name=<name>` (required): Specifies the agent to remove if multiple agents exist on the platform.
-          - `--force` (optional): Forces the removal of the agent, bypassing confirmation prompts.
-    - **Behavior:**
-      - Provides seamless lifecycle management for agents, including deployment, health monitoring, and removal.
-      - Ensures agent interactions are logged for traceability and troubleshooting.
-      - Fetches data about the platform and/or application.
-  **_NOTE_**: This subcommand will not be a part of initial MVP. 
-
   - `generate`: This command takes a canonical representation and a Helm
     template to produce deployment-ready Helm charts. Details:
     - **Flags and Options:**
@@ -201,8 +177,10 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
 ### Test Plan
 
 1. Unit tests for the discover and generate commands.
-2. Integration tests for end-to-end workflows (Cloud Foundry -> canonical -> Helm charts).
-3. Automated validation with sample Cloud Foundry applications.
+2. Integration tests for end-to-end workflows (eg: Cloud Foundry -> discovery manifest -> Helm chart).
+3. Test each of the components separately: Discovery and Generate.
+4. Ensure sensitive data is not exposed.
+
 
 ### Upgrade/Downgrade Strategy
 
