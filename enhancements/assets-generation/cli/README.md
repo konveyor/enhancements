@@ -143,6 +143,10 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
         Helm chart. Defaults to stdio.
       - `--type=<type>` (optional): Specifies the type of generator. MVP
         supports helm. Defaults to `Helm`
+      - `--set key=value` (optional): Sets a value for the given in the command line.
+        If the key already exists in the values file that was passed, it will override its value.
+      - `--non-k8s-only` (optional): Only renders the non-k8s templates available in the files/konveyor
+        path from the target Helm Chart.
     - **Behavior:**
       - Reads the canonical representation file to extract configuration
         details.
