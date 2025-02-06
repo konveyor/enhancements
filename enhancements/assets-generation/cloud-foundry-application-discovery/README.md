@@ -60,9 +60,17 @@ similar tool to Konveyor, extensible, and that improves on the templating engine
 that it offers a pluggable design that can be used to implement well known
 templating engines.
 
+Overall, Konveyor provides the analysis of an application with the goal of finding
+potential challenges to migrating such application to a target platform. Assert generation
+enables Konveyor to enables users the ability to auto generate target manifests for the
+intented platform.
+
 ### Goals
 
 * Identify and understand Cloud Foundry Application manifests (v3) fields.
+* Define the canonical form for Cloud Foundry Application manifests (V3). The
+  discovery of a Cloud Foundry application will populate the fields of the canonical
+  form so that they can be used as `values.yaml` in the transformation with Helm templates.
 * Extract and process Cloud Foundry application manifest into a new canonical
   form, capturing the intent of the original field value and with the foresight
   of the future application of the given field in a Kubernetes platform.
@@ -276,47 +284,47 @@ See [metadata specification](#metadata-specification). |
 | **buildpacks** | BuildPacks | This field in CF specify how to build your application (e.g., "nodejs\_buildpack", "java\_buildpack"). |
 | **docker** | Docker | The value of the docker image pullspec and the username. See [docker specification](#docker-specification). |
 | **env** | Env | Direct mapping from the application's `Env` field |
-| **no-route** | Routes | Processes will have no route information in the canonical form manifest. See [route specification](#route-specification). |
+| **no-route** | Routes | Processes will have no route information in the canonical form manifest. Defaults to false. See [route specification](#route-specification). |
 | **processes** | Processes | See [process specification](#process-specification) |
 | **random-route** | Routes | See [route specification](#route-specification). |
 | **routes** | Routes | See [route specification](#route-specification). |
 | **services** | Services | See [service specification](#service-specification). |
 | **sidecars** | Sidecars | See [sidecar specification](#sidecar-specification). |
 | **metadata** | Metadata | See [metadata specification](#metadata-specification). |
-| **timeout** | Timeout | Maximum time allowed for an application to respond to readiness or health checks during startup.If the application does not respond within this time, the platform will mark the deployment as failed. |
-| **instances** | Instances | Number of CF application instances |
+| **timeout** | Timeout | Maximum time allowed for an application to respond to readiness or health checks during startup.If the application does not respond within this time, the platform will mark the deployment as failed. Defaults to 60 seconds and maximum is 180 seconds. Can be changes in the Cloud Foundry Controller.|
+| **instances** | Instances | Number of CF application instances. Defaults to 1. |
 | **stack** | Stack | Stack is derived from the `stack` field in the application manifest. The value is captured for information purposes because it has no relevance in Kubernetes. |
 
 ```go
 type Application struct {
-  // Metadata captures the name, labels and annotations in the application.
-  Metadata Metadata `yaml:",inline" validate:"required"`
-  // Env captures the `env` field values in the CF application manifest.
-  Env map[string]string `yaml:"env,omitempty"`
-  // Routes represent the routes that are made available by the application.
-  Routes []Route `yaml:"route,omitempty"`
-  // Services captures the `services` field values in the CF application manifest.
-  Services []Service `yaml:"service,omitempty"`
-  // Processes captures the `processes` field values in the CF application manifest.
-  Processes []Process `yaml:"process,omitempty"`
-  // Sidecars captures the `sidecars` field values in the CF application manifest.
-  Sidecars []Sidecar `yaml:"sidecar,omitempty"`
-  // Stack represents the `stack` field in the application manifest.
-  // The value is captured for information purposes because it has no relevance
-  // in Kubernetes.
-  Stack string `yaml:"stack,omitempty"`
-  // Timeout specifies the maximum time allowed for an application to
-  // respond to readiness or health checks during startup.
-  // If the application does not respond within this time, the platform will mark
-  // the deployment as failed. The default value is 60 seconds.
-  // https://github.com/cloudfoundry/docs-dev-guide/blob/96f19d9d67f52ac7418c147d5ddaa79c957eec34/deploy-apps/large-app-deploy.html.md.erb#L35
-  Timeout *uint `yaml:"timeout,omitempty"`
-  // BuildPacks capture the buildpacks defined in the CF application manifest.
-  BuildPacks []string `yaml:"buildPacks,omitempty"`
-  // Docker captures the Docker specification in the CF application manifest.
-  Docker *Docker `yaml:"docker,omitempty"`
-  // Instances captures the number of instances to run concurrently for this application
-  Instances *uint `yaml:"instances,omitempty"`
+	Metadata Metadata `yaml:",inline" validate:"required"`
+	// Env captures the `env` field values in the CF application manifest.
+	Env map[string]string `yaml:"env,omitempty"`
+	// Routes represent the routes that are made available by the application.
+	Routes RouteSpec `yaml:"routes,inline,omitempty"`
+	// Services captures the `services` field values in the CF application manifest.
+	Services Services `yaml:"services,omitempty"`
+	// Processes captures the `processes` field values in the CF application manifest.
+	Processes Processes `yaml:"processes,omitempty"`
+	// Sidecars captures the `sidecars` field values in the CF application manifest.
+	Sidecars Sidecars `yaml:"sidecars,omitempty"`
+	// Stack represents the `stack` field in the application manifest.
+	// The value is captured for information purposes because it has no relevance
+	// in Kubernetes.
+	Stack string `yaml:"stack,omitempty"`
+	// Timeout specifies the maximum time allowed for an application to
+	// respond to readiness or health checks during startup.
+	// If the application does not respond within this time, the platform will mark
+	// the deployment as failed. The default value is 60 seconds and maximum to 180 seconds, but both values can be changed in the Cloud Foundry Controller.
+	// https://github.com/cloudfoundry/docs-dev-guide/blob/96f19d9d67f52ac7418c147d5ddaa79c957eec34/deploy-apps/large-app-deploy.html.md.erb#L35
+	// Default is 60 (seconds).
+	Timeout int `yaml:"timeout" validate:"min=0,max=180"`
+	// BuildPacks capture the buildpacks defined in the CF application manifest.
+	BuildPacks []string `yaml:"buildPacks,omitempty"`
+	// Docker captures the Docker specification in the CF application manifest.
+	Docker Docker `yaml:"docker,omitempty"`
+	// Instances captures the number of instances to run concurrently for this application. Default is 1.
+	Instances int `yaml:"instances" validate:"required,min=1"`
 }
 ```
 
@@ -329,10 +337,10 @@ type Application struct {
 
 ```go
 type Docker struct {
-  // Image represents the pullspect where the container image is located.
-  Image string `yaml:"image" validate:"required"`
-  // Username captures the username to authenticate against the container registry.
-  Username string `yaml:"username,omitempty"`
+	// Image represents the pullspect where the container image is located.
+	Image string `yaml:"image" validate:"required"`
+	// Username captures the username to authenticate against the container registry.
+	Username string `yaml:"username,omitempty"`
 }
 ```
 
@@ -346,18 +354,18 @@ type Docker struct {
 | **Memory** | Memory | (Optional) The amount of memory to allocate to the sidecar. |
 
 ```go
-type Sidecar struct {
-  // Name represents the name of the Sidecar
-  Name string `yaml:"name" validate:"required"`
-  // ProcessTypes captures the different process types defined for the sidecar.
-  // Compared to a Process, which has only one type, sidecar processes can
-  // accumulate more than one type.
-  ProcessTypes []ProcessType `yaml:"processType" validate:"required,oneof=worker web"`
-  // Command captures the command to run the sidecar
-  Command []string `yaml:"command" validate:"required"`
-  // Memory represents the amount of memory to allocate to the sidecar.
-  // It's an optional field.
-  Memory string `yaml:"memory,omitempty"`
+type SidecarSpec struct {
+	// Name represents the name of the Sidecar
+	Name string `yaml:"name" validate:"required"`
+	// ProcessTypes captures the different process types defined for the sidecar.
+	// Compared to a Process, which has only one type, sidecar processes can
+	// accumulate more than one type.
+	ProcessTypes []ProcessType `yaml:"processType" validate:"required,oneof=worker web"`
+	// Command captures the command to run the sidecar
+	Command string `yaml:"command" validate:"required"`
+	// Memory represents the amount of memory to allocate to the sidecar.
+	// It's an optional field.
+	Memory string `yaml:"memory,omitempty"`
 }
 ```
 
@@ -373,16 +381,16 @@ fields are captured.
 | **binding\_name** | BindingName | Name of the service to bind to. |
 
 ```go
-type Service struct {
-  // Name represents the name of the Cloud Foundry service required by the
-  // application. This field represents the runtime name of the service, captured
-  // from the 3 different cases where the service name can be listed.
-  // For more information check https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#services-block
-  Name string `yaml:"name" validate:"required"`
-  // Parameters contain the k/v relationship for the aplication to bind to the service
-  Parameters map[string]interface{} `yaml:"parameters,omitempty"`
-  // BindingName captures the name of the service to bind to.
-  BindingName string `yaml:"bindingName,omitempty"`
+type ServiceSpec struct {
+	// Name represents the name of the Cloud Foundry service required by the
+	// application. This field represents the runtime name of the service, captured
+	// from the 3 different cases where the service name can be listed.
+	// For more information check https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#services-block
+	Name string `yaml:"name" validate:"required"`
+	// Parameters contain the k/v relationship for the aplication to bind to the service
+	Parameters map[string]interface{} `yaml:"parameters,omitempty"`
+	// BindingName captures the name of the service to bind to.
+	BindingName string `yaml:"bindingName,omitempty"`
 }
 ```
 
@@ -399,18 +407,19 @@ type Service struct {
 
 ```go
 type Metadata struct {
-  // Name capture the `name` field int CF application manifest
-  Name string `yaml:"name" validate:"required"`
-  // Space captures the `space` where the CF application is deployed at runtime. The field is empty if the
-  // application is discovered directly from the CF manifest. It is equivalent to a Namespace in Kubernetes.
-  Space string `yaml:"space,omitempty"`
-  // Labels capture the labels as defined in the `annotations` field in the CF application manifest
-  Labels map[string]string `yaml:"labels,omitempty"`
-  // Annotations capture the annotations as defined in the `labels` field in the CF application manifest
-  Annotations map[string]string `yaml:"annotations,omitempty"`
-  // Version captures the version of the manifest containing the resulting CF application manifests list retrieved via REST API.
-  // Only version 1 is supported at this moment. See https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#manifest-schema-version
-  Version string `yaml:"version"`
+	// Name capture the `name` field int CF application manifest
+	Name string `yaml:"name" validate:"required"`
+	// Space captures the `space` where the CF application is deployed at runtime. The field is empty if the
+	// application is discovered directly from the CF manifest. It is equivalent to a Namespace in Kubernetes.
+	Space string `yaml:"space,omitempty"`
+	// Labels capture the labels as defined in the `annotations` field in the CF application manifest
+	Labels map[string]*string `yaml:"labels,omitempty"`
+	// Annotations capture the annotations as defined in the `labels` field in the CF application manifest
+	Annotations map[string]*string `yaml:"annotations,omitempty"`
+	// Version captures the version of the manifest containing the resulting CF application manifests list retrieved via REST API.
+	// Only version 1 is supported at this moment See https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#manifest-schema-version
+	// Defaults to 1
+	Version string `yaml:"version"`
 }
 ```
 
@@ -419,42 +428,53 @@ type Metadata struct {
 | Name | Canonical Form | Comments |
 | ----- | ----- | ----- |
 | **type** | Type | Only web or worker types are supported. |
-| **Application.docker** |  | Image | Pull specification of the container image. This field is derived from the docker’s field in the application spec. See [application specification](https://docs.google.com/document/d/1zYBWSe6WYQzv6eLozi6jBL-TYVpOKktuzv2no92tG30/edit?pli=1&tab=t.0#heading=h.5vxln8xxilyw). |
 | **command** | Command | The command used to start the process. |
 | **disk\_quota** | DiskQuota | Example: 1G unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case
 Note: In CF, limit for all instances of the **web** process; |
-| **memory** | Memory | The value at the application level defines the default memory requirements for all processes in the application, when not specified by the process itself. The discovery process will consolidate the amount of memory specific to each process based on the information either in the application or the process fields. Example: 128MB unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case. Note: In CF, limit for all instances of the **web** process; |
-| **health-check-http-endpoint** | Y  | Probe.Endpoint | health-check fields are captured in a Probe structure, common with the readiness-heath-check. See [Probe specification](#probe-specification). |
-| **health-check-invocation-timeout** | Probe.Timeout | See [Probe specification](#probe-specification). |
-| **health-check-interval** | Probe.Interval | See [Probe specification](#probe-specification). |
-| **health-check-type** | N |  | Type of health check to perform; `none` is deprecated and an alias to `process` |
-| **readiness-check-http-endpoint** | Probe.Endpoint | See [Probe specification](#probe-specification). |
-| **readiness-check-invocation-timeout** | Probe.Timeout | See [Probe specification](#probe-specification). |
-| **readiness-check-interval** | Probe.Interval | See [Probe specification](#probe-specification). |
-| **readiness-health-check-type** | N |  | Type of health check to perform; `none` is deprecated and an alias to `process` |
-| **instances** | Replicas | This field determines how many instances of the process will run in the application. |
-| **log-rate-limit-per-second** | LogRateLimit | The log rate limit for all the instances of the process; unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case, or -1 or 0 |
+| **lifecycle** | Lifecycle | The lifecycle attribute specifies which application lifecycle to use for staging and running the application. Three variants are supported at the moment: `buildpack`, `cnb`, and `docker`. Defaults to `buildpack`. See https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#lifecycle|
+| **memory** | Memory | The value at the application level defines the default memory requirements for all processes in the application, when not specified by the process itself. The discovery process will consolidate the amount of memory specific to each process based on the information either in the application or the process fields. Example: 128MB unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case. Note: In CF, limit for all instances of the **web** process. Defaults to `1G`. https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#manifest-schema-version|
+| **health-check-http-endpoint**  | Probe.Endpoint | health-check fields are captured in a Probe structure, common with the readiness-heath-check. See [Probe specification](#probe-specification). Defaults to `/`. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L172|
+| **health-check-invocation-timeout** | Probe.Timeout | See [Probe specification](#probe-specification). Defaults to `1 second`. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L176|
+| **health-check-interval** | Probe.Interval | See [Probe specification](#probe-specification). Defaults to `30 seconds`. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L180 |
+| **health-check-type** | Type of health check to perform; `none` is deprecated and an alias to `process`. Defaults to `port`. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L168|
+| **readiness-check-http-endpoint** | Probe.Endpoint | See [Probe specification](#probe-specification). Defaults to `/`. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L188|
+| **readiness-check-invocation-timeout** | Probe.Timeout | See [Probe specification](#probe-specification). Defaults to `1 second`. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L192|
+| **readiness-check-interval** | Probe.Interval | See [Probe specification](#probe-specification). Defaults to `30 seconds`. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L196|
+| **readiness-health-check-type**  | Type of health check to perform; `none` is deprecated and an alias to `process`. Defaults to `process`. https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L184 |
+| **instances** | Replicas | This field determines how many instances of the process will run in the application. Defaults to 1. See https://github.com/SchemaStore/schemastore/blob/926649610d04226ec3b37c58418d4340e4b1d36c/src/schemas/json/cloudfoundry-application-manifest.json#L263|
+| **log-rate-limit-per-second** | LogRateLimit | The log rate limit for all the instances of the process; unit of measurement: `B`, `K`, `KB`, `M`, `MB`, `G`, `GB`, `T`, or `TB` in upper case or lower case, or -1 or 0. Defaults to `16K`. See https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#log-rate-limit-per-second |
 
 ```go
-type Process struct {
-  // Type captures the `type` field in the Process specification.
-  // Accepted values are `web` or `worker`
-  Type ProcessType `yaml:"type" validate:"required"`
-  // Command represents the command used to run the process.
-  Command []string `yaml:"command,omitempty"`
-  // DiskQuota represents the amount of persistent disk requested by the process.
-  DiskQuota string `yaml:"disk,omitempty"`
-  // Memory represents the amount of memory requested by the process.
-  Memory string `yaml:"memory,omitempty"`
-  // HealthCheck captures the health check information
-  HealthCheck *Probe `yaml:"healthCheck,omitempty"`
-  // ReadinessCheck captures the readiness check information.
-  ReadinessCheck *Probe `yaml:"readinessCheck,omitempty"`
-  // Replicas represents the number of instances for this process to run.
-  Replicas uint `yaml:"replicas" validate:"required"`
-  // LogRateLimit represents the maximum amount of logs to be captured per second.
-  LogRateLimit string `yaml:"logRateLimit,omitempty"`
+type ProcessSpec struct {
+	// Type captures the `type` field in the Process specification.
+	// Accepted values are `web` or `worker`
+	Type ProcessType `yaml:"type" validate:"required,oneof=web worker"`
+	// Command represents the command used to run the process.
+	Command string `yaml:"command,omitempty"`
+	// DiskQuota represents the amount of persistent disk requested by the process.
+	DiskQuota string `yaml:"disk,omitempty"`
+	// Memory represents the amount of memory requested by the process.
+	Memory string `yaml:"memory" validate:"required"`
+	// HealthCheck captures the health check information
+	HealthCheck ProbeSpec `yaml:"healthCheck"`
+	// ReadinessCheck captures the readiness check information.
+	ReadinessCheck ProbeSpec `yaml:"readinessCheck"`
+	// Instances represents the number of instances for this process to run.
+	Instances int `yaml:"instances" validate:"required,min=1"`
+	// LogRateLimit represents the maximum amount of logs to be captured per second. Defaults to `16K`
+	LogRateLimit string `yaml:"logRateLimit" validate:"required"`
+	// Lifecycle captures the value fo the lifecycle field in the CF application manifest.
+	// Valid values are `buildpack`, `cnb`, and `docker`. Defaults to `buildpack`
+	Lifecycle LifecycleType `yaml:"lifecycle,omitempty" validate:"required,oneof=buildpack cnb docker"`
 }
+
+type LifecycleType string
+
+const (
+	BuildPackLifecycleType LifecycleType = "buildpack"
+	CNBLifecycleType       LifecycleType = "cnb"
+	DockerLifecycleType    LifecycleType = "docker"
+)
 ```
 
 ### ProcessType specification
@@ -482,21 +502,30 @@ const (
 | **health-check-http-endpoint** | Endpoint | HTTP endpoint to be used for health checks, specifying the path to be monitored. |
 | **health-check-invocation-timeout** | Timeout | Maximum time allowed for each health check invocation to complete. |
 | **health-check-interval** | Interval | Interval at which health checks are performed to monitor the application’s status. |
-| **health-check-type** | Type  | Specifies the type of health check to perform (`none`, `http`, `tcp`, or `process`). Note: `none` is deprecated and an alias for process. |
+| **health-check-type** | Type  | Specifies the type of health check to perform (`port`, `process`, `http`). |
 
 ```go
-type Probe struct {
-  // Endpoint represents the URL location where to perform the probe check.
-  Endpoint string `yaml:"endpoint" validate:"required"`
-  // Timeout represents the number of seconds in which the probe check can be considered as timedout.
-  // https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#timeout
-  Timeout uint `yaml:"timeout" validate:"required"`
-  // Interval represents the number of seconds between probe checks.
-  Interval uint `yaml:"interval" validate:"required"`
-  // Type specifies the type of health check to perform
-  Type string `yaml:"type" validate:"required,oneof=http tcp process"`
+type ProbeSpec struct {
+	// Endpoint represents the URL location where to perform the probe check.
+	Endpoint string `yaml:"endpoint" validate:"required"`
+	// Timeout represents the number of seconds in which the probe check can be considered as timedout.
+	// https://docs.cloudfoundry.org/devguide/deploy-apps/manifest-attributes.html#timeout
+	Timeout int `yaml:"timeout" validate:"required,min=0"`
+	// Interval represents the number of seconds between probe checks.
+	Interval int `yaml:"interval" validate:"required,min=0"`
+	// Type specifies the type of health check to perform.
+	Type ProbeType `yaml:"type" validate:"required,oneof=http process port"`
 }
+
+type ProbeType string
+
+const (
+  PortProbeType ProbeType = "port"
+  ProcessProbeType ProbeType = "process"
+  HTTPProbeType ProbeType = "http"
+)
 ```
+
 
 ## Route specification
 
@@ -523,20 +552,44 @@ Examples:
 | **protocol** | Protocol | It can be `http`, `http2` or `tcp`. |
 
 ```go
-type Route struct {
-  // Route captures the domain name, port and path of the route.
-  Route string `yaml:"route" validate:"required"`
-  // Protocol captures the protocol type: http, http2 or tcp. Note that the CF `protocol` field is only available
-  // for CF deployments that use HTTP/2 routing.
-  Protocol RouteProtocol `yaml:"protocol" validate:"required,oneof=http http2 tcp"`
+
+type RouteSpec struct {
+	//NoRoute captures the field no-route in the CF Application manifest.
+	NoRoute bool `yaml:"noRoute,omitempty"`
+	//RandomRoute captures the field random-route in the CF Application manifest.
+	RandomRoute bool `yaml:"randomRoute,omitempty"`
+	//Routes captures the field routes in the CF Application manifest.
+	Routes Routes `yaml:"routes,omitempty"`
 }
+
+type Route struct {
+	// Route captures the domain name, port and path of the route.
+	Route string `yaml:"route" validate:"required"`
+	// Protocol captures the protocol type: http, http2 or tcp. Note that the CF `protocol` field is only available
+	// for CF deployments that use HTTP/2 routing.
+	Protocol RouteProtocol `yaml:"protocol,omitempty" validate:"required,oneof=http http2 tcp"`
+	// Options captures the options for the Route. Only load balancing is supported at the moment.
+	Options RouteOptions `yaml:"options,omitempty"`
+}
+
+type RouteOptions struct {
+	// LoadBalancing captures the settings for load balancing. Only `round-robin` or `least-connections` are supported
+	LoadBalancing LoadBalancingType `yaml:"loadBalancing,omitempty" validate:"oneof=round-robin least-connections"`
+}
+
+type LoadBalancingType string
+
+const (
+	RoundRobinLoadBalancingType      LoadBalancingType = "round-robin"
+	LeastConnectionLoadBalancingType LoadBalancingType = "least-connection"
+)
 
 type RouteProtocol string
 
 const (
-	HTTP  RouteProtocol = "http"
-	HTTP2 RouteProtocol = "http2"
-	TCP   RouteProtocol = "tcp"
+	HTTPRouteProtocol  RouteProtocol = "http1"
+	HTTP2RouteProtocol RouteProtocol = "http2"
+	TCPRouteProtocol   RouteProtocol = "tcp"
 )
 ```
 
@@ -611,6 +664,182 @@ Developers may need to refactor applications or implement new solutions that
 align with Kubernetes practices.
 
 ## Design Details
+
+### Canonical Form specification
+
+The following yaml are examples of a Cloud Foundry Application manifest and its canonical form
+generated from performing the discovery on the source manifest:
+
+```yaml
+---
+version: 1
+space: default
+applications:
+- name: app1
+  buildpacks:
+  - ruby_buildpack
+  - java_buildpack
+  env:
+    VAR1: value1
+    VAR2: value2
+  routes:
+  - route: route.example.com
+  - route: another-route.example.com
+    protocol: http2
+  services:
+  - name: my-service1
+  - name: my-service2
+  - name: my-service-with-arbitrary-params
+    binding_name: my-binding
+    parameters:
+      key1: value1
+      key2: value2
+  stack: cflinuxfs4
+  metadata:
+    annotations:
+      contact: "bob@example.com jane@example.com"
+    labels:
+      sensitive: true
+  processes:
+  - type: web
+    command: start-web.sh
+    disk_quota: 512M
+    health-check-http-endpoint: /healthcheck
+    health-check-type: http
+    health-check-invocation-timeout: 10
+    instances: 3
+    memory: 500M
+    log-rate-limit-per-second: 1KB
+    timeout: 10
+  - type: worker
+    command: start-worker.sh
+    disk_quota: 1G
+    health-check-type: process
+    instances: 2
+    memory: 256M
+    log-rate-limit-per-second: 1KB
+    timeout: 15
+- name: app2
+  env:
+    VAR1: value1
+  processes:
+  - type: web
+    instances: 1
+    memory: 256M
+    log-rate-limit-per-second: 1KB
+  sidecars:
+  - name: authenticator
+    process_types: [ 'web', 'worker' ]
+    command: bundle exec run-authenticator
+    memory: 800M
+  - name: upcaser
+    process_types: [ 'worker' ]
+    command: ./tr-server
+    memory: 2G
+```
+
+When this manifest is run through the discovery process, it will generate a canonical form for each application discovered. For this
+example both applications are combined into a single yaml:
+
+```yaml
+---
+name: app1
+space: default
+labels:
+    sensitive: "true"
+annotations:
+    contact: bob@example.com jane@example.com
+version: "1"
+env:
+    VAR1: value1
+    VAR2: value2
+routes:
+    - route: route.example.com
+    - route: another-route.example.com
+      protocol: http2
+services:
+    - name: my-service1
+    - name: my-service2
+    - name: my-service-with-arbitrary-params
+      parameters:
+        key1: value1
+        key2: value2
+      bindingName: my-binding
+processes:
+    - type: web
+      command: start-web.sh
+      disk: 512M
+      memory: 500M
+      healthCheck:
+        endpoint: /healthcheck
+        timeout: 10
+        interval: 30
+        type: http
+      readinessCheck:
+        endpoint: /
+        timeout: 1
+        interval: 30
+        type: process
+      instances: 3
+      logRateLimit: 1KB
+    - type: worker
+      command: start-worker.sh
+      disk: 1G
+      memory: 256M
+      healthCheck:
+        endpoint: /
+        timeout: 1
+        interval: 30
+        type: process
+      readinessCheck:
+        endpoint: /
+        timeout: 1
+        interval: 30
+        type: process
+      instances: 2
+      logRateLimit: 1KB
+stack: cflinuxfs4
+timeout: 60
+buildPacks:
+    - ruby_buildpack
+    - java_buildpack
+instances: 1
+---
+name: app2
+space: default
+version: "1"
+env:
+    VAR1: value1
+processes:
+    - type: web
+      memory: 256M
+      healthCheck:
+        endpoint: /
+        timeout: 1
+        interval: 30
+        type: port
+      readinessCheck:
+        endpoint: /
+        timeout: 1
+        interval: 30
+        type: process
+      instances: 1
+      logRateLimit: 1KB
+sidecars:
+    - name: authenticator
+      processType:
+        - web
+        - worker
+      command: bundle exec run-authenticator
+      memory: 800M
+    - name: upcaser
+      processType:
+        - worker
+      command: ./tr-server
+      memory: 2G
+timeout: 60
+instances: 1
+```
 
 ### Test Plan
 
