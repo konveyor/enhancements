@@ -52,6 +52,11 @@ have been struggling with the template language used to capture the Kubernetes
 resources, as it is not well known and requires an additional effort to master,
  compared to other templating languages.
 
+ The goal for this enhancement is to define manifest output format from the
+ result of the discovery process of a Cloud Foundry Application manifest. This
+ output manifest, also referred as canonical form, is then consumed by the
+ generate operation to render the desired assets.
+
 ## Motivation
 
 The challenge brought by the templating language severely impacts the usability
