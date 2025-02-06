@@ -104,13 +104,12 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
 
 - **Command Design:**
   - `discover`: This command is responsible for analyzing an application from a
-    specified platform and generating a canonical representation in YAML/JSON
+    specified platform and generating a canonical representation in YAML
     format. Details:
     - **Flags and Options:**
       - `--platform=<platform>` (required): Specifies the platform to discover.
         Supported value for MVP: cf.
       - `--input=<name>` (optional): Specifies the application to be analyzed.
-      - `--use-agent=<agent_name>` (optional): Enables agent-based discovery for extracting data.
       - `--use-live-connection` (optional): Uses live platform connections for real-time discovery.
       - `--output=<file>` (optional): Writes the output to a specified file.
         Defaults to standard output.
@@ -163,6 +162,52 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
   - Modularize the functionality to support future enhancements. 
 - **Integration Path:**
   - Release as part of upcoming Kantra/Konveyor in tech preview.
+
+ ### Usage
+ ```
+  - Usage: kantra [OPTIONS] COMMAND [OPTIONS1]...
+
+Konveyor CLI
+
+Options:
+  -h, --help     Show commands and options.
+  -v, --version  Show the CLI version.
+
+Commands:
+  discover       Analyze the source platform and/or application and output discovery manifest.
+  generate       Generate deployment assets for a target platform.
+  ...
+  ...
+
+Run 'kantra COMMAND --help' for more information on a command.
+
+Discover Command:
+  Usage: kantra discover [OPTIONS]
+
+  Options:
+    --platform <platform>      Specify the platform to discover (e.g., cloudfoundry).
+    --input <name>             Specify the application to analyze.
+    --use-live-connection      Use live platform connections for discovery.
+    --output <file>            Output file (default: standard output).
+    --list-platforms           List available discovery providers.
+    --log-level <level>        Set logging verbosity.
+
+Generate Command:
+  Usage: kantra generate [OPTIONS]
+
+  Options:
+    --input <file>             Specify the input discovery manifest file.
+    --template <path>          Specify the Helm template path.
+    --output-dir <directory>   Specify output directory (default: standard output).
+    --type <type>              Specify generator type (default: Helm).
+    --set key=value            Override values in the template.
+    --non-k8s-only             Render only non-Kubernetes templates.
+
+...
+...
+
+```
+
 
 ### Security, Risks, and Mitigations
 
