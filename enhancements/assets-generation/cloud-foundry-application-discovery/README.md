@@ -26,7 +26,7 @@ replaces:
 superseded-by:
 ---
 
-# Cloud Foundry Application Discovery to canonical form
+# Cloud Foundry Application Discovery to discovery manifest
 
 
 ## Release Signoff Checklist
@@ -54,7 +54,7 @@ resources, as it is not well known and requires an additional effort to master,
 
  The goal for this enhancement is to define manifest output format from the
  result of the discovery process of a Cloud Foundry Application manifest. This
- output manifest, also referred as canonical form, is then consumed by the
+ output manifest, also referred as discovery manifest, is then consumed by the
  generate operation to render the desired assets.
 
 ## Motivation
@@ -73,14 +73,14 @@ intented platform.
 ### Goals
 
 * Identify and understand Cloud Foundry Application manifests (v3) fields.
-* Define the canonical form for Cloud Foundry Application manifests (V3). The
-  discovery of a Cloud Foundry application will populate the fields of the canonical
-  form so that they can be used as `values.yaml` in the transformation with Helm templates.
-* Extract and process Cloud Foundry application manifest into a new canonical
-  form, capturing the intent of the original field value and with the foresight
+* Define the discovery manifest for Cloud Foundry Application manifests (V3). The
+  discovery of a Cloud Foundry application will populate the fields of the discovery
+  manifest so that they can be used as `values.yaml` in the transformation with Helm templates.
+* Extract and process Cloud Foundry application manifest into a new discovery
+  manifest, capturing the intent of the original field value and with the foresight
   of the future application of the given field in a Kubernetes platform.
 * Provide documentation for developers to understand the relationship between
-  the original manifest and resulting canonical manifest.
+  the original manifest and resulting discovery manifest.
 
 ### Non-Goals
 
@@ -89,7 +89,7 @@ intented platform.
 ## Proposal
 
 To migrate applications from Cloud Foundry to Kubernetes, it is essential to
-translate these manifests into an intermediate format, or canonical form, that
+translate these manifests into an intermediate format, or discovery manifest, that
 captures the intent and configuration of the CF manifest. This intermediate
 manifest serves as a bridge, retaining critical deployment configurations while
 adapting them to Kubernetes-native practices. The format needs to be designed
@@ -274,22 +274,22 @@ it does not already exist.
 
 #### Space specification
 
-| Name |  Canonical Form | Description |
+| Name |  Discovery Specification | Description |
 | ----- | ----- | ----- |
-| **applications** | Application | Direct mapping to a slice of canonical form manifests, each one representing the discovery results of a CF application. See [app-level specification](#application-specification) |
+| **applications** | Application | Direct mapping to a slice of discovery manifests, each one representing the discovery results of a CF application. See [app-level specification](#application-specification) |
 | **space** | Metadata.Space | See [metadata specification](#metadata-specification). This field is only populated at runtime. |
 | **version** | Metadata.Version | The manifest schema version; currently the only valid version is 1, defaults to 1 if not provided. This field is only populated at runtime. |
 
 #### Application specification
 
-| Name | Canonical Form | Comments |
+| Name | Discovery Specification | Comments |
 | ----- | ----- | ----- |
 | **name** | Metadata.Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format.
 See [metadata specification](#metadata-specification). |
 | **buildpacks** | BuildPacks | This field in CF specify how to build your application (e.g., "nodejs\_buildpack", "java\_buildpack"). |
 | **docker** | Docker | The value of the docker image pullspec and the username. See [docker specification](#docker-specification). |
 | **env** | Env | Direct mapping from the application's `Env` field |
-| **no-route** | Routes | Processes will have no route information in the canonical form manifest. Defaults to false. See [route specification](#route-specification). |
+| **no-route** | Routes | Processes will have no route information in the discovery manifest. Defaults to false. See [route specification](#route-specification). |
 | **processes** | Processes | See [process specification](#process-specification) |
 | **random-route** | Routes | See [route specification](#route-specification). |
 | **routes** | Routes | See [route specification](#route-specification). |
@@ -335,7 +335,7 @@ type Application struct {
 
 ### Docker specification
 
-| Name | Canonical Form | Description |
+| Name | Discovery Specification | Description |
 | ----- | ----- | ----- |
 | **image** | Image | Pullspec of the container image. |
 | **username** | Username | (Optional) Username to authenticate against the container registry.|
@@ -351,7 +351,7 @@ type Docker struct {
 
 ### Sidecar specification
 
-| Name | Canonical Form | Description |
+| Name | Discovery Specification | Description |
 | ----- | ----- | ----- |
 | **name** | Name | Name of the sidecar |
 | **process\_types** | ProcessTypes | ProcessTypes captures the different process types defined for the sidecar. Compared to a Process, which has only one type, sidecar processes can accumulate more than one type. See [processtype specification](#processtype-specification).|
@@ -376,10 +376,10 @@ type SidecarSpec struct {
 
 ### Service specification
 
-Maps to Spec.Services in the canonical form. Only \`name\`, \`parameters\`, and `bindng\_name` CF
+Maps to Spec.Services in the discovery manifest. Only \`name\`, \`parameters\`, and `bindng\_name` CF
 fields are captured.
 
-| Name | Canonical Form | Description |
+| Name | Discovery Specification | Description |
 | ----- | ----- | ----- |
 | **name** | Name | Name of the service required by the application |
 | **parameters** | Parameters | key/value pairs for the application to use when connecting to the service. |
@@ -401,7 +401,7 @@ type ServiceSpec struct {
 
 ### Metadata specification
 
-| Name | Canonical Form | Description |
+| Name | Discovery Specification | Description |
 | ----- | ----- | ----- |
 | **Application.name** | Name | Name is derived from the application’s Name field, which is stored in the metadata of the discovery manifest, following Kubernetes structured resources format. |
 | **Space.name** | Space | Captured at runtime only and it contains the name of the space where the application is deployed. |
@@ -430,7 +430,7 @@ type Metadata struct {
 
 ### Process specification
 
-| Name | Canonical Form | Comments |
+| Name | Discovery Specification | Comments |
 | ----- | ----- | ----- |
 | **type** | Type | Only web or worker types are supported. |
 | **command** | Command | The command used to start the process. |
@@ -502,7 +502,7 @@ const (
 
 ## Probe specification
 
-| Name | Canonical Form | Description |
+| Name | Discovery Specification | Description |
 | ----- | ----- | ----- |
 | **health-check-http-endpoint** | Endpoint | HTTP endpoint to be used for health checks, specifying the path to be monitored. |
 | **health-check-invocation-timeout** | Timeout | Maximum time allowed for each health check invocation to complete. |
@@ -551,7 +551,7 @@ Examples:
 	\- route: www.example.com/foo
 	\- route: tcp-example.com:1234
 
-| Name | Canonical Form | Description |
+| Name | Discovery Specification | Description |
 | ----- | ----- | ----- |
 | **route** | Route  | `Route as defined in the route field value.`  |
 | **protocol** | Protocol | It can be `http`, `http2` or `tcp`. |
@@ -601,13 +601,13 @@ const (
 ### User Stories [optional]
 
 * As a DevOps engineer migrating multiple applications, I want an intermediate
-  canonical form that abstracts the complexities of Cloud Foundry manifests,
+  discovery manifest that abstracts the complexities of Cloud Foundry manifests,
   so that I can easily adapt and reuse it for Kubernetes deployment across
   various platforms.
 
 * As a DevOps engineer migrating multiple applications, I want to clearly
   understand the relationship between Cloud Foundry manifest fields and their
-  canonical equivalents, so that I can confidently map my application's
+  discovery equivalents, so that I can confidently map my application's
   configurations to a Kubernetes-native environment.
 
 * As a DevOps engineer migrating an application with complex configurations, I
@@ -615,8 +615,8 @@ const (
   original Cloud Foundry manifest, so that my application behaves consistently after migration.
 
 * As a DevOps engineer migrating applications, I want the migration tool to
-  focus only on generating a canonical form, so that I can independently choose
-  how to apply the canonical form using my preferred Kubernetes templating approach.
+  focus only on generating a discovery manifest, so that I can independently choose
+  how to apply the discovery manifest using my preferred Kubernetes templating approach.
 
 ### Implementation Details/Notes/Constraints [optional]
 
@@ -636,7 +636,7 @@ _How will security be reviewed and by whom? How will UX be reviewed and by whom?
 
 _Consider including folks that also work outside your immediate sub-project._
 
-#### Canonical Manifest Misalignment
+#### Discovery Manifest Misalignment
 CF provides features that are not directly mappable to Kubernetes-native
 concepts, requiring additional work during the migration process to ensure
 compatibility.
@@ -670,9 +670,9 @@ align with Kubernetes practices.
 
 ## Design Details
 
-### Canonical Form specification
+### Discovery Manifest specification
 
-The following yaml are examples of a Cloud Foundry Application manifest and its canonical form
+The following yaml are examples of a Cloud Foundry Application manifest and its discovery manifest
 generated from performing the discovery on the source manifest:
 
 ```yaml
@@ -743,7 +743,7 @@ applications:
     memory: 2G
 ```
 
-When this manifest is run through the discovery process, it will generate a canonical form for each application discovered. For this
+When this manifest is run through the discovery process, it will generate a discovery manifest for each application discovered. For this
 example both applications are combined into a single yaml:
 
 ```yaml
