@@ -4,11 +4,21 @@ authors:
   - "@JonahSussman"
   - "@savitharaghunathan"
 reviewers:
-  - TBD
+  - "@dymurray"
+  - "@jortel"
+  - "@eemcmullan"
+  - "@jordigilh"
+  - "@gciavarrini"
+  - "@rromannissen"
 approvers:
-  - TBD
+  - "@dymurray"
+  - "@jortel"
+  - "@eemcmullan"
+  - "@jordigilh"
+  - "@gciavarrini"
+  - "@rromannissen"
 creation-date: 2025-01-20
-last-updated: 2025-01-22
+last-updated: 2025-02-14
 status: provisional
 see-also:
   - "https://github.com/konveyor/enhancements/pull/210"
@@ -19,7 +29,7 @@ see-also:
 
 ## Release Signoff Checklist
 
-- [ ] Enhancement is `implementable`
+- [x] Enhancement is `implementable`
 - [ ] Design details are appropriately documented from clear requirements
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
@@ -37,8 +47,8 @@ see-also:
 
 This proposal introduces enhancements to the existing Kantra tool to support the
 discovery and transformation of resources from a source platform to a target platform
-(eg: Cloudfoundry -> Kubernetes). The goal is to create a modular CLI that outputs a canonical
-representation of resources and generates deployment assets (e.g., Helm
+(eg: Cloudfoundry -> Kubernetes). The goal is to create a modular CLI that outputs a discovery manifest
+of resources and generates deployment assets (e.g., Helm
 charts). The enhancement will provide a foundational capability for platform
 migrations, enabling a tech-preview release in an upcoming version of Kantra.
 
@@ -49,7 +59,7 @@ require reliable tools to simplify resource discovery and deployment transformat
 Existing tools like Move2Kube (M2K) provide limited flexibility and lack a
 modular approach, resulting in suboptimal user experiences. This enhancement
 addresses these gaps by extending the Kantra CLI with commands for discovery and
-asset generation while supporting a canonical configuration format for future
+asset generation while supporting a discovery manifest format for future
 expansion.
 
 We propose modifying the existing Kantra CLI instead of developing an entirely
@@ -69,8 +79,6 @@ integration with other tools and workflows.
   - `generate` command: Produce assets for deployment to the target plaform. For the mvp,
      we will generate a values.yaml file based on the source platform config,
      and combine it with the user's templates to generate a helm chart
-- Utilize the [canonical configuration enhancement](link: TODO) to serve as a consistent
-  intermediary for platform transformations.
 - Enhance logging and error reporting for better user experience and debugging.
 - Provide detailed documentation and examples for both commands to facilitate adoption.
 
@@ -104,23 +112,23 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
 
 - **Command Design:**
   - `discover`: This command is responsible for analyzing an application from a
-    specified platform and generating a canonical representation in YAML
+    specified platform and generating a discovery manifest in YAML
     format. Details:
     - **Flags and Options:**
-      - `--platform=<platform>` (required): Specifies the platform to discover.
+      - `--discovery-provider=<discovery_provider>` (required): Specifies the discovery provider.
         Supported value for MVP: cf.
       - `--input=<name>` (optional): Specifies the application to be analyzed.
       - `--use-live-connection` (optional): Uses live platform connections for real-time discovery.
       - `--output=<file>` (optional): Writes the output to a specified file.
         Defaults to standard output.
-      - `--list-platforms` (optional): Lists the available discovery providers.
+      - `--list-discovery-providers` (optional): Lists the available discovery providers.
         For mvp, it defaults to `cf`
       - `--log-level` (optional): Provides additional details about the discovery
         process in the logs.
     - **Behavior:**
       - Scans the provided application input (e.g., Cloud Foundry manifest
         files) and extracts relevant configuration details.
-      - Outputs a structured canonical representation containing metadata (e.g.,
+      - Outputs a structured discovery manifest representation containing metadata (e.g.,
         application name, instances, routes), runtime information (e.g., route, etc ),
         and deployment settings.
       - **Error Handling:**
@@ -131,15 +139,15 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
         - Through filesystem access to the platform's installation paths (e.g., for Application Servers
           or Servlet Containers), implemented as an agent on the host.
           
-  - `generate`: This command takes a canonical representation and a Helm
+  - `generate`: This command takes a discovery manifest representation and a Helm
     template to produce deployment-ready Helm charts. Details:
     - **Flags and Options:**
-      - `--input=<file>` (required): Specifies the canonical configuration file
+      - `--input=<file>` (required): Specifies the discovery manifest file
         to use as input.
-      - `--template=<path>` (required): Path to the Helm template to use for
-        chart generation.
+      - `--chart-dir=<path>` (required): Path to the Helm template to use for
+        asset generation.
       - `--output-dir=<directory>` (optional): Directory to save the generated
-        Helm chart. Defaults to stdio.
+        Helm chart. Defaults to stdout.
       - `--type=<type>` (optional): Specifies the type of generator. MVP
         supports helm. Defaults to `Helm`
       - `--set key=value` (optional): Sets a value for the given in the command line.
@@ -147,9 +155,9 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
       - `--non-k8s-only` (optional): Only renders the non-k8s templates available in the files/konveyor
         path from the target Helm Chart.
     - **Behavior:**
-      - Reads the canonical representation file to extract configuration
+      - Reads the discovery manifest representation file to extract configuration
         details.
-      - Applies the provided Helm template to the canonical form and the user provided templates,
+      - Applies the provided Helm template to the discovery manifest and the user provided templates,
         and generates Kubernetes manifests.
       - Validates the generated artifacts for completeness and correctness.
     - **Error Handling:**
@@ -233,7 +241,7 @@ Generate Command:
 
 ### Upgrade/Downgrade Strategy
 
-1. Add versioning to canonical configuration files to ensure backward
+1. Add versioning to discovery manifest files to ensure backward
 compatibility.
 2. Provide migration scripts for users upgrading from earlier Kantra versions.
 
