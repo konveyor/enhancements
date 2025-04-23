@@ -15,7 +15,7 @@ approvers:
   - "@JonahSussman"
   - "@jwmatthews"
 creation-date: 2024-11-20
-last-updated: 2024-11-22
+last-updated: 2025-04-23
 status: provisional
 see-also:
   -    
@@ -38,7 +38,6 @@ superseded-by:
 ## Open Questions
 
 - Should there be a dynamic way of registering Platform Types, Discovery Providers and Generator Types? Should that be managed by CRs or could there be an additional mechanism? That would imply adding some dynamic behavior on the UI to render the different field associated with each of them.
-- How can we store sensitive data retrieved by the Discovery Providers?
 - How could we handle the same file being rendered by two different _Generators_ (charts)? Is there a way to calculate the intersection of two different Helm charts?
 
 ## Summary
@@ -198,7 +197,7 @@ _Target Platforms_ will be surfaced in the _Application Profile_ as read only da
   - Keys are documented and have a precise meaning.
   - Similar to Ansible facts, but surfacing different concerns related to the application runtime and platform configuration.
 - RBAC protected.
-- Injected in tasks by the hub.
+- Injected in tasks by the addon.
 
 ##### Discovery
 
@@ -248,9 +247,12 @@ First class entity in Konveyor to wrap templates. Fields include:
 
 Multiple _Generators_ can be associated with an _Archetype_ through [_Target Platforms_](https://github.com/konveyor/enhancements/issues/186):
 - Foster reusability.
-- The generated assets for an archetype would be the product of the union of the instantiation (The `helm template` command for example) of all templates from all _Generators_ associated with that _Archetype_. (For Helm, we could consider leveraging [helmfile](https://github.com/helmfile/helmfile) to achieve this.)
+- The generated assets for an archetype would be the product of the union of the instantiation of all templates from all _Generators_ associated with that _Archetype_:
+  - Generators will have an order of precedence when associated with _Target Platforms_. If the same file is output by two generators, the one that was produced by the _Generator_ with the top level of precedence will be included in the resulting fileset.
 
 ![Archetypes, Target Platforms and Generators](images/archetypes-targetplatforms-generators.png?raw=true "Archetypes, Target Platforms and Generators")
+
+For example, using the previous diagram, let's assume the _EAP on OpenShift Generator_ had top precedence and the _OpenShift Generator_ was second for the _OpenShift_ _Target Platform_. If both generators output the same file (for example Deployment.yml), the one produced by the _EAP on OpenShift Generator_ would be the one added to the resulting generated assets fileset.
 
 ##### Templating engine
 
@@ -261,7 +263,7 @@ In a first iteration, leverage the [Helm templating engine](https://helm.sh/docs
 Template instantiation should be considered the act of injecting values in a template to render the target assets (deployment descriptors, configuration files...). For the Helm use case in this first iteration, the process could be as follows:
 
 - The hub generates a values.yaml file based on the intersection of the _Configuration_ dictionary for the target application, the fixed _Variables_ set in the Generator and the _Parameters_ the user might have provided when requesting the generation, in inverse order of preference (_Parameters_ have top preference over the others, then _Variables_ and finally the _Configuration_ dictionary). That file should also include values inferred from other information stored in the application profile such as tags.
-- The values.yaml file is injected by the hub in a _Generator_ task pod that will execute the `helm template` command to render the assets.
+- The values.yaml file is injected by the addon in a _Generator_ task pod that will execute the `helm template` command to render the assets.
 - The generated assets are then placed in a branch of the repository associated with the application.
 
 ![Template Instantiation](images/template-instantiation.png?raw=true "Template Instantiation")
@@ -288,7 +290,45 @@ TBD
 
 ### Implementation Details/Notes/Constraints
 
-TBD
+#### Sensitive Data Management
+
+The _Discovery Provider_ determines which fields are sensitive and replaces the sensitive data with a _ref_(placeholder). Only the _Discovery Provider_ can identify sensitive data.
+This would be an option on the discovery process (default: false).
+
+
+##### Input
+
+Sample CF manifest:
+
+```yaml
+...
+name: Elmer
+username: rabbit
+password: slayer24
+...
+```
+
+##### Discovery Provider Output
+
+manifest.yaml
+```yaml
+...
+name: Elmer
+username: $(secret-0001)
+password: $(secret-0002)
+...
+```
+
+secret.yaml
+```yaml
+...
+secret-0001: rabbit
+secret-0002: slayer24
+...
+```
+The addon would store the application manifest (and secret in the hub). The secret would be stored encrypted.
+
+The hub API could render the application manifest with the secret references substituted depending on user permissions.
 
 ### Security, Risks, and Mitigations
 
