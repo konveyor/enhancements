@@ -15,7 +15,7 @@ approvers:
   - "@JonahSussman"
   - "@jwmatthews"
 creation-date: 2024-11-20
-last-updated: 2025-04-23
+last-updated: 2025-04-28
 status: provisional
 see-also:
   -    
@@ -186,6 +186,17 @@ A _Source Platform_ section (similar to the Source Code and Binary sections) sho
 
 A read-only _Configuration_ dictionary should also be browsable in the _Application Profile_. For more about _Configuration_ see the [Canonical Configuration model section](#canonical-configuration-model) section.
 
+An optional new section called _Configuration Repository_ will be added to the _Application_ entity as well to track where the generated assets will be stored after the generation process. This section will be similar to the existing _Source Code_ section and will include the following fields:
+
+- _Repository Type_: Dropdown, single choice. Values: Git,SVN.
+- _Repository URL_: String. Required if either Branch or Root path have any value.
+- _Branch_: String.
+- _Root path_: String.
+
+If the _Configuration Repository_ section is undefined (no repository has been entered), assets generation will default to the _assets_ directory in a new _assets_ branch in the _Source Code_ repository.
+
+Applications will have a third set of credentials under the _Manage Credentials_ view. Those credentials will be called _Configuration credentials_ and will have a similar single choice dropdown to the one used for _Source credentials_, including all _Source Control_ type credentials available in the system (configuration repositories are source control repositories by nature).
+
 _Target Platforms_ will be surfaced in the _Application Profile_ as read only data (can't be manually and individually associated to a single application) and inherited from the archetype.
 
 ##### Canonical Configuration model
@@ -217,13 +228,7 @@ Abstraction layer responsible of collecting configuration around an application 
 - Live connection via API or similar methods.
 - Through the filesystem accessing the path in which the platform is installed (suitable for Application Servers and Servlet containers). This would likely be modeled as an agent deployed on the platform host itself.
 
-Configuration discovery could happen in different stages during the lifecycle of an application to avoid storing sensitive data:
-- *Initial discovery*:
-  - Configuration dictionary gets populated with non sensitive data. Sensitive data gets redacted or defaults to dummy values.
-- *Template instantiation*:
-  - A second discovery retrieval happens to obtain the sensitive data and inject it in the instantiated templates (the actual generated assets) without storing the data in the Configuration dictionary.
-
-Discovery providers are custom tailored for the particularities of each platform and should be able to differentiate regular configuration from sensitive data.
+Discovery providers are custom tailored for the particularities of each platform and should be able to differentiate regular configuration from sensitive data. Sensitive data will be stored encrypted in the hub.
 
 #### Assets Generation
 
@@ -258,30 +263,31 @@ For example, using the previous diagram, let's assume the _EAP on OpenShift Gene
 
 In a first iteration, leverage the [Helm templating engine](https://helm.sh/docs/chart_template_guide/functions_and_pipelines/), as it is the lingua franca for Kubernetes related resource definition, although the solution should be open to other technologies in the future, such as Ansible for more complex assets generation.
 
-##### Template instantiation
+##### Template instantiation and Repository Augmentation
 
 Template instantiation should be considered the act of injecting values in a template to render the target assets (deployment descriptors, configuration files...). For the Helm use case in this first iteration, the process could be as follows:
 
-- The hub generates a values.yaml file based on the intersection of the _Configuration_ dictionary for the target application, the fixed _Variables_ set in the Generator and the _Parameters_ the user might have provided when requesting the generation, in inverse order of preference (_Parameters_ have top preference over the others, then _Variables_ and finally the _Configuration_ dictionary). That file should also include values inferred from other information stored in the application profile such as tags.
-- The values.yaml file is injected by the addon in a _Generator_ task pod that will execute the `helm template` command to render the assets.
-- The generated assets are then placed in a branch of the repository associated with the application.
+- The addon generates a values.yaml file based on the intersection of the _Configuration_ dictionary for the target application, the fixed _Variables_ set in the Generator and the _Parameters_ the user might have provided when requesting the generation, in inverse order of preference (_Parameters_ have top preference over the others, then _Variables_ and finally the _Configuration_ dictionary). That file should also include values inferred from other information stored in the application profile, including tags. Dependencies, Issues and Insights will be optional.
+- The generator addon will invoke the generator command (or Go library) with the calculated values.yaml file to render the assets.
+- The generated assets are then placed by the addon in the _Configuration Repository_ URL, branch and root path defined in the Application profile, or will default to the _assets_ path in the _assets_ branch of the _Source Repository_ if the former is not defined.
 
 ![Template Instantiation](images/template-instantiation.png?raw=true "Template Instantiation")
 
 From a UI/UX perspective, when requesting assets generation for a given application, users would be prompted with the following:
 - Values for the _Parameters_ configured in the associated _Generator_(s)
-- Target repository for the generated assets. Will default to the application repository and the `generated_assets` branch, but could be used to store configuration in a different configuration repository if that the pattern the organization uses:
-  - _URL_
-  - _Root Path_
-  - _Branch_
-  - _Credentials_
 - Option to skip template instantiation and simply copy the charts to the target repository and inject the configuration as a values file. This is helpful when template instantiation is handled by an external orchestrator like a CI/CD pipeline.
+- Option to include summarized analysis data (Issues) in the values file.
+- Option to include insights in the values file.
+- Option to include dependencies in the values file.
 
-##### Repository Augmentation
+As stated before, the addon will target the _Configuration Repository_ URL, branch and root path defined in the Application profile, or will default to the _assets_ path in the _assets_ branch of the _Source Repository_ if the former is not defined. Some info or warning box should be displayed when the application doesn't have the _Configuration Repository_ defined, informing the user about the default repository, branch and path that will be used:
 
-- Generated assets could be stored in a branch from the target application repository, or if needed, on a separate configuration repository if the application has adopted a GitOps approach to configuration management.
-- Allow architects to seed repositories for migrators to start their work with everything they need to deploy the applications they are working on right away → Ease the change, test, repeat cycle.
-- Aligned with the Seed work step from the Do work stage in the [Konveyor Unified Experience enhancement](https://github.com/konveyor/enhancements/tree/master/enhancements/unified_experience#step-4-do-work).
+> Warning: This application doesn't have a defined configuration repository. Generated assets will be placed in a new branch called "assets" under the "assets" directory from the source repository.
+
+When executing _Template Instantiation_ at bulk, the same information should be provided when not all applications have the _Configuration Repository_ defined:
+
+> Warning: Not all selected applications have a defined configuration repository. For those applications, generated assets will be placed in a new branch called "assets" under the "assets" directory from the source repository.
+
 
 
 ### Functional Specification
