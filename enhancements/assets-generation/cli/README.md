@@ -233,10 +233,23 @@ Generate Command:
 
 ### Test Plan
 
-1. Unit tests for the discover and generate commands.
-2. Integration tests for end-to-end workflows (eg: Cloud Foundry -> discovery manifest -> Helm chart).
-3. Test each of the components separately: Discovery and Generate.
-4. Ensure sensitive data is not exposed.
+Test Plan covers 1.unit tests for the discover and generate commands and 2. integration tests for
+end-to-end workflows (eg: Cloud Foundry -> discovery manifest -> Helm chart).
+1. Discover a Cloud Foundry application
+   Eg: kantra discover cloud-foundry --input <cloud_foundry_app_config> --output <discovery_manifest>
+2. Generate OCP manifest for a Cloud Foundry application
+  Eg: kantra generate helm --chart-dir  <helm_sample_dir> --input <discovery_manifest> --output-dir <manifests_dir>
+3. Test Discover command flags:
+     --list-providers flag
+     --output flag
+4. Test Generate command flags
+    4.1 -- set flag (Values in the discovery manifest can be overridden using the set flag.)
+    4.2 When generate is used without --non-k8s-only, it generates both k8s and non-k8s manifests
+    4.3 Generate non-k8s manifests only
+5. Perform live discovery of source platform resources
+   Eg: kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2>
+6. Perform live discovery of a specific CF application
+   Eg: kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2> --app-name=<app-name>
 
 
 ### Upgrade/Downgrade Strategy
