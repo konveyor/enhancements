@@ -240,24 +240,39 @@ The test plan covers:
 Test cases:
 1. Discover a Cloud Foundry application
    ```bash
-   kantra discover cloud-foundry --input <cloud_foundry_app_config> --output <discovery_manifest>
+   kantra discover cloud-foundry --input=<cloud_foundry_app_config> --output-dir=<path_to_output_dir>
    ```
 2. Generate an OpenShift manifest for a Cloud Foundry application
    ```bash
-   kantra generate helm --chart-dir <helm_sample_dir> --input <discovery_manifest> --output-dir <manifests_dir>
+   kantra generate helm --input=<path/to/discover/manifest> --chart-dir=<path/to/helmchart>
    ```
 3. Test discover command flags
-   - `--list-providers`
-   - `--output`
+   - `--list-platforms`         List available supported discovery platforms
+   - `--cf-config string`       Path to the Cloud Foundry CLI configuration file (default: ~/.cf/config)
+   - `--platformType string`    Platform type for discovery (default: cloud-foundry)
+   - `--skip-ssl-validation`    Skip SSL certificate validation for API connections (default: false)
+   - `--output-dir`             Directory where output manifests will be saved (default: standard output).
+        If the directory does not exist, it will be created automatically.
+   - `--list-apps`              Lists available applications; it can be used with both local and live discovery
+   ```bash
+   kantra discover cloud-foundry --input=<path-to/manifest-dir> --list-apps
+   ```
+   - `--conceal-sensitive-data` Separate sensitive data (credentials, secrets) into a dedicated file. This can be used
+        with both local and live discovery
+   ```bash
+   kantra discover cloud-foundry --input=<path-to/manifest-dir>  --conceal-sensitive-data=true
+   ```
 4. Test generate command flags
    - `--set` – override values in the discovery manifest
-   - omit `--non-k8s-only` – generate both Kubernetes and non-Kubernetes manifests
    - `--non-k8s-only` – generate only non-Kubernetes manifests
-5. Perform live discovery of source platform resources
+   - omit `--non-k8s-only` – generate both Kubernetes and non-Kubernetes manifests
+   - `--output-dir` - Directory where output manifests will be saved (default: standard output).
+        If the directory does not exist, it will be created automatically.
+5. Perform live discovery of source platform resources on a subset of spaces
    ```bash
    kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2>
    ```
-6. Perform live discovery of a specific CF application
+6. Perform live discovery of source platform resources on a subset of spaces and on a specific application:
    ```bash
    kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2> --app-name=<app-name>
    ```
