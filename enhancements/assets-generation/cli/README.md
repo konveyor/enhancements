@@ -242,10 +242,49 @@ Test cases:
    ```bash
    kantra discover cloud-foundry --input=<cloud_foundry_app_config> --output-dir=<path_to_output_dir>
    ```
+Sample CloudFoundry application manifest used as input for the discover command
+  ```bash
+  $ cat cf-nodejs-app-doc.yaml
+    name: cf-nodejs
+    lifecycle: cnb
+    buildpacks:
+      - docker://my-registry-a.corp/nodejs
+      - docker://my-registry-b.corp/dynatrace
+    instances: 1
+    random-route: true
+    timeout: 15
+  ```
+Here's the discovery manifest generated with the above CloudFoundry application manifest as input
+  ```bash
+  $ cat discoveryManifest.yaml
+    name: cf-nodejs
+    randomRoute: true
+    timeout: 15
+    buildPacks:
+      - docker://my-registry-a.corp/nodejs
+      - docker://my-registry-b.corp/dynatrace
+    instances: 1
+    lifecycle: cnb
+  ```
 2. Generate an OpenShift manifest for a Cloud Foundry application
    ```bash
    kantra generate helm --input=<path/to/discover/manifest> --chart-dir=<path/to/helmchart>
    ```
+   Here's the deployment manifest generated with the above discovery manifest as input
+  ```bash
+  $ cat configmap.yaml 
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+    name: cf-nodejs
+    data:
+      RANDOM_ROUTE: true
+    TIMEOUT: "15"
+    BUILD_PACKS: |
+      - docker://my-registry-a.corp/nodejs
+      - docker://my-registry-b.corp/dynatrace
+    INSTANCES: "1"
+  ```
 3. Test discover command flags
    - `--list-platforms`         List available supported discovery platforms
    - `--cf-config string`       Path to the Cloud Foundry CLI configuration file (default: ~/.cf/config)
