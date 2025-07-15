@@ -233,18 +233,40 @@ Generate Command:
 
 ### Test Plan
 
-The test plan covers:
-1. Unit tests for the `discover` and `generate` commands.
-2. Integration tests for end-to-end workflows (e.g., Cloud Foundry → discovery manifest → Helm chart).
+## Introduction
+
+The test plan outlines the testing strategy and validation criteria for Kantra CLI
+commands: discover and generate. It includes both unit tests for command functionality and integration
+tests for end-to-end workflows converting Cloud Foundry application manifests to Helm charts
+(e.g., Cloud Foundry → discovery manifest → Helm chart).
+
+## Objectives
+- Validate core CLI command behavior (discover, generate)
+- Handle invalid/malformed input gracefully
+- Ensure generated outputs (discovery manifests, Helm charts) are correct
+
+## Goals
+Unit tests for:
+  - Parsing and validation of input manifests
+  - Data transformation logic
+  - Flag-specific behavior and validation
+
+Integration tests for:
+  - End-to-end workflows: Cloud Foundry Manifest → Discovery Manifest -> Helm chart
+
+## Non-Goals:
+   - GUI or web interfaces
+   - Performance/stress testing
+   - Cloud deployment testing
 
 Test cases:
 1. Discover a Cloud Foundry application
    ```bash
    kantra discover cloud-foundry --input=<cloud_foundry_app_config> --output-dir=<path_to_output_dir>
    ```
-Sample CloudFoundry application manifest used as input for the discover command
-  ```bash
-  $ cat cf-nodejs-app-doc.yaml
+   Input : Sample CloudFoundry application manifest
+   ```bash
+   $ cat cf-nodejs-app-doc.yaml
     name: cf-nodejs
     lifecycle: cnb
     buildpacks:
@@ -253,10 +275,10 @@ Sample CloudFoundry application manifest used as input for the discover command
     instances: 1
     random-route: true
     timeout: 15
-  ```
-Sample discovery manifest generated with the above CloudFoundry application manifest as input
-  ```bash
-  $ cat discoveryManifest.yaml
+    ```
+   Output: Sample discovery manifest
+    ```bash
+   $ cat discoveryManifest.yaml
     name: cf-nodejs
     randomRoute: true
     timeout: 15
@@ -265,24 +287,26 @@ Sample discovery manifest generated with the above CloudFoundry application mani
       - docker://my-registry-b.corp/dynatrace
     instances: 1
     lifecycle: cnb
-  ```
+    ```
+   Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
+   manifest.
 2. Generate an OpenShift manifest for a Cloud Foundry application
    ```bash
    kantra generate helm --input=<path/to/discover/manifest> --chart-dir=<path/to/helmchart>
    ```
-  Expected Generated Helm Chart Output
-  ```
-  generated-output/
-├── Chart.yaml
-├── templates/
-│   ├── configmap.yaml
-└── files/
-    └── konveyor/
-        └── Dockerfile
-  ```
+   Expected Generated Helm Chart Output
+   ```
+    generated-output/
+    ├── Chart.yaml
+    ├── templates/
+    │   ├── configmap.yaml
+    └── files/
+        └── konveyor/
+          └── Dockerfile
+   ```
    Sample deployment manifest generated with the above discovery manifest as input
-  ```bash
-  $ cat configmap.yaml 
+   ```bash
+    $ cat configmap.yaml
     apiVersion: v1
     kind: ConfigMap
     metadata:
@@ -294,8 +318,34 @@ Sample discovery manifest generated with the above CloudFoundry application mani
       - docker://my-registry-a.corp/nodejs
       - docker://my-registry-b.corp/dynatrace
     INSTANCES: "1"
-  ```
-3. Test discover command flags
+   ```
+   Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
+   manifest.
+3. Pass CloudFoundry manifest with missing optional fields
+   ```bash
+   Input             : Omit random-route and timeout fields in YAML
+   Expected Behavior : Fields are omitted or defaulted in output 
+   Validation        : Output still valid YAML, no crash or error
+   ```
+4. Provide invalid Input Format to discover command
+   ```bash
+   Input             : Malformed YAML (e.g., missing colon)
+   Expectation       : CLI should return error and non-zero exit code
+   Validation        : Exit code ≠ 0, helpful error message in stderr
+   ```
+5. Perform live discovery of source platform resources on a subset of spaces
+   ```bash
+   kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2>
+   ```
+   Validation:
+    - CLI connects to Cloud Foundry API
+    - Output manifests correspond to actual apps in space1, space2 spaces
+6. Perform live discovery of source platform resources on a subset of spaces and on a specific application:
+   ```bash
+   kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2> --app-name=<app-name>
+   ```
+   Validation: Only app-name app is discovered in space1, space2 spaces
+7. Test discover command flags
    - `--list-platforms`         List available supported discovery platforms
    - `--cf-config string`       Path to the Cloud Foundry CLI configuration file (default: ~/.cf/config)
    - `--platformType string`    Platform type for discovery (default: cloud-foundry)
@@ -303,28 +353,44 @@ Sample discovery manifest generated with the above CloudFoundry application mani
    - `--output-dir`             Directory where output manifests will be saved (default: standard output).
         If the directory does not exist, it will be created automatically.
    - `--list-apps`              Lists available applications; it can be used with both local and live discovery
-   ```bash
-   kantra discover cloud-foundry --input=<path-to/manifest-dir> --list-apps
-   ```
-   - `--conceal-sensitive-data` Separate sensitive data (credentials, secrets) into a dedicated file. This can be used
+   - `--conceal-sensitive-data` Separate sensitive data (credentials, secrets) into a dedicated file. This works
         with both local and live discovery
    ```bash
    kantra discover cloud-foundry --input=<path-to/manifest-dir>  --conceal-sensitive-data=true
    ```
-4. Test generate command flags
+   Input: Sample CloudFoundry manifest
+   ```bash
+   $ cat cf-nodejs-app-doc.yaml
+    name: app-with-secrets
+    docker: 
+        image: myregistry/myapp:latest
+        username: docker-registry-user
+    disk: 512M
+    memory: 500M
+    instances: 1
+   ```
+   Output#1: Discovery manifest with secret concealed
+   ```bash
+   $ cat cf-nodejs-app-doc.yaml
+    name: app-with-secrets
+    docker:
+        image: myregistry/myapp:latest
+        username: $(a1b2c-3d4E5-f6G7h8-atgh78)
+    disk: 512M
+    memory: 500M
+    instances: 1
+   ```
+   Output#2: Secrets file where UUID is mapped to secret
+   ```bash
+   $ cat secrets.yaml
+   a1b2c-3d4E5-f6G7h8-atgh78: docker-registry-user
+   ```
+8. Test generate command flags
    - `--set` – override values in the discovery manifest
    - `--non-k8s-only` – generate only non-Kubernetes manifests
    - omit `--non-k8s-only` – generate both Kubernetes and non-Kubernetes manifests
    - `--output-dir` - Directory where output manifests will be saved (default: standard output).
         If the directory does not exist, it will be created automatically.
-5. Perform live discovery of source platform resources on a subset of spaces
-   ```bash
-   kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2>
-   ```
-6. Perform live discovery of source platform resources on a subset of spaces and on a specific application:
-   ```bash
-   kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2> --app-name=<app-name>
-   ```
 
 ### Upgrade/Downgrade Strategy
 
