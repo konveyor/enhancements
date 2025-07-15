@@ -254,7 +254,7 @@ Sample CloudFoundry application manifest used as input for the discover command
     random-route: true
     timeout: 15
   ```
-Here's the discovery manifest generated with the above CloudFoundry application manifest as input
+Sample discovery manifest generated with the above CloudFoundry application manifest as input
   ```bash
   $ cat discoveryManifest.yaml
     name: cf-nodejs
@@ -270,7 +270,17 @@ Here's the discovery manifest generated with the above CloudFoundry application 
    ```bash
    kantra generate helm --input=<path/to/discover/manifest> --chart-dir=<path/to/helmchart>
    ```
-   Here's the deployment manifest generated with the above discovery manifest as input
+  Expected Generated Helm Chart Output
+  ```
+  generated-output/
+├── Chart.yaml
+├── templates/
+│   ├── configmap.yaml
+└── files/
+    └── konveyor/
+        └── Dockerfile
+  ```
+   Sample deployment manifest generated with the above discovery manifest as input
   ```bash
   $ cat configmap.yaml 
     apiVersion: v1
