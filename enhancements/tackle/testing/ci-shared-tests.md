@@ -3,7 +3,7 @@ title: ci-shared-tests
 authors:
   - "@aufi"
 reviewers:
-  - @dymurray
+  - "@dymurray"
 approvers:
   - TBD
 creation-date: "2025-07-11"
