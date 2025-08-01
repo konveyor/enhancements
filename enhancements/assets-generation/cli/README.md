@@ -321,13 +321,13 @@ Test cases:
    ```
    Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
    manifest.
-3. Pass CloudFoundry manifest with missing optional fields
+3. Negative testing for discover subcommand: Pass CloudFoundry manifest with missing optional fields
    ```bash
    Input             : Omit random-route and timeout fields in YAML
    Expected Behavior : Fields are omitted or defaulted in output 
    Validation        : Output still valid YAML, no crash or error
    ```
-4. Provide invalid Input Format to discover command
+4. Negative testing for discover subcommand: Provide invalid input Format
    ```bash
    Input             : Malformed YAML (e.g., missing colon)
    Expectation       : CLI should return error and non-zero exit code
@@ -358,32 +358,64 @@ Test cases:
    ```bash
    kantra discover cloud-foundry --input=<path-to/manifest-dir>  --conceal-sensitive-data=true
    ```
-   Input: Sample CloudFoundry manifest
+   Example#1 Input: Sample CloudFoundry manifest
    ```bash
-   $ cat cf-nodejs-app-doc.yaml
+   $ cat app-with-secrets.yaml
     name: app-with-secrets
     docker: 
         image: myregistry/myapp:latest
         username: docker-registry-user
+    services:
+      - name: my-database
+    parameters:
+      "credentials": "{\"username\": \"secret-username\",\"password\": \"secret-password\"}"
     disk: 512M
     memory: 500M
     instances: 1
    ```
-   Output#1: Discovery manifest with secret concealed
+   Example#1 Output: Discovery manifest with secret concealed
    ```bash
-   $ cat cf-nodejs-app-doc.yaml
+   $ cat discovery-manifest-app-secrets.yaml
     name: app-with-secrets
     docker:
         image: myregistry/myapp:latest
-        username: $(a1b2c-3d4E5-f6G7h8-atgh78)
+        username: $(z7c8y3f9-w5u8-4589-abcd-zf1234567871)
+    services:
+      - name: my-database
+        credentials: $(d4c3d4g7-d6f9-7912-zwde-f89456789036)
     disk: 512M
     memory: 500M
     instances: 1
    ```
-   Output#2: Secrets file where UUID is mapped to secret
+   Example#1 Output: Secrets file where UUID is mapped to secret
    ```bash
    $ cat secrets.yaml
-   a1b2c-3d4E5-f6G7h8-atgh78: docker-registry-user
+   z7c8y3f9-w5u8-4589-abcd-zf1234567871: docker-registry-user
+   d4c3d4g7-d6f9-7912-zwde-f89456789036: '{"username": "secret-username","password": "secret-password"}'
+   ```
+   Example#2 Input: Sample CloudFoundry manifest with no secrets
+   ```bash
+   $ cat cf-nodejs-no-secrets.yaml
+    name: cf-nodejs-no-secrets
+    lifecycle: cnb
+    buildpacks:
+      - docker://my-registry-a.corp/nodejs
+      - docker://my-registry-b.corp/dynatrace
+    instances: 1
+    random-route: true
+    timeout: 15
+   ```
+   Example#2 Output: Discovery manifest with no UUID substitution
+   ```bash
+   $ cat discoveryManifest.yaml
+    name: cf-nodejs-no-secrets
+    randomRoute: true
+    timeout: 15
+    buildPacks:
+      - docker://my-registry-a.corp/nodejs
+      - docker://my-registry-b.corp/dynatrace
+    instances: 1
+    lifecycle: cnb
    ```
 8. Test generate command flags
    - `--set` – override values in the discovery manifest
