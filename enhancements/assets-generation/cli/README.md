@@ -34,8 +34,8 @@ see-also:
 - [ ] Test plan is defined
 - [ ] User-facing documentation is created
 
-
 ## Open Questions
+
 1. Do we need an interactive mode where users can preview and modify
    configurations during discovery or generation?
 2. Should the CLI provide validation against Kubernetes best practices
@@ -54,7 +54,7 @@ migrations, enabling a tech-preview release in an upcoming version of Kantra.
 
 ## Motivation
 
-Organizations migrating workloads from one platform to another (e.g. Cloud Foundry to Kubernetes) 
+Organizations migrating workloads from one platform to another (e.g. Cloud Foundry to Kubernetes)
 require reliable tools to simplify resource discovery and deployment transformation.
 Existing tools like Move2Kube (M2K) provide limited flexibility and lack a
 modular approach, resulting in suboptimal user experiences. This enhancement
@@ -90,7 +90,7 @@ integration with other tools and workflows.
 - Automatic detection of application archetypes.
 - Full compatibility with the Konveyor add-on process.
 - Immediate support for platforms beyond Cloud Foundry and Kubernetes.
-- Actual agent implementation. we will have stubs for the `agent` 
+- Actual agent implementation. we will have stubs for the `agent`
   subcommand for initial mvp.
 
 ## Proposal
@@ -138,7 +138,7 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
         - Via live connections using APIs or other supported interfaces.
         - Through filesystem access to the platform's installation paths (e.g., for Application Servers
           or Servlet Containers), implemented as an agent on the host.
-          
+
   - `generate`: This command takes a discovery manifest representation and a Helm
     template to produce deployment-ready Helm charts. Details:
     - **Flags and Options:**
@@ -167,11 +167,12 @@ making it easy to deploy on Kubernetes with minimal manual intervention.
 - **Library Architecture:**
   - Implement the core functionality as a standalone library in Go for reuse in
     Kantra and other projects.
-  - Modularize the functionality to support future enhancements. 
+  - Modularize the functionality to support future enhancements.
 - **Integration Path:**
   - Release as part of upcoming Kantra/Konveyor in tech preview.
 
- ### Usage
+### Usage
+
  ```
   - Usage: kantra [OPTIONS] COMMAND [OPTIONS1]...
 
@@ -216,7 +217,6 @@ Generate Command:
 
 ```
 
-
 ### Security, Risks, and Mitigations
 
 - Conduct code reviews with security specialists to mitigate risks.
@@ -226,45 +226,53 @@ Generate Command:
   violate pre-existing policies.
 
 #### **Risks**
+
 1. Modularity increases the maintenance burden.
    - **Mitigation:** Maintain clear documentation and well-defined APIs for each module.
 
 ## Design Details
 
-### Test Plan
+## Test Plan
 
-## Introduction
+### Introduction
 
 The test plan outlines the testing strategy and validation criteria for Kantra CLI
 commands: discover and generate. It includes both unit tests for command functionality and integration
 tests for end-to-end workflows converting Cloud Foundry application manifests to Helm charts
-(e.g., Cloud Foundry → discovery manifest → Helm chart).
+(e.g., Cloud Foundry → discovery manifest → Helm chart). Automated tests will be added to the
+<https://github.com/konveyor-ecosystem/kantra-cli-tests> repo.
 
-## Objectives
+### Objectives
+
 - Validate core CLI command behavior (discover, generate)
-- Handle invalid/malformed input gracefully
+- Verify that invalid/malformed input is handled gracefully
 - Ensure generated outputs (discovery manifests, Helm charts) are correct
 
-## Goals
-Unit tests for:
+### Testing Goals
+
+- Cloud deployment testing is not a short term immediate need but is desired as a long term goal.
+- Unit tests for:
   - Parsing and validation of input manifests
   - Data transformation logic
   - Flag-specific behavior and validation
-
-Integration tests for:
+- Integration tests for:
   - End-to-end workflows: Cloud Foundry Manifest → Discovery Manifest -> Helm chart
 
-## Non-Goals:
-   - GUI or web interfaces
-   - Performance/stress testing
-   - Cloud deployment testing
+### Testing Non-Goals
+
+- GUI or web interfaces
+- Performance/stress testing
 
 Test cases:
-1. Discover a Cloud Foundry application
+
+1. Perform discovery using a Cloud Foundry manifest with a single application
+
    ```bash
    kantra discover cloud-foundry --input=<cloud_foundry_app_config> --output-dir=<path_to_output_dir>
    ```
+
    Input : Sample CloudFoundry application manifest
+
    ```bash
    $ cat cf-nodejs-app-doc.yaml
     name: cf-nodejs
@@ -275,9 +283,11 @@ Test cases:
     instances: 1
     random-route: true
     timeout: 15
-    ```
+   ```
+
    Output: Sample discovery manifest
-    ```bash
+
+   ```bash
    $ cat discoveryManifest.yaml
     name: cf-nodejs
     randomRoute: true
@@ -287,15 +297,85 @@ Test cases:
       - docker://my-registry-b.corp/dynatrace
     instances: 1
     lifecycle: cnb
-    ```
+   ```
+
    Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
    manifest.
-2. Generate an OpenShift manifest for a Cloud Foundry application
+   Note that the `--output-dir` flag is optional. If omitted, it defaults to standard output.
+2. Perform discovery using a Cloud Foundry manifest with multiple applications
+
+   ```bash
+   kantra discover cloud-foundry --input=<cloud_foundry_app_config>
+   ```
+
+   Input : Sample CloudFoundry manifest with multiple applications
+
+   ```bash
+   $ cat cf-multiple-apps.yaml
+    version: 1
+    applications:
+      - name: my-app-1      # This application will be selected
+        memory: 512M
+        instances: 2
+        buildpacks: [java_buildpack]
+        env:
+          DATABASE_URL: postgres://...
+      - name: my-app-2      # This application will be ignored
+        memory: 256M
+        instances: 1
+        buildpacks: [java_buildpack]
+   ```
+
+   Validation critera: When processing Cloud Foundry format manifests with multiple applications, only the
+   first application in the applications array should be processed.
+3. Perform discovery by passing the directory path of a directory with multiple manifests
+
+   ```bash
+   kantra discover cloud-foundry --input=<path_to_input_dir>
+   ```
+
+   Input : Directory path of directory with multiple manifests; Manifest could be a single application manifest
+           or a Cloud Foundry manifest with multiple applications
+
+   ```bash
+
+  manifests/
+  ├── app-1-manifest.yml     # Single app: name: app-1
+  ├── app-2-manifest.yml     # Single app: name: app-2
+  ├── cf-apps-manifest.yml   # CF format with applications: [app-3, app-4]
+  └── other-file.txt         # Ignored (not a manifest)
+
+   ```
+
+   Validation critera: Discovery manifests should be generated for each of the .yaml and .yml files
+   in the input directory. Files other than .yaml and .yml should be ignored.
+4. Perform discovery of a single application by passing the directory path of a directory with multiple manifests
+   ```bash
+   kantra discover cloud-foundry --input=<path_to_input_dir> --app-name=<app-name>
+   ```
+
+   Input : Directory path of directory with multiple manifests; Manifest could be a single application manifest
+           or a Cloud Foundry manifest with multiple applications
+
+   ```bash
+  manifests/
+  ├── app-1-manifest.yml     # Single app: name: app-1
+  ├── app-2-manifest.yml     # Single app: name: app-2
+  ├── cf-apps-manifest.yml   # CF format with applications: [app-3, app-4]
+  └── other-file.txt         # Ignored (not a manifest)
+   ```
+
+   Validation critera: Only app-name should be discovered.
+5. Generate an OpenShift manifest for a Cloud Foundry application
+
    ```bash
    kantra generate helm --input=<path/to/discover/manifest> --chart-dir=<path/to/helmchart>
    ```
+
    Expected Generated Helm Chart Output
-   ```
+
+   ```bash
+
     generated-output/
     ├── Chart.yaml
     ├── templates/
@@ -304,7 +384,9 @@ Test cases:
         └── konveyor/
           └── Dockerfile
    ```
+
    Sample deployment manifest generated with the above discovery manifest as input
+
    ```bash
     $ cat configmap.yaml
     apiVersion: v1
@@ -319,46 +401,59 @@ Test cases:
       - docker://my-registry-b.corp/dynatrace
     INSTANCES: "1"
    ```
+
    Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
    manifest.
-3. Negative testing for discover subcommand: Pass CloudFoundry manifest with missing optional fields
+6. Negative testing for discover subcommand: Pass CloudFoundry manifest with missing optional fields
+
    ```bash
    Input             : Omit random-route and timeout fields in YAML
    Expected Behavior : Fields are omitted or defaulted in output 
    Validation        : Output still valid YAML, no crash or error
    ```
-4. Negative testing for discover subcommand: Provide invalid input Format
+
+7. Negative testing for discover subcommand: Provide invalid input Format
+
    ```bash
    Input             : Malformed YAML (e.g., missing colon)
    Expectation       : CLI should return error and non-zero exit code
    Validation        : Exit code ≠ 0, helpful error message in stderr
    ```
-5. Perform live discovery of source platform resources on a subset of spaces
+
+8. Perform live discovery of source platform resources on a subset of spaces
+
    ```bash
    kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2>
    ```
+
    Validation:
     - CLI connects to Cloud Foundry API
     - Output manifests correspond to actual apps in space1, space2 spaces
-6. Perform live discovery of source platform resources on a subset of spaces and on a specific application:
+9. Perform live discovery of source platform resources on a subset of spaces and on a specific application:
+
    ```bash
    kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2> --app-name=<app-name>
    ```
+
    Validation: Only app-name app is discovered in space1, space2 spaces
-7. Test discover command flags
-   - `--list-platforms`         List available supported discovery platforms
-   - `--cf-config string`       Path to the Cloud Foundry CLI configuration file (default: ~/.cf/config)
-   - `--platformType string`    Platform type for discovery (default: cloud-foundry)
-   - `--skip-ssl-validation`    Skip SSL certificate validation for API connections (default: false)
-   - `--output-dir`             Directory where output manifests will be saved (default: standard output).
+10. Test other discover command flags
+
+- `--list-platforms`         List available supported discovery platforms
+- `--cf-config string`       Path to the Cloud Foundry CLI configuration file (default: ~/.cf/config)
+- `--platformType string`    Platform type for discovery (default: cloud-foundry)
+- `--skip-ssl-validation`    Skip SSL certificate validation for API connections (default: false)
+- `--output-dir`             Directory where output manifests will be saved (default: standard output).
         If the directory does not exist, it will be created automatically.
-   - `--list-apps`              Lists available applications; it can be used with both local and live discovery
-   - `--conceal-sensitive-data` Separate sensitive data (credentials, secrets) into a dedicated file. This works
+- `--list-apps`              Lists available applications; it can be used with both local and live discovery
+- `--conceal-sensitive-data` Separate sensitive data (credentials, secrets) into a dedicated file. This works
         with both local and live discovery
+
    ```bash
    kantra discover cloud-foundry --input=<path-to/manifest-dir>  --conceal-sensitive-data=true
    ```
+
    Example#1 Input: Sample CloudFoundry manifest
+
    ```bash
    $ cat app-with-secrets.yaml
     name: app-with-secrets
@@ -373,7 +468,9 @@ Test cases:
     memory: 500M
     instances: 1
    ```
+
    Example#1 Output: Discovery manifest with secret concealed
+
    ```bash
    $ cat discovery-manifest-app-secrets.yaml
     name: app-with-secrets
@@ -387,13 +484,17 @@ Test cases:
     memory: 500M
     instances: 1
    ```
+
    Example#1 Output: Secrets file where UUID is mapped to secret
+
    ```bash
    $ cat secrets.yaml
    z7c8y3f9-w5u8-4589-abcd-zf1234567871: docker-registry-user
    d4c3d4g7-d6f9-7912-zwde-f89456789036: '{"username": "secret-username","password": "secret-password"}'
    ```
+
    Example#2 Input: Sample CloudFoundry manifest with no secrets
+
    ```bash
    $ cat cf-nodejs-no-secrets.yaml
     name: cf-nodejs-no-secrets
@@ -405,7 +506,9 @@ Test cases:
     random-route: true
     timeout: 15
    ```
+
    Example#2 Output: Discovery manifest with no UUID substitution
+
    ```bash
    $ cat discoveryManifest.yaml
     name: cf-nodejs-no-secrets
@@ -417,12 +520,14 @@ Test cases:
     instances: 1
     lifecycle: cnb
    ```
-8. Test generate command flags
-   - `--set` – override values in the discovery manifest
-   - `--non-k8s-only` – generate only non-Kubernetes manifests
-   - omit `--non-k8s-only` – generate both Kubernetes and non-Kubernetes manifests
-   - `--output-dir` - Directory where output manifests will be saved (default: standard output).
-        If the directory does not exist, it will be created automatically.
+
+11. Test generate command flags
+
+- `--set`               Override values in the discovery manifest
+- `--non-k8s-only`      Generate only non-Kubernetes manifests
+- omit `--non-k8s-only` Generate both Kubernetes and non-Kubernetes manifests
+- `--output-dir`        Directory where output manifests will be saved (default: standard output).
+                           If the directory does not exist, it will be created automatically.
 
 ### Upgrade/Downgrade Strategy
 
