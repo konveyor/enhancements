@@ -366,7 +366,7 @@ Test cases:
    ```
 
    Validation critera: Only app-name should be discovered.
-5. Generate an OpenShift manifest for a Cloud Foundry application
+5. Generate a Kubernetes manifest for a Cloud Foundry application
 
    ```bash
    kantra generate helm --input=<path/to/discover/manifest> --chart-dir=<path/to/helmchart>
