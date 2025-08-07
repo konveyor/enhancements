@@ -265,7 +265,7 @@ tests for end-to-end workflows converting Cloud Foundry application manifests to
 
 Test cases:
 
-1. Perform discovery using a Cloud Foundry manifest with a single application
+T1. Perform discovery using a Cloud Foundry manifest with a single application
 
    ```bash
    kantra discover cloud-foundry --input=<cloud_foundry_app_config> --output-dir=<path_to_output_dir>
@@ -302,7 +302,7 @@ Test cases:
    Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
    manifest.
    Note that the `--output-dir` flag is optional. If omitted, it defaults to standard output.
-2. Perform discovery using a Cloud Foundry manifest with multiple applications
+T2. Perform discovery using a Cloud Foundry manifest with multiple applications
 
    ```bash
    kantra discover cloud-foundry --input=<cloud_foundry_app_config>
@@ -326,9 +326,9 @@ Test cases:
         buildpacks: [java_buildpack]
    ```
 
-   Validation critera: When processing Cloud Foundry format manifests with multiple applications, only the
+   Validation criteria: When processing Cloud Foundry format manifests with multiple applications, only the
    first application in the applications array should be processed.
-3. Perform discovery by passing the directory path of a directory with multiple manifests
+T3. Perform discovery by passing the directory path of a directory with multiple manifests
 
    ```bash
    kantra discover cloud-foundry --input=<path_to_input_dir>
@@ -347,10 +347,12 @@ Test cases:
 
    ```
 
-   Validation critera: Discovery manifests should be generated for each of the .yaml and .yml files
+   Validation criteria: Discovery manifests should be generated for each of the .yaml and .yml files
    in the input directory. Files other than .yaml and .yml should be ignored.
-4. Perform discovery of a single application by passing the directory path of a directory with multiple manifests
+T4. Perform discovery of a single application by passing the directory path of a directory with multiple manifests
+
    ```bash
+
    kantra discover cloud-foundry --input=<path_to_input_dir> --app-name=<app-name>
    ```
 
@@ -365,8 +367,8 @@ Test cases:
   └── other-file.txt         # Ignored (not a manifest)
    ```
 
-   Validation critera: Only app-name should be discovered.
-5. Generate a Kubernetes manifest for a Cloud Foundry application
+   Validation criteria: Only app-name should be discovered.
+T5. Generate a Kubernetes manifest for a Cloud Foundry application
 
    ```bash
    kantra generate helm --input=<path/to/discover/manifest> --chart-dir=<path/to/helmchart>
@@ -404,7 +406,7 @@ Test cases:
 
    Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
    manifest.
-6. Negative testing for discover subcommand: Pass CloudFoundry manifest with missing optional fields
+T6. Negative testing for discover subcommand: Pass CloudFoundry manifest with missing optional fields
 
    ```bash
    Input             : Omit random-route and timeout fields in YAML
@@ -412,7 +414,7 @@ Test cases:
    Validation        : Output still valid YAML, no crash or error
    ```
 
-7. Negative testing for discover subcommand: Provide invalid input Format
+T7. Negative testing for discover subcommand: Provide invalid input Format
 
    ```bash
    Input             : Malformed YAML (e.g., missing colon)
@@ -420,7 +422,7 @@ Test cases:
    Validation        : Exit code ≠ 0, helpful error message in stderr
    ```
 
-8. Perform live discovery of source platform resources on a subset of spaces
+T8. Perform live discovery of source platform resources on a subset of spaces
 
    ```bash
    kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2>
@@ -429,14 +431,14 @@ Test cases:
    Validation:
     - CLI connects to Cloud Foundry API
     - Output manifests correspond to actual apps in space1, space2 spaces
-9. Perform live discovery of source platform resources on a subset of spaces and on a specific application:
+T9. Perform live discovery of source platform resources on a subset of spaces and on a specific application:
 
    ```bash
    kantra discover cloud-foundry --use-live-connection --spaces=<space1,space2> --app-name=<app-name>
    ```
 
-   Validation: Only app-name app is discovered in space1, space2 spaces
-10. Test other discover command flags
+   Validation criteria: Only app-name app is discovered in space1, space2 spaces
+T10. Test other discover command flags
 
 - `--list-platforms`         List available supported discovery platforms
 - `--cf-config string`       Path to the Cloud Foundry CLI configuration file (default: ~/.cf/config)
@@ -521,7 +523,7 @@ Test cases:
     lifecycle: cnb
    ```
 
-11. Test generate command flags
+T11. Test generate command flags
 
 - `--set`               Override values in the discovery manifest
 - `--non-k8s-only`      Generate only non-Kubernetes manifests
