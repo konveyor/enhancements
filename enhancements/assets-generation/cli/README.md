@@ -256,12 +256,14 @@ tests for end-to-end workflows converting Cloud Foundry application manifests to
   - Data transformation logic
   - Flag-specific behavior and validation
 - Integration tests for:
-  - End-to-end workflows: Cloud Foundry Manifest → Discovery Manifest -> Helm chart
+  - End-to-end workflows: Cloud Foundry Manifest → Discovery Manifest -> Helm chart . The e2e tests in CI
+  would use manifest files already retrieved without live discovery.
 
 ### Testing Non-Goals
 
 - GUI or web interfaces
 - Performance/stress testing
+- Cloud Foundry API integration
 
 Test cases:
 
@@ -300,8 +302,7 @@ T1. Perform discovery using a Cloud Foundry manifest with a single application
    ```
 
    Validation criteria: The key, value pairs in the output file should match those of the CloudFoundry
-   manifest.
-   Note that the `--output-dir` flag is optional. If omitted, it defaults to standard output.
+   manifest. Note that the `--output-dir` flag is optional. If omitted, it defaults to standard output.
 T2. Perform discovery using a Cloud Foundry manifest with multiple applications
 
    ```bash
