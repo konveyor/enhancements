@@ -200,13 +200,21 @@ particular run mode will be much easier.
 #### new provider command
 
 The new provider command will be responsible for installing into '$HOME/.kantra`
- the provider settings template file, all the necessary utilities beside the programming
+the provider settings template file, all the necessary utilities beside the programming
 language and the dependency management tool. We will have to add docs to detail
 this and have good error messages.
 
-We already have 'pkg/providers' that encapsulate the information for each well
-known provider, and we will continue to use these encapsulations to drive the
-new command.
+The providers list to be installed will be driven by the `$HOME/.kantra/config.yaml`.
+Here we will set the for each provider that is installable, the location for downloading
+the zip or the container. Kantra will be responsible for downloading and extracting
+the information to the correct place.
+
+A user who has their own provider will be able to update the config and point to
+the download location, this could incldue an on-disk path.
+
+Each provider, may additionally come with their own default ruleset. This ruleset
+should be added to the kantra ruleset's directory, and should get added to it's own
+directory in that.
 
 #### provider install
 
@@ -219,9 +227,9 @@ formated as a table.
 
 ```bash
 $ kantra provider list
-Provider Name    Language    Installed
-java-provider     java         yes
- go-provider     golang         no 
+Provider Name    Language    Installed    Version
+java-provider     java         yes         1.8.0
+ go-provider     golang         no         1.8.0
 ....
 ```
 
