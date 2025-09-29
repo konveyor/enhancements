@@ -56,7 +56,7 @@ achieve the same performance benefits for all providers.
 or a [Named Pipe](https://learn.microsoft.com/en-us/windows/win32/ipc/named-pipes)
 on Windows.
 
-- Providers should be installed on the local machine and should contain all of
+- Providers should be installed on the local machine and should ensure all of
 the necessary dependencies are installed when being installed.
 
 - Providers should be first-class entities from `kantra`, with their own subcommand.
