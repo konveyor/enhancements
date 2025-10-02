@@ -263,19 +263,6 @@ etc...
 
 This command should undo all that the install command does.
 
-### Enable `kai_analyzer_rpc`
-
-To enable the kai_analyzer_rpc to have providers be installed and used, we should
-consider that there is already a package format and process for dealing with vscode
-extensions. Because of this, I am proposing that each provider becomes it's own extension
-and that they depend on Kai. This will enable someone to install the kai-java-provider
-and when that is installed, it will register with the Kai plugin, and the Kai plugin
-will be able to ask for the provider_settings.
-
-This enables us to then also have the `kai-java-provider' depend on the
-RedHat Java Extension which will allow for Kai to be installed only for the
-specific things a user needs and nothing more.
-
 ### Security, Risks, and Mitigations
 
 I don't see any security risks with this approach. There will be no network
