@@ -29,10 +29,10 @@ replaces:
 ## Summary
 
 Currently, users face a slow and cumbersome experience when running analysis with
-providers, primarily due to the reliance on container-based communication as well
-as a unclear user experience for managing those providers. Along with this, there
-is not user experience for provider management, specifically adding or removing
-providers. This enhancement proposes a shift to a more efficient communication method
+providers, primarily due to the reliance on container-based communication Along
+with this, there is not user experience for provider management, specifically
+adding or removing providers.
+This enhancement proposes a shift to a more efficient communication method
 using local sockets and named pipes.
 This change will dramatically improve analysis speed and simplify provider management
 by introducing a new command-line interface for installing and managing providers.
@@ -61,9 +61,9 @@ that moving analysis to be able to communicate over a socket/named pipe that we 
 achieve the same performance benefits for all providers.
 
 Furthermore, the absence of a streamlined user experience for managing providers
-is a majore usability gap. Users lack a simple way to add, remove or configure their
+is a major usability gap. Users lack a simple way to add, remove or configure their
 analysis tools, creating a significant barrier to adoption and customization.
-This Proposal is equally motivated by the need to empower users with direct control
+This proposal is equally motivated by the need to empower users with direct control
 over their environment through a clear and simple command-line interface for `kantra`.
 
 ### Goals
