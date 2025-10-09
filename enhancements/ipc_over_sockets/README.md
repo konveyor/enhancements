@@ -28,11 +28,22 @@ replaces:
 
 ## Summary
 
-We should strongly consider updating the user experience around using providers
-for users, and this enhancement attempts to capture that update. I believe that we
-should consider moving to a new way of engine/provider communication. As a part
-of this move, we will have to redesign the way providers are managed by the users
-because we will no longer have a container.
+Currently, users face a slow and cumbersome experience when running analysis with
+providers, primarily due to the reliance on container-based communication as well
+as a unclear user experience for managing those providers. Along with this, there
+is not user experience for provider management, specifically adding or removing
+providers. This enhancement proposes a shift to a more efficient communication method
+using local sockets and named pipes.
+This change will dramatically improve analysis speed and simplify provider management
+by introducing a new command-line interface for installing and managing providers.
+The result for the end user will be a significantly faster, more streamlined, and
+user-friendly analysis process by enabling users to take control of the providers.
+
+Adding configuration as a first class citizen to kantra, will enable easier use with
+the CLI, as you will need to add less options per command. Along with this will
+be a more ergonomic CLI interface, that will both feel familar and not break backwards
+compatability but will move to a style where commands manage one thing, and figuring
+out what to do is easier from the command help.
 
 ## Motivation
 
@@ -48,6 +59,12 @@ is slow. We have found that running locally is much faster, and that is why we b
 [containerless java analysis](https://github.com/konveyor/kantra/pull/338). I believe
 that moving analysis to be able to communicate over a socket/named pipe that we can
 achieve the same performance benefits for all providers.
+
+Furthermore, the absence of a streamlined user experience for managing providers
+is a majore usability gap. Users lack a simple way to add, remove or configure their
+analysis tools, creating a significant barrier to adoption and customization.
+This Proposal is equally motivated by the need to empower users with direct control
+over their environment through a clear and simple command-line interface for `kantra`.
 
 ### Goals
 
