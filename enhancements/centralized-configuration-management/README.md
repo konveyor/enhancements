@@ -108,7 +108,39 @@ TBD
 
 ### Implementation Details/Notes/Constraints
 
-TBD
+#### IDE Implementation
+
+The IDE will be enhanced to support centralized configuration management from Konveyor Hub through the following changes:
+
+##### Hub Connection Management
+
+Extend the existing solution server configuration mechanism to include Hub connectivity. Users will configure Hub connection details (URL, credentials) similar to how they currently configure the AI solution server. The IDE will support both standalone solution server mode and Hub-managed mode where configuration is synchronized from the Hub.
+
+##### Profile Synchronization
+
+A sync engine will be added to the IDE that:
+1. Uses the repository's git remote URL to identify the corresponding Application in the Hub
+2. Retrieves available analyzer profile IDs from the Hub for that Application
+3. Downloads profile bundles (profile configuration + rulesets) as tarballs from the Hub
+4. Writes profiles to disk in a shared format readable by both the IDE and Kantra CLI
+
+The sync engine will implement conflict mitigation strategies such as pausing synchronization during active analysis operations to prevent reading partially-written configuration.
+
+##### Shared Profile Format
+
+The IDE and Kantra will align on a common on-disk representation of analyzer profiles. This shared format will be stored in the repository (proposed location: `.konveyor/profiles/`) and support:
+- Multiple profiles per repository
+- Profile metadata including source (bundled/user/hub), version, and sync state
+- Associated rulesets bundled with each profile
+- Hub-sourced profiles marked as read-only to prevent local modifications
+
+##### Configuration Precedence
+
+The IDE will consume configuration from multiple sources following the precedence model defined in the UX design:
+- Environment variables
+- Hub-synchronized profiles
+- Local user preferences
+- Bundled defaults
 
 ## Design Details
 
