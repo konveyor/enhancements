@@ -33,7 +33,7 @@ superseded-by:
 Introduce a lightweight LLM proxy service, deployed alongside the Hub and Solution Server in Kubernetes.
 The proxy provides a centralized, administrator-controlled entry point for LLM access, ensuring that real LLM credentials never leave the cluster.
 
-When authentication is enabled, the proxy validates incoming requests using JWT tokens issued by Keycloak. End users (for example, IDE plugins or other clients) authenticate using only their Hub credentials, while the proxy uses a cluster-side secret to connect to the underlying LLM provider.
+When authentication is enabled, the proxy validates incoming requests using JWT tokens issued by Keycloak. End users (for example, IDE plugins or other clients) authenticate using only their Hub credentials, while the proxy service uses credentials stored in a Kubernetes secret to connect to the underlying LLM provider.
 
 This design decouples user identity from backend LLM credentials, enabling administrators to configure, rotate, or restrict LLM access centrally without distributing API keys to every client.
 
