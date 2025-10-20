@@ -81,7 +81,7 @@ and saving hundreds of MB of RAM. Search is done via binary search, which runs i
 #### Story 1
 As a user,
 I want to be able to get a full list of dependencies
-When I analyze a Java binary with embedded libraries
+When I analyze a Java binary with embedded libraries without internet connection
 
 ### Implementation Details/Notes/Constraints
 
@@ -97,26 +97,25 @@ Ideally, we would want to modernize this project, since it's very old and gobble
 
 The process of regenerating the index could either be included in the process of generating the Java provider image,
 or could be completely independent. The Java provider image build would then simply download the pre-generated data
-from a Github releases link.
+from a GitHub releases link.
 
-#### 2. Data bundling
-Data could be pre-generated and potentially **compressed** for a smaller disk footprint:
-```
--rw-r--r--. 1 jmle jmle 877M Sep 16 10:57 central.archive-metadata.sorted.txt
--rw-r--r--. 1 jmle jmle 504M Sep 16 11:49 index.bin
-```
+- Given the urgency of this enhancement, a first phase will get the previously-generated data from a [pre-made release in GitHub](https://github.com/konveyor/maven-search-index/releases/tag/v0.0.1).
 
-would become
-```
--rw-r--r--. 1 jmle jmle 388M Sep 18 16:31 data.tar.gz
--rw-r--r--. 1 jmle jmle 241M Sep 18 16:30 index.tar.gz
-```
+#### 2. Data contents
+The data would consist of two files:
+1. **The artifacts list**: an ordered *.txt file with a map-like structure, that will contain entries in the form `<sha> <groupId>:<artifactId>:<packaging>::<version>`. For instance: `00000002832188c16354e5dbb141f3b8e7462976 org.geneweaver:gweaver-bulk-import:jar::1.0.11`
+2. **The index for the artifacts list**: a binary file containing, for each sha, the offset in the artifacts list (1) where the information for that particular SHA is located. This file will be searched on using binary search and give the location of the entry in the artifacts file. Its contents will be in the form `<sha> <offset>`.
 
-This data could be directly included in the Java provider and the CLI. If compressed, the data would have to be decompressed
-before the first analysis
+#### 3. Data bundling
+The easiest and most straightforward way of including this data is to bundle it within the images themselves and kantra.
+The disk footprint of the artifacts will increase, but this will allow us to avoid making the client download the data at any time, which, in any case, wouldn't be possible in disconnected environments.
 
-#### 3. Data access
-Accessing the data would be done through a few simple functions to query the files.
+Having the data compressed would enable us to decrease the size of the images in a few hundred MBs, but we would incur in lessened performance
+due to having to decompress the data before each run (for instance, when running the Java provider in the hub, decompression would be needed before
+analysis each time a task is created). Disk size shouldn't be a problem nowadays, so the data will be included as-is.
+
+#### 4. Data access
+Accessing the data would be done through a few simple functions to query the files. The flow diagram is explained in the Proposal section.
 
 
 ### Security, Risks, and Mitigations
@@ -131,12 +130,10 @@ Testing would be done by comparing a successful analysis of an older version of 
 with an analysis done by the latest version with local index data.
 
 ### Upgrade / Downgrade Strategy
-
 Upgrading of the data would be done at first by using the Windup project mentioned earlier. Ideally, we would upgrade
 and modify it so that it is more modern and suits our needs.
 
 ## Implementation History
-
 TBD
 
 ## Drawbacks
@@ -151,5 +148,4 @@ A possible alternative would be to load all the information into memory, or usin
 approaches also come with their own drawbacks.
 
 ## Infrastructure Needed
-
-No special infrastructure will be needed.
+TBD - we might need additional infrastructure to run the data generation process
