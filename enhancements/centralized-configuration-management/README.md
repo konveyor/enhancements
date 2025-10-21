@@ -147,7 +147,7 @@ The IDE will consume configuration from multiple sources following the precedenc
 - Support inventory of analysis profiles.
 - Support (optional) association of an analysis profile with one-or-more [Archetype] Target Platforms.
 - Support finding an application based on source repository URL and (optional) root path.
-- Support listing profiles for an application.
+- Support listing profiles for an application associated through archetypes.
 - Support downloading the bundle for an analysis profile. A _bundle_ is a tarball containing the analysis profile.yaml and associated custome rules files.
 
 ## Design Details
