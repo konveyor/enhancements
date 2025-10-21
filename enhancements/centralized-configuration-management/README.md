@@ -135,21 +135,93 @@ A sync engine will be added to the IDE that:
 
 The sync engine will implement conflict mitigation strategies such as pausing synchronization during active analysis operations to prevent reading partially-written configuration.
 
-##### Shared Profile Format
 
-The IDE and Kantra will align on a common on-disk representation of analyzer profiles. This shared format will be stored in the repository (proposed location: `.konveyor/profiles/`) and support:
+#### CLI Implementation
+
+The CLI will support centralized configuration management from the Konveyor Hub through the following:
+
+##### Hub Connection
+
+The CLI will include a `--login` option, which will prompt for the Hub login information:
+
+`kantra analyze --login`
+
+`Hub URL:`  
+`Username:`  
+`Password:`  
+
+##### Profile Synchronization
+
+Once connected to the Hub, the CLI can retrieve associated profiles given an application's remote URL:
+
+`kantra analyze --sync <app>`
+
+The CLI will download any appropriate profile bundles (profile + rulesets) from the Hub.
+
+##### Running Analysis from a Centralized Config
+
+The `--profile` flag will allow analysis configuration from a profile.
+
+`kantra analyze --profile profile-1 ...`
+
+To list available on-disk profiles: `kantra analyze --list-profiles <app>`.
+
+The profile will be verified against the server-side configuration. If it is not in sync, 
+the CLI will provide the following options:
+- Update the existing local profile.
+- Keep the existing local profile.
+
+Alternatively, profiles will always be overwritten.
+
+
+#### IDE and CLI: Shared Profile Format
+
+The IDE and CLI will align on a common on-disk representation of analyzer profiles. 
+
+Example `profile.yaml`
+```yaml
+metadata:
+  name: eap7-to-eap8
+  id: hub-profile-123
+  source: hub 
+  syncedAt: "2025-10-15T12:00:00Z"
+  version: "1.2.3"
+spec:
+  rules:
+    labelSelectors: 
+      - "konveyor.io/target=eap8"
+    rulesets:
+      - "./rulesets/eap-migration.yaml"
+      - "./rulesets/java-ee-to-jakarta.yaml"
+    useDefaultRules: false
+    withDepRules: true
+  scope:
+    depAanlysis: true
+    withKnownLibs: false
+    packages:
+      - "!package=com.example.apps"
+      - "package=com.example.apps2"
+  # Hub-specific metadata
+  hubMetadata:
+    applicationId: "app-456"
+    profileId: "profile-123"
+    readonly: true  # Hub profiles cannot be edited locally
+```
+
+This shared format will be stored in the repository (proposed location: `.konveyor/profiles/`) and support:
 - Multiple profiles per repository
 - Profile metadata including source (bundled/user/hub), version, and sync state
 - Associated rulesets bundled with each profile
 - Hub-sourced profiles marked as read-only to prevent local modifications
 
-##### Configuration Precedence
+#### IDE and CLI: Configuration Precedence
 
-The IDE will consume configuration from multiple sources following the precedence model defined in the UX design:
+The IDE and CLI will consume configuration from multiple sources following the precedence model defined in the UX design:
 - Environment variables
 - Hub-synchronized profiles
 - Local user preferences
 - Bundled defaults
+
 
 ## Design Details
 
