@@ -17,12 +17,12 @@ approvers:
   - "@jwmatthews"
   - "@fabianvf"
   - "@jortel"
-  - "@eemcmullan"  
+  - "@eemcmullan"
 creation-date: 2025-10-09
 last-updated: 2025-10-09
 status: provisional
 see-also:
-  -    
+  -
 replaces:
   -
 superseded-by:
@@ -99,8 +99,23 @@ Developers in charge of migrating specific applications. They perform changes to
 
 ### User Stories
 
-TBD
+#### Web-UI
+1. As an __architect__, I want to manage the set of defined analysis profiles.  This includes the standard view, create, edit, and delete functions.
+2. As an __architect__, I want to attach an existing analysis profile to an archetype's target profile.  The analysis profiles and asset generator list will be managed on the same target profile.
+3. As an __architect__ or __migrator__, when opening the Analysis Wizard, I want to be able to use the analysis wizard as it is currently available.
+4. As an __architect__, when opening the Analysis Wizard, I want to be able to use the analysis wizard as it is currently available, and in the final confirmation step, be able to save my configuration as a new analysis profile.
+5. As an __architect__ or __migrator__, when opening the Analysis Wizard, I want to be able to select an analysis profile available via one of the application's archetype target profiles.
+6. As an __architect__, when opening the Analysis Wizard, I want to be able to select an analysis profile from all defined profiles.
 
+#### IDE
+1. As a __migrator__, I want to connect to my hub instance.
+2. As a __migrator__, I want to select an analysis profile for the application I am working on.
+3. As a __migrator__, I want to use the hub connected analysis profile.
+
+#### CLI
+1. As a __migrator__, I want to connect to my hub instance.
+2. As a __migrator__, I want to select an analysis profile for the application I am working on.
+3. As a __migrator__, I want to run an analysis using the selected analysis profile.
 
 ### Functional Specification
 
@@ -111,9 +126,58 @@ TBD
 - Support inventory of analysis profiles.
 - Support (optional) association of an analysis profile with one-or-more [Archetype] Target Platforms.
 - Support finding an application based on source repository URL and (optional) root path.
-- Support listing profiles for an application as ssociated through archetypes.
+- Support listing profiles for an application as associated through archetypes.
 - Support downloading the bundle for an analysis profile. A _bundle_ is a tarball containing the analysis profile.yaml and associated custom rulesets files.
 
+#### Web-UI
+
+##### Manage Analysis Profiles
+
+Add a new page to the Administration menu to allow management of analysis profiles.
+
+This page should follow the typical pattern:
+  - The page is rooted at a typical _table view_ of analysis profiles defined on the system:
+    - The table displayed base data and useful general statistics about the profiles, as available.
+    - A "create a new analysis profile" action will be a table level action.
+    - Row level actions should allow "Edit" and "Delete" actions on their row.
+
+  - A _detail drawer_ as required to show more useful detailed read-only information to about an analysis profile:
+    - All basic details about an analysis profile
+    - A summary view of the settings may be included so it can be viewed without opening the edit modal.
+
+  - The _delete action_ will require a confirmation before deleting.  Any analysis profile that is attached to an archetype target profile either needed to be prevented from being deleted, or removed from the target profile when deleted.
+
+  - The _create_ and _edit_ action may share the same modal.  Since the analysis profiles can be considered saved settings from the analysis wizard, reusing the same wizard views to create/edit a profile may be useful.  All of the currently available settings on the analysis wizard should be available here as well.
+
+##### Attaching an Analysis Profile to an Archetype Target Profile
+
+Target profiles current exist on Archetypes from the "Manage target profiles" kebab action on an Archetype.  This target profile sub-page will be enhanced to also allow attaching a single analysis profile to each of the archetype's target profiles.
+
+```mermaid
+classDiagram
+    direction LR
+    Archetype "1" --> "0..*" TargetPlatform: defines
+    TargetPlatform "*" --> "1" AnalysisProfile : uses
+    TargetPlatform "1" --> "0..*" Generator : contains (ordered)
+```
+
+Update the _target profile page_:
+  - Display the selected Analysis Profile on the _table_
+  - Update the _create/edit modal_ to add an Analysis Profile section to allow search and selection of an existing Analysis Profile
+  - Allow creation of a target profile _without selecting Generators_.
+
+On the Archetype page, add the selected analysis profile to the _details drawer target profile tab_.
+
+##### Analysis Wizard
+
+The analysis wizard will need to retain its current behavior, but be extended such that the user either progresses with the normal _manual flow_, or chooses to use an _analysis profile flow_.
+
+If an __architect__ is using the normal _manual flow_, an option to save the configuration as an analysis profile will be added on the review step.  This should dynamically add an extra wizard step to collect the data needed to both run the analysis and store the analysis as an analysis profile.
+
+If using the _analysis profile flow_, the user will select an analysis profile and start the analysis:
+  - No modifications to the profile will be allowed.
+  - If the user is a __migrator__, the user may select an analysis profile that has been attached to one of the applications' archetype target profiles.
+  - If the user is an __architect__, the user may select an analysis profile that has been attached to one of the applications' archetype target profiles or any analysis profile available on the system.
 
 ### Implementation Details/Notes/Constraints
 
@@ -146,9 +210,9 @@ The CLI will include a `--login` option, which will prompt for the Hub login inf
 
 `kantra analyze --login`
 
-`Hub URL:`  
-`Username:`  
-`Password:`  
+`Hub URL:`
+`Username:`
+`Password:`
 
 ##### Profile Synchronization
 
@@ -166,7 +230,7 @@ The `--profile` flag will allow analysis configuration from a profile.
 
 To list available on-disk profiles: `kantra analyze --list-profiles <app>`.
 
-The profile will be verified against the server-side configuration. If it is not in sync, 
+The profile will be verified against the server-side configuration. If it is not in sync,
 the CLI will provide the following options:
 - Update the existing local profile.
 - Keep the existing local profile.
@@ -176,19 +240,19 @@ Alternatively, profiles will always be overwritten.
 
 #### IDE and CLI: Shared Profile Format
 
-The IDE and CLI will align on a common on-disk representation of analyzer profiles. 
+The IDE and CLI will align on a common on-disk representation of analyzer profiles.
 
 Example `profile.yaml`
 ```yaml
 metadata:
   name: eap7-to-eap8
   id: hub-profile-123
-  source: hub 
+  source: hub
   syncedAt: "2025-10-15T12:00:00Z"
   version: "1.2.3"
 spec:
   rules:
-    labelSelectors: 
+    labelSelectors:
       - "konveyor.io/target=eap8"
     rulesets:
       - "./rulesets/eap-migration.yaml"
