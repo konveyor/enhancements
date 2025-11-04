@@ -119,7 +119,49 @@ Developers in charge of migrating specific applications. They perform changes to
 
 ### Functional Specification
 
-TBD
+#### IDE
+
+##### Standard Flow
+
+The following mockups provide an approach on how Centralized Configuration Management could be implemented on the IDE side from a functional perspective.
+
+![IDE Standard Flow](images/centralized-management-standard-01.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-02.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-03.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-04.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-05.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-06.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-07.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-08.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-09.png?raw=true "IDE Standard Flow")
+
+![IDE Standard Flow](images/centralized-management-standard-10.png?raw=true "IDE Standard Flow")
+
+##### Centralized Configuration Locking
+
+Large organizations with strict standards are likely to want to lock MTA to work only with centralized configuration. This won’t be possible in a local VS Code environments, where users will have the freedom to enable and disable centralized configuration. Nevertheless, it could be enforced in Eclipse Che environments where configuration (and environment variables) are prepopulated and users don't have control over environment variables. In order to facilitate this, the proposal is to enable the MTA plugin to completely lock local user configuration and enforce centralized configuration via environment variables:
+
+- KONVEYOR_CENTRALIZED_CONFIG: If set to true, local configuration will be disabled.
+- KONVEYOR_HUB_URL: Contains the URL for the Konveyor/MTA Hub the IDE plugin will have to connect to. Ignored if KONVEYOR_CENTRALIZED_CONFIG is not true.
+- KONVEYOR_ALLOW_INSECURE_CONNECTIONS: Allows the plugin to connect to Hub instances with self signed certificates. Ignored if the other two environment variables are not set.
+
+The following mockups provide an approach on the impact that those variables would have on the IDE user experience.
+
+![IDE Configuration Locking](images/centralized-management-locking-01.png?raw=true "IDE Configuration Locking")
+
+![IDE Configuration Locking](images/centralized-management-locking-02.png?raw=true "IDE Configuration Locking")
+
+![IDE Configuration Locking](images/centralized-management-locking-03.png?raw=true "IDE Configuration Locking")
+
+![IDE Configuration Locking](images/centralized-management-locking-04.png?raw=true "IDE Configuration Locking")
 
 #### Hub
 
