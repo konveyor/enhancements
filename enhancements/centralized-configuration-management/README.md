@@ -248,9 +248,10 @@ The CLI will support centralized configuration management from the Konveyor Hub 
 
 ##### Hub Connection
 
-The CLI will include a `--login` option, which will prompt for the Hub login information:
+The CLI will add a new subcommand `config` for interacting with the Hub. 
+This subcommand will include a `--login` option to prompt for Hub login information:
 
-`kantra analyze --login`
+`kantra config login`
 
 `Hub URL:`
 `Username:`
@@ -260,9 +261,11 @@ The CLI will include a `--login` option, which will prompt for the Hub login inf
 
 Once connected to the Hub, the CLI can retrieve associated profiles given an application's remote URL:
 
-`kantra analyze --sync <app>`
+`kantra config --sync <app>`
 
 The CLI will download any appropriate profile bundles (profile + rulesets) from the Hub.
+If logged in, this will automatically be attempted if the Hub application has 
+been updated.
 
 ##### Running Analysis from a Centralized Config
 
@@ -270,7 +273,7 @@ The `--profile` flag will allow analysis configuration from a profile.
 
 `kantra analyze --profile profile-1 ...`
 
-To list available on-disk profiles: `kantra analyze --list-profiles <app>`.
+To list available on-disk profiles: `kantra config --list-profiles <app>`.
 
 The profile will be verified against the server-side configuration. If it is not in sync,
 the CLI will provide the following options:
@@ -278,6 +281,10 @@ the CLI will provide the following options:
 - Keep the existing local profile.
 
 Alternatively, profiles will always be overwritten.
+
+If a profile is found at the expected location in the applicaiton, it will be used
+by default. An override flag or enviroment variable can be set to change this
+behavior.
 
 
 #### IDE and CLI: Shared Profile Format
