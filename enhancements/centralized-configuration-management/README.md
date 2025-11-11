@@ -175,7 +175,7 @@ The following mockups provide an approach on the impact that those variables wou
 
 ##### Manage Analysis Profiles
 
-Add a new page to the Administration menu to allow management of analysis profiles.
+Add a new page to the __Migration__ menu to allow management of analysis profiles.
 
 This page should follow the typical pattern:
   - The page is rooted at a typical _table view_ of analysis profiles defined on the system:
@@ -221,6 +221,22 @@ If using the _analysis profile flow_, the user will select an analysis profile a
   - If the user is a __migrator__, the user may select an analysis profile that has been attached to one of the applications' archetype target profiles.
   - If the user is an __architect__, the user may select an analysis profile that has been attached to one of the applications' archetype target profiles or any analysis profile available on the system.
 
+##### Custom migration targets
+
+Currently, the custom migration target management page is scoped to the Administrator perspective. To support the configuration management enhancement, the management page needs to be moved to the Migration perspective.
+
+  - __Migrator__ users can view the migration targets
+  - __Architect__ users can create, edit, remove custom targets and change the target order
+
+##### Navigation menu for the Migration perspective
+
+The current navigation menu in the Migration perspective is flat and doesn't differentiate between page intent. The navigation can potentially be reorganized and grouped around:
+  - Inputs / Applications / Primary entities and flows
+  - Outputs / Reporting
+  - Non-Administrator managed Configuration and Tools
+
+Any change to the navigation should have the intention to make the Migration perspective more intuitive to use.
+
 ### Implementation Details/Notes/Constraints
 
 #### IDE Implementation
@@ -248,7 +264,7 @@ The CLI will support centralized configuration management from the Konveyor Hub 
 
 ##### Hub Connection
 
-The CLI will add a new subcommand `config` for interacting with the Hub. 
+The CLI will add a new subcommand `config` for interacting with the Hub.
 This subcommand will include a `--login` option to prompt for Hub login information:
 
 `kantra config login`
@@ -264,7 +280,7 @@ Once connected to the Hub, the CLI can retrieve associated profiles given an app
 `kantra config --sync <app>`
 
 The CLI will download any appropriate profile bundles (profile + rulesets) from the Hub.
-If logged in, this will automatically be attempted if the Hub application has 
+If logged in, this will automatically be attempted if the Hub application has
 been updated.
 
 ##### Running Analysis from a Centralized Config
