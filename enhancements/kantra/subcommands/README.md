@@ -83,22 +83,20 @@ from a config file.
 #### analyze
 
 `kantra analyze` will only be responsible for options involving running analysis.
-Such as:
 
-- `kantra analyze --config-file <path/to/config> --output <output-dir>`
-
-*There will also be an undetermined default path to this file.*
+*There will also be an undetermined default path to this file which will contain
+the analysis configuration files from provider install.*
 
 - `kantra analyze --input <path/to/app> --output <output-dir> --target <target>`
 
 #### rules
 
 `kantra rules` will provide options for interacting with rules and rulesets for 
-analysis configuration. This includes both default rulesets and custom rulesets. 
+analysis configuration. This includes both default rulesets and custom rulesets.
+
+- `kantra rules list-labels`
 
 The current `test` subcommand will fall under this new subcommand.
-
-- `kantra rules --list-targets`
 
 - `kantra rules test <path-to-test-rules>`
 
@@ -109,9 +107,9 @@ files and profiles. This will include:
 
 - `kantra config login`
 
-- `kantra config --sync <app>`
+- `kantra config sync <app>`
 
-- `kantra config --list-profiles`
+- `kantra config  list-profiles <app>`
 
 #### provider
 
@@ -119,11 +117,11 @@ files and profiles. This will include:
 installing and removing providers. This will be included once Kantra supports 
 [socket communication](https://github.com/konveyor/enhancements/pull/231).
 
-- `kantra provider --list-providers`
+- `kantra provider list`
 
-- `kantra provider --install <provider>`
+- `kantra provider install <provider>`
 
-- `kantra provider --remove <provider`
+- `kantra provider remove <provider>`
 
 #### transform
 
@@ -140,8 +138,14 @@ installing and removing providers. This will be included once Kantra supports
 
 ### Analysis Config File
 
-Below is an example config file that can be used to read and set all
-analysis options from the provider, as well as any CLI analysis options.
+Below is an example config file that can be used to read and set analysis options 
+from the provider, as well as any CLI analysis options. This will be created during 
+a provider install. The proposed location for these config files 
+is `KANTRA_DIR/provider/<provider-name>/config.yaml`
+
+Because analysis can be run in containerless mode or hybrid mode (providers in container),
+there will need to be separate config files for each. We can differentiate by config
+file name, or add a value to the config file, to indicate which mode will be used.
 
 ```yaml
 providerConfig:
@@ -196,8 +200,11 @@ For example:
 
 `kantra analyze --list-targets`
 
-The refactored CLI will read this input to the new `rules` subcommand. 
+The refactored CLI will read this input to the new `rules` subcommand.
 
+Deprecated options will be hidden using Cobra’s support for hidden subcommands 
+and flags, with `Command.Hidden`. When a deprecated option is invoked, the CLI 
+will print a deprecation notice.
 
 ## Test Plan
 
