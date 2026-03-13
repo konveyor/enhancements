@@ -2,18 +2,17 @@
 title: generic-provider-to-specific-providers
 authors:
   - "@jmle"
-  - "@pranavgaikwad"
-  - "@savitharaghunathan"
 reviewers:
-  - TBD
+  - "@shawn-hurley"
+  - "@eemcmullan"
 approvers:
   - TBD
-creation-date: 2025-03-11
-last-updated: 2025-03-11
+creation-date: 2026-03-13
+last-updated: 2026-03-13
 status: provisional
 see-also:
   - "https://github.com/konveyor/analyzer-lsp/issues/1013"
-  - "docs/refactoring-generic-provider-to-specific-providers.md"
+  - "refactoring-generic-provider-to-specific-providers.md"
 ---
 
 # Refactor Generic Service Client to Language-Specific Providers
