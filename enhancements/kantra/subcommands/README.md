@@ -84,7 +84,7 @@ from a config file.
 
 `kantra analyze` will only be responsible for options involving running analysis.
 
-*There will also be an undetermined default path to this file which will contain
+*There will also be a default path in `~/.kantra` to this file which will contain
 the analysis configuration files from provider install.*
 
 - `kantra analyze --input <path/to/app> --output <output-dir> --target <target>`
@@ -148,46 +148,22 @@ there will need to be separate config files for each. We can differentiate by co
 file name, or add a value to the config file, to indicate which mode will be used.
 
 ```yaml
-providerConfig:
-  name: "java"
-  binaryPath: "/path/to/java/binary"
-  useSocket: true
-  initConfig:
-    location: "/path/to/application/source/code"
-    analysisMode: "full"
-    providerSpecificConfig:
-      name: "java" 
-      bundles: "/path/to/bundle"
-      lspServerPath: "/path/to/language/server/binary"
-      depOpenSourceLabelsFile: "/path/to/maven.default.index"
-      dependencyProviderPath: "/path/to/dependency/provider/binary"
-analysisConfig:
-  rules:
-    targets:
-    - "cloud-readiness"
-    - "quarkus"
-    sources:
-    - ""
-    labelSelectors:
-    - ""
-    rulesets:
-    - "path/to/custom-rules"
-    - "path/to/other/custom-rules"
-    useDefaultRules: false
-    analyzeKnownLibraries: true
-  scope:
-    depAanlysis: true
-    withKnownLibs: false
-    incidentSelector: "!package=com.example.apps"
-  output:
-    location: "path/to/output-dir"
-    skipStaticReport: false
-    overwrite: true
-    jsonOutput: false
-
+javaAnalysisConfig:
+  rules: "/path/to/default/rules"
+  providerConfig:
+    name: "java"
+    binaryPath: "/path/to/java/binary"
+    useSocket: true
+    initConfig:
+      location: "/path/to/application/source/code"
+      analysisMode: "full"
+      providerSpecificConfig:
+        name: "java" 
+        bundles: "/path/to/bundle"
+        lspServerPath: "/path/to/language/server/binary"
+        depOpenSourceLabelsFile: "/path/to/maven.default.index"
+        dependencyProviderPath: "/path/to/dependency/provider/binary"
 ```
-
-*A profile config will take priority over the CLI analysis config.*.  
 
 *Analysis input flags will take priority over the CLI analysis config.*
 
