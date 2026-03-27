@@ -1,5 +1,5 @@
 ---
-title: neat-enhancement-idea
+title: provide builtin AuthZ
 authors:
   - "jortel@redhat.com"
 reviewers:
