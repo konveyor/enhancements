@@ -61,8 +61,9 @@ be associated to permissions (scopes).  Tokens will continue to contain scope cl
 
 ```mermaid
 erDiagram
-    USER ||--o{ USER_ROLE : "has many"
-    ROLE ||--o{ USER_ROLE : "belongs to many"
+    USER ||--o{ USER_ROLE : "has"
+    ROLE ||--o{ ROLE_PERMISSION : "has"
+    PERMISSION ||--o{ ROLE_PERMISSION : "is assigned to"
 
     USER {
         uint id PK
@@ -73,13 +74,23 @@ erDiagram
 
     ROLE {
         uint id PK
-        string name "unique (e.g. admin, developer)"
-        string scopes "JSON serialized []string"
+        string name "unique"
+    }
+
+    PERMISSION {
+        uint id PK
+        string name "human readable name"
+        string scope "actual OIDC scope string"
     }
 
     USER_ROLE {
         uint user_id PK,FK
         uint role_id PK,FK
+    }
+
+    ROLE_PERMISSION {
+        uint role_id PK,FK
+        uint permission_id PK,FK
     }
 ```
 
