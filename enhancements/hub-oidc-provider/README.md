@@ -61,11 +61,11 @@ be associated to permissions (scopes).  Tokens will continue to contain scope cl
 ```mermaid
 sequenceDiagram
     participant UI as UI (Client Application)
-    participant Hub as Hub <br>(OIDC Provider)
+    participant Hub as Hub Provider<br>(OIDC Provider)
     participant User as User
     participant DB as Database<br>(Users + Roles)
 
-    Note over UI,Hub: Authorization Code Flow with Local Authentication
+    Note over UI,Hub: Local Authorization Code Flow (No Consent)
 
     UI->>Hub: GET /oauth2/authorize<br>?client_id=...&scope=openid profile email
     activate Hub
@@ -79,8 +79,6 @@ sequenceDiagram
     Hub->>DB: Authenticate User<br>(check username + password)
     DB-->>Hub: User record + associated Roles
 
-    Hub->>Hub: Validate Credentials
-
     alt Invalid Credentials
         Hub->>User: Show Login Page with Error
         deactivate Hub
@@ -91,19 +89,6 @@ sequenceDiagram
         DB-->>Hub: List of scopes from roles
 
         Hub->>Hub: Apply Authorization Layer<br>(merge requested scopes + role-based scopes)
-
-        alt Consent Required
-            Hub->>User: Show Consent Screen<br>("Allow this app to access ...")
-            User->>Hub: User clicks Approve (or Deny)
-            
-            alt User Denies
-                Hub-->>UI: Redirect with error=access_denied
-            else User Approves
-                Hub->>DB: Save Consent (user + client)
-            end
-        else Consent Already Given
-            Note right of Hub: Skip consent screen
-        end
 
         Hub-->>UI: Redirect back with authorization code
         deactivate Hub
