@@ -1,22 +1,14 @@
 ---
 title: neat-enhancement-idea
 authors:
-  - "@janedoe"
+  - "jortel@redhat.com"
 reviewers:
   - TBD
-  - "@alicedoe"
 approvers:
   - TBD
-  - "@oscardoe"
-creation-date: yyyy-mm-dd
-last-updated: yyyy-mm-dd
-status: provisional|implementable|implemented|deferred|rejected|withdrawn|replaced
-see-also:
-  - "/enhancements/this-other-neat-thing.md"  
-replaces:
-  - "/enhancements/that-less-than-great-idea.md"
-superseded-by:
-  - "/enhancements/our-past-effort.md"
+creation-date: 2026-3-27
+last-updated: 2026-3-27
+status: implementable
 ---
 
 # Builtin AuthZ
