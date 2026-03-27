@@ -54,9 +54,36 @@ Eliminate dependence on Keycloak.
 ## Proposal
 
 Make the hub an OIDC provider. The provider policy may be self-contained or configured
-to delegate authentication and/or authorization to an external provider. Th hub inventory
+to delegate authentication and/or authorization to an external provider. The hub inventory
 is augmented to include Users and Roles. Users may be associated to roles and roles may
 be associated to permissions (scopes).  Tokens will continue to contain scope claims.
+
+
+```mermaid
+erDiagram
+    USER ||--o{ USER_ROLE : "has many"
+    ROLE ||--o{ USER_ROLE : "belongs to many"
+
+    USER {
+        uint id PK
+        string username "unique"
+        string password "encrypted"
+        string email "unique"
+    }
+
+    ROLE {
+        uint id PK
+        string name "unique (e.g. admin, developer)"
+        string scopes "JSON serialized []string"
+    }
+
+    USER_ROLE {
+        uint user_id PK,FK
+        uint role_id PK,FK
+    }
+```
+
+Login:
 
 ```mermaid
 sequenceDiagram
@@ -106,7 +133,7 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by Hub Provider<br>with local user identity + authorization from roles
 ```
 
-When and external provider is configured, the login page rendered by the hub will contain a
+Login when and external provider is configured, the login page rendered by the hub will contain a
 button for this.  For example: "Login with Google".
 
 ```mermaid
@@ -169,6 +196,84 @@ sequenceDiagram
     deactivate Hub
 
     Note over UI: UI now has tokens issued by the Hub Provider<br>containing both external identity + local authorization (roles/scopes)
+```
+
+Token validation:
+
+```mermaid
+sequenceDiagram
+    participant UI as UI / API Client
+    participant Hub as Hub Provider<br>(OIDC Provider)
+    participant ProtectedAPI as Protected API / Resource Server
+    participant DB as Database<br>(Optional)
+
+    Note over UI,ProtectedAPI: Token Validation Flow (most common pattern)
+
+    UI->>ProtectedAPI: GET /api/projects<br>Authorization: Bearer <access_token>
+    activate ProtectedAPI
+
+    ProtectedAPI->>ProtectedAPI: 1. Verify JWT Signature<br>(using Hub's JWKS)
+    ProtectedAPI->>ProtectedAPI: 2. Validate Standard Claims<br>(iss, aud, exp, nbf, iat)
+
+    alt Token is Invalid or Expired
+        ProtectedAPI-->>UI: 401 Unauthorized
+    else Token is Valid
+        ProtectedAPI->>ProtectedAPI: 3. Extract Claims<br>(sub, scope, roles if present)
+
+        %% Optional: Extra authorization check using your DB
+        ProtectedAPI->>DB: 4. Optional: Lookup user roles<br>by sub (username)
+        DB-->>ProtectedAPI: Current roles & scopes
+
+        ProtectedAPI->>ProtectedAPI: 5. Check Required Scopes<br>e.g. HasScope("api:read") or role-based check
+
+        alt Authorization Failed
+            ProtectedAPI-->>UI: 403 Forbidden
+        else Authorization Passed
+            ProtectedAPI-->>UI: 200 OK + Response Data
+        end
+    end
+
+    deactivate ProtectedAPI
+
+    Note over ProtectedAPI: Common Validation Order:<br>1. Signature + Issuer<br>2. Expiration<br>3. Audience<br>4. Scopes / Claims<br>5. Custom business rules
+```
+
+Token validation with external provider:
+
+```mermaid
+sequenceDiagram
+    participant UI as UI / Client
+    participant Hub as Hub Provider
+    participant ProtectedAPI as Protected API
+    participant DB as Database
+    participant ExternalIdP as External IdP (Google, etc.)
+
+    Note over Hub,DB: During initial login: Store external refresh_token linked to local user
+
+    UI->>ProtectedAPI: Request with Hub access_token
+    activate ProtectedAPI
+
+    ProtectedAPI->>ProtectedAPI: Verify Hub JWT signature + claims
+    ProtectedAPI->>DB: Lookup user + stored external refresh_token
+
+    alt Re-validation Enabled
+        ProtectedAPI->>ExternalIdP: Attempt refresh<br>(POST /token with refresh_token)
+        ExternalIdP-->>ProtectedAPI: Success → new external tokens<br>OR Failure (invalid_grant / revoked)
+        
+        alt External Refresh Failed (Revoked)
+            ProtectedAPI->>ProtectedAPI: Mark session as invalid / force re-login
+            ProtectedAPI-->>UI: 401 Unauthorized + prompt to re-authenticate
+        else External Refresh Succeeded
+            ProtectedAPI->>ProtectedAPI: Optional: Update stored tokens
+            ProtectedAPI->>ProtectedAPI: Check local roles/scopes
+            ProtectedAPI-->>UI: 200 OK
+        end
+    else No Re-validation (simple mode)
+        ProtectedAPI->>DB: Only check local user status + roles
+        ProtectedAPI-->>UI: 200 OK (until Hub token expires)
+    end
+
+    deactivate ProtectedAPI
 ```
 
 The UI will be updated to use OIDC (instead of keycloak) and be configured to use the
