@@ -56,8 +56,9 @@ Eliminate dependence on Keycloak.
 Make the hub an OIDC provider. The provider policy may be self-contained or configured
 to delegate authentication and/or authorization to an external provider. The hub inventory
 is augmented to include Users and Roles. Users may be associated to roles and roles may
-be associated to permissions (scopes).  Tokens will continue to contain scope claims.
+be associated to permissions (scopes).
 
+High Level Model:
 
 ```mermaid
 erDiagram
@@ -94,7 +95,7 @@ erDiagram
     }
 ```
 
-Login:
+**Basic** Login:
 
 ```mermaid
 sequenceDiagram
@@ -144,7 +145,7 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by Hub Provider<br>with local user identity + authorization from roles
 ```
 
-Login when and external provider is configured, the login page rendered by the hub will contain a
+**Login** when and external provider is configured, the login page rendered by the hub will contain a
 button for this.  For example: "Login with Google".
 
 ```mermaid
@@ -209,7 +210,7 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by the Hub Provider<br>containing both external identity + local authorization (roles/scopes)
 ```
 
-Token validation:
+Token **Validation**:
 
 ```mermaid
 sequenceDiagram
@@ -249,7 +250,7 @@ sequenceDiagram
     Note over ProtectedAPI: Common Validation Order:<br>1. Signature + Issuer<br>2. Expiration<br>3. Audience<br>4. Scopes / Claims<br>5. Custom business rules
 ```
 
-Token validation with external provider:
+Token **validation** with external provider:
 
 ```mermaid
 sequenceDiagram
