@@ -46,8 +46,8 @@ Eliminate dependence on Keycloak.
 - To discontinue seeding the realm in keycloak.
 - To support user management in the tackle UI.
   - User CRUD.
-  - Role CRUD
-  - User role assignment.
+  - Role CRUD with association scopes.
+  - Grant roles to users.
 
 ### Non-Goals
 
