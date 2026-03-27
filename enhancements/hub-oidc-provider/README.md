@@ -61,6 +61,10 @@ be associated to permissions (scopes).
 The UI will be updated to use OIDC (instead of keycloak) and be configured to use the
 hub OIDC provider.  The UI will have pages to manage user, roles and permissions.
 
+The Tackle CR will support configuring the hub to use an external OIDC provider but it will no longer install,
+configure or seed it.  The installation and configuration of an external provider is the sole responsibility 
+of the user.
+
 ### Security, Risks, and Mitigations
 
 The [go-oidc](https://github.com/luikyv/go-oidc) package is **OpenID certified** and is actively maintained. It has no reported CVEs.  AI code analysis
