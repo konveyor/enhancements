@@ -1,5 +1,5 @@
 ---
-title: provide builtin AuthZ
+title: provide-builtin-authz
 authors:
   - "jortel@redhat.com"
 reviewers:
