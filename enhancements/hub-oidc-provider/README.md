@@ -11,7 +11,7 @@ last-updated: 2026-3-27
 status: implementable
 ---
 
-# Builtin AuthZ
+# Provide builtin AuthZ
 
 Add builtin AuthZ functionality so that KeyCloak is no longer required.
 
