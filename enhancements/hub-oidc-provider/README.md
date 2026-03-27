@@ -58,6 +58,16 @@ to delegate authentication and/or authorization to an external provider. The hub
 is augmented to include Users and Roles. Users may be associated to roles and roles may
 be associated to permissions (scopes).
 
+The UI will be updated to use OIDC (instead of keycloak) and be configured to use the
+hub OIDC provider.  The UI will have pages to manage user, roles and permissions.
+
+### Security, Risks, and Mitigations
+
+The [go-oidc](https://github.com/luikyv/go-oidc) package is **OpenID certified** and is actively maintained. It has no reported CVEs.  AI code analysis
+reports no vulnerabilities or backdoors.
+
+## Design Details
+
 High Level Model:
 
 ```mermaid
@@ -287,16 +297,6 @@ sequenceDiagram
 
     deactivate ProtectedAPI
 ```
-
-The UI will be updated to use OIDC (instead of keycloak) and be configured to use the
-hub OIDC provider.  The UI will have pages to manage user, roles and permissions.
-
-### Security, Risks, and Mitigations
-
-The [go-oidc](https://github.com/luikyv/go-oidc) package is **OpenID certified** and is actively maintained. It has no reported CVEs.  AI code analysis
-reports no vulnerabilities or backdoors.
-
-## Design Details
 
 ### Test Plan
 
