@@ -69,7 +69,7 @@ be associated to permissions (scopes).  Tokens will continue to contain scope cl
 ```mermaid
 sequenceDiagram
     participant UI as UI (Client Application)
-    participant Hub as Hub Provider<br>(OIDC Provider)
+    participant Hub as Hub <br>(OIDC Provider)
     participant User as User
     participant DB as Database<br>(Users + Roles)
 
@@ -135,7 +135,7 @@ button for this.  For example: "Login with Google".
 ```mermaid
 sequenceDiagram
     participant UI as UI (Client Application)
-    participant Hub as Hub Provider<br>(OIDC Broker)
+    participant Hub as Hub <br>(OIDC Broker)
     participant ExternalIdP as External IdP<br>(e.g. Google)
     participant User as User
     participant DB as Database<br>(Users + Roles)
