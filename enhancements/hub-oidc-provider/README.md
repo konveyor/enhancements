@@ -78,7 +78,8 @@ High Level Model:
 erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
-    TOKEN ||--|| USER : "mapped"
+    IDP_IDENTITY ||--|| USER : "mapped"
+    IDP_IDENTITY ||--|| TOKEN : "mapped"
 
     USER {
         uint id PK
@@ -98,14 +99,31 @@ erDiagram
         string scope "OIDC scope"
     }
     
-    TOKEN {
+    IDP_IDENTITY {
         uint id PK
         uint user_id FK
+        string provider "Ex: google"
+        string subject
+        string refresh_token "(encrypted)"
         datetime expiration
-        string provider "builtin|google|..."
-        string token "refresh token (encrypted)"
+        datetime last_authenticated
+        datetime last_refreshed
+    }
+    
+    TOKEN {
+        uint id PK
+        uint user_id
+        uint idp_identity_id FK
+        string jti "jwt id"
+        datetime expiration
+        datetime revoked
+        datetime last_authenticated
+        datetime last_refreshed
     }
 ```
+
+Notes:
+- The expiration is mainly used for reaping.
 
 **Basic** Login:
 
