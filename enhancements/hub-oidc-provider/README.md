@@ -39,10 +39,10 @@ Eliminate dependence on Keycloak.
 
 ### Goals
 
+- **To discontinue dependence on keycloak**.
 - To provide AuthZ _out-of-the-box_.
 - To (optionally) delegate authentication to an external OIDC provider
 - To (optionally) delegate authorization to an external OIDC provider.
-- To discontinue dependence on keycloak.
 - To discontinue seeding the realm in keycloak.
 - To support user management in the tackle UI.
   - User CRUD.
