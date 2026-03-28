@@ -76,9 +76,8 @@ High Level Model:
 
 ```mermaid
 erDiagram
-    USER ||--o{ USER_ROLE : "has"
-    ROLE ||--o{ ROLE_PERMISSION : "has"
-    PERMISSION ||--o{ ROLE_PERMISSION : "is assigned to"
+    USER ||o-o{ ROLE : "has"
+    ROLE ||o-o{ PERMISSION : "has"
 
     USER {
         uint id PK
@@ -96,16 +95,6 @@ erDiagram
         uint id PK
         string name "human readable name"
         string scope "actual OIDC scope string"
-    }
-
-    USER_ROLE {
-        uint user_id PK,FK
-        uint role_id PK,FK
-    }
-
-    ROLE_PERMISSION {
-        uint role_id PK,FK
-        uint permission_id PK,FK
     }
 ```
 
