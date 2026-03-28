@@ -78,6 +78,7 @@ High Level Model:
 erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
+    TOKEN ||--|| USER : "mapped"
 
     USER {
         uint id PK
@@ -95,6 +96,14 @@ erDiagram
         uint id PK
         string name "human readable name"
         string scope "OIDC scope"
+    }
+    
+    TOKEN {
+        uint id PK
+        uint user_id FK
+        datetime expiration
+        string provider "builtin|google|..."
+        string token "refresh token (encrypted)"
     }
 ```
 
