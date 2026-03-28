@@ -79,7 +79,7 @@ erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
     IDP_IDENTITY ||--|| USER : "mapped"
-    IDP_IDENTITY ||--|| TOKEN : "mapped"
+    IDP_IDENTITY ||--|| TOKEN : "authenticated by"
 
     USER {
         uint id PK
