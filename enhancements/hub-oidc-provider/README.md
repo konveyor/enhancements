@@ -53,7 +53,7 @@ Eliminate dependence on Keycloak.
 
 ## Proposal
 
-Make the hub an OIDC provider. The provider policy may be self-contained or configured
+Make the hub an OIDC provider. The security policy may be self-contained or configured
 to delegate authentication and/or authorization to an external provider. The hub inventory
 is augmented to include Users and Roles. Users may be associated to roles and roles may
 be associated to permissions (scopes).
