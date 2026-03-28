@@ -96,7 +96,7 @@ erDiagram
     PERMISSION {
         uint id PK
         string name "human readable name"
-        string scope "OIDC scope"
+        string scope "scope"
     }
     
     IDP_IDENTITY {
@@ -123,7 +123,7 @@ erDiagram
 ```
 
 Notes:
-- The expiration is mainly used for reaping.
+- The _expiration_ column is mainly used for reaping.
 
 **Basic** Login:
 
