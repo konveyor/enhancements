@@ -113,7 +113,7 @@ erDiagram
     TOKEN {
         uint id PK
         uint user_id
-        uint idp_identity_id FK nullable
+        uint idp_identity_id FK "0 = none" 
         string jti "jwt id"
         datetime expiration
         datetime revoked
