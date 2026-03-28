@@ -123,6 +123,7 @@ erDiagram
 ```
 
 Notes:
+- The Token table contains hub issued tokens.
 - The _expiration_ column is mainly used for reaping.
 
 **Basic** Login:
