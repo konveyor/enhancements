@@ -78,8 +78,8 @@ High Level Model:
 erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
-    IDP_IDENTITY ||--|| USER : "mapped"
-    IDP_IDENTITY ||--|| TOKEN : "user authenticated by"
+    IDP_IDENTITY ||--|| USER : "EXTERNAL identity"
+    IDP_IDENTITY ||--|| TOKEN : "delegated authentication"
 
     USER {
         uint id PK
