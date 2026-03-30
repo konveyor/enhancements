@@ -74,9 +74,7 @@ reports no vulnerabilities or backdoors.
 
 ### Routes/Endpoints
 
-### OIDC Endpoints Provided by `luikyv/go-oidc`
-
-These endpoints are automatically handled by the library when you mount `op.Handler()`.
+OIDC Endpoints Provided by `go-oidc`
 
 | Method | Endpoint Path                       | Purpose |
 |--------|-------------------------------------|---------|
