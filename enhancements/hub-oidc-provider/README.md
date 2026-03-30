@@ -65,6 +65,12 @@ The Tackle CR will support configuring the hub to use an external OIDC provider 
 configure or seed it.  The installation and configuration of an external provider is the sole responsibility 
 of the user.
 
+The UI fragment used for the login page will be read from a ConfigMap managed by the operator.  Branding
+customizations will be handled by the operator.
+
+Publish a README.md that contains expected roles and a catalog of scopes to support user's bringing their
+own external OIDC provider. This _may_ also include a recommended keycloak Realm specification.
+
 ### Security, Risks, and Mitigations
 
 The [go-oidc](https://github.com/luikyv/go-oidc) package is **OpenID certified** and is actively maintained. It has no reported CVEs.  AI code analysis
