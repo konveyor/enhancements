@@ -72,7 +72,23 @@ reports no vulnerabilities or backdoors.
 
 ## Design Details
 
-High Level Model:
+### Routes/Endpoints
+
+### OIDC Endpoints Provided by `luikyv/go-oidc`
+
+These endpoints are automatically handled by the library when you mount `op.Handler()`.
+
+| Method | Endpoint Path                       | Purpose |
+|--------|-------------------------------------|---------|
+| GET    | `/.well-known/openid-configuration` | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc. |
+| GET    | `/oauth2/authorize`                 | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
+| POST   | `/oauth2/token`                     | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token |
+| GET    | `/oauth2/jwks`                      | JSON Web Key Set – Public keys used by clients to verify your JWT signatures |
+| GET    | `/oauth2/userinfo`                  | UserInfo Endpoint – Returns user claims (optional, but commonly used) |
+| POST   | `/oauth2/introspect`                | Token Introspection – Allows resource servers to validate opaque tokens (optional) |
+| POST   | `/oauth2/revoke`                    | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended) |
+
+### High Level Model:
 
 ```mermaid
 erDiagram
@@ -122,11 +138,11 @@ erDiagram
     }
 ```
 
-Notes:
+#### Notes:
 - The Token table contains hub issued tokens.
 - The _expiration_ column is mainly used for reaping.
 
-**Basic** Login:
+### Login
 
 ```mermaid
 sequenceDiagram
@@ -176,7 +192,9 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by Hub Provider<br>with local user identity + authorization from roles
 ```
 
-**Login** when and external provider is configured, the login page rendered by the hub will contain a
+### Login (external Authentication)
+
+when and external provider is configured, the login page rendered by the hub will contain a
 button for this.  For example: "Login with Google".
 
 ```mermaid
@@ -241,7 +259,7 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by the Hub Provider<br>containing both external identity + local authorization (roles/scopes)
 ```
 
-Token **Validation**:
+### Token Validation
 
 ```mermaid
 sequenceDiagram
@@ -281,7 +299,7 @@ sequenceDiagram
     Note over ProtectedAPI: Common Validation Order:<br>1. Signature + Issuer<br>2. Expiration<br>3. Audience<br>4. Scopes / Claims<br>5. Custom business rules
 ```
 
-Token **validation** with external provider:
+### Token validation (external authentication)
 
 ```mermaid
 sequenceDiagram
