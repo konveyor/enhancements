@@ -74,7 +74,7 @@ reports no vulnerabilities or backdoors.
 
 ### Routes/Endpoints
 
-OIDC _standard_ endpoints Provided by `go-oidc`
+Standard OIDC endpoints Provided by `go-oidc`
 
 | Method | Endpoint Path                       | Purpose |
 |--------|-------------------------------------|---------|
