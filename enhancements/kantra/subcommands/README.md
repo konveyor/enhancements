@@ -3,11 +3,12 @@ title: Kantra Subcommands and Analysis Config
 authors:
   - "@eemcmullan"
 reviewers:
-  - TBD
+  - "@shawn-hurley"
+  - "@jmle"
 approvers:
   - TBD
 creation-date: 2025-11-03
-last-updated: 2025-11-06
+last-updated: 2026-03-31
 status: implementable
 ---
 
@@ -85,7 +86,8 @@ from a config file.
 `kantra analyze` will only be responsible for options involving running analysis.
 
 *There will also be a default path in `~/.kantra` to this file which will contain
-the analysis configuration files from provider install.*
+the analysis configuration files from provider install. If not found here, it will
+look in the current directory, which is today's behavior.*
 
 - `kantra analyze --input <path/to/app> --output <output-dir> --target <target>`
 
@@ -140,8 +142,8 @@ installing and removing providers. This will be included once Kantra supports
 
 Below is an example config file that can be used to read and set analysis options 
 from the provider, as well as any CLI analysis options. This will be created during 
-a provider install. The proposed location for these config files 
-is `KANTRA_DIR/provider/<provider-name>/config.yaml`
+a provider install. The location for these config files is 
+`KANTRA_DIR/provider/<provider-name>/config.yaml`
 
 Because analysis can be run in containerless mode or hybrid mode (providers in container),
 there will need to be separate config files for each. We can differentiate by config
