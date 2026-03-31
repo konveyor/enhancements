@@ -1,5 +1,5 @@
 ---
-title: provide-builtin-authz
+title: provide-builtin-auth
 authors:
   - "jortel@redhat.com"
 reviewers:
@@ -11,9 +11,9 @@ last-updated: 2026-3-27
 status: implementable
 ---
 
-# Provide builtin AuthZ
+# Provide builtin Auth
 
-Add builtin AuthZ functionality so that KeyCloak is no longer required.
+Add builtin AuthN and AuthZ functionality so that KeyCloak is no longer required.
 
 
 ## Release Signoff Checklist
