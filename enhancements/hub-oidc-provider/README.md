@@ -61,15 +61,20 @@ be associated to permissions (scopes).
 The UI will be updated to use OIDC (instead of keycloak) and be configured to use the
 hub OIDC provider.  The UI will have pages to manage user, roles and permissions.
 
-The Tackle CR will support configuring the hub to use an external OIDC provider but it will no longer install,
-configure or seed it.  The installation and configuration of an external provider is the sole responsibility 
-of the user.
-
 The UI fragment used for the login page will be read from a ConfigMap managed by the operator.  Branding
 customizations will be handled by the operator.
 
+The hub may be configured to integrate with external (remote) auth providers. The primary mechanism will be OIDC but will
+also support LDAP.  In both cases, scopes (OIDC) and groups (LDAP) may need to be mapped to tackle roles. External
+providers may be created, updated and deleted using the UI/API. Configuration includes connection information
+credentials and mapping information.
+
 Publish a README.md that contains expected roles and a catalog of scopes to support user's bringing their
 own external OIDC provider. This _may_ also include a recommended keycloak Realm specification.
+
+All sensitive information will be stored encrypted.
+
+Access tokens may be revoked (effective next refresh).
 
 ### Security, Risks, and Mitigations
 
@@ -86,11 +91,11 @@ Standard OIDC endpoints Provided by `go-oidc`
 |--------|-------------------------------------|---------|
 | GET    | `/.well-known/openid-configuration` | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc. |
 | GET    | `/oidc/authorize`                   | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
-| POST   | `/oidc/token`                     | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token |
-| GET    | `/oidc/jwks`                      | JSON Web Key Set – Public keys used by clients to verify your JWT signatures |
-| GET    | `/oidc/userinfo`                  | UserInfo Endpoint – Returns user claims (optional, but commonly used) |
-| POST   | `/oidc/introspect`                | Token Introspection – Allows resource servers to validate opaque tokens (optional) |
-| POST   | `/oidc/revoke`                    | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended) |
+| POST   | `/oidc/token`                       | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token |
+| GET    | `/oidc/jwks`                        | JSON Web Key Set – Public keys used by clients to verify your JWT signatures |
+| GET    | `/oidc/userinfo`                    | UserInfo Endpoint – Returns user claims (optional, but commonly used) |
+| POST   | `/oidc/introspect`                  | Token Introspection – Allows resource servers to validate opaque tokens (optional) |
+| POST   | `/oidc/revoke`                      | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended) |
 
 ### High Level Model:
 
