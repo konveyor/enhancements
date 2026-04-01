@@ -25,6 +25,8 @@ Add builtin AuthN and AuthZ functionality so that KeyCloak is no longer required
 
 ## Open Questions
 
+- What kinds of authentication options needed to query LDAP.
+
 ## Summary
 
 Currently, keycloak is required to provide user authentication and authorization. Both the Hub
