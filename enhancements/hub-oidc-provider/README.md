@@ -85,12 +85,12 @@ Standard OIDC endpoints Provided by `go-oidc`
 | Method | Endpoint Path                       | Purpose |
 |--------|-------------------------------------|---------|
 | GET    | `/.well-known/openid-configuration` | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc. |
-| GET    | `/oauth2/authorize`                 | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
-| POST   | `/oauth2/token`                     | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token |
-| GET    | `/oauth2/jwks`                      | JSON Web Key Set – Public keys used by clients to verify your JWT signatures |
-| GET    | `/oauth2/userinfo`                  | UserInfo Endpoint – Returns user claims (optional, but commonly used) |
-| POST   | `/oauth2/introspect`                | Token Introspection – Allows resource servers to validate opaque tokens (optional) |
-| POST   | `/oauth2/revoke`                    | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended) |
+| GET    | `/oidc/authorize`                   | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
+| POST   | `/oidc/token`                     | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token |
+| GET    | `/oidc/jwks`                      | JSON Web Key Set – Public keys used by clients to verify your JWT signatures |
+| GET    | `/oidc/userinfo`                  | UserInfo Endpoint – Returns user claims (optional, but commonly used) |
+| POST   | `/oidc/introspect`                | Token Introspection – Allows resource servers to validate opaque tokens (optional) |
+| POST   | `/oidc/revoke`                    | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended) |
 
 ### High Level Model:
 
@@ -284,13 +284,7 @@ sequenceDiagram
         ProtectedAPI-->>UI: 401 Unauthorized
     else Token is Valid
         ProtectedAPI->>ProtectedAPI: 3. Extract Claims<br>(sub, scope, roles if present)
-
-        %% Optional: Extra authorization check using your DB
-        ProtectedAPI->>DB: 4. Optional: Lookup user roles<br>by sub (username)
-        DB-->>ProtectedAPI: Current roles & scopes
-
-        ProtectedAPI->>ProtectedAPI: 5. Check Required Scopes<br>e.g. HasScope("api:read") or role-based check
-
+        ProtectedAPI->>ProtectedAPI: 4. Check Required Scopes<br>e.g. HasScope("api:read") or role-based check
         alt Authorization Failed
             ProtectedAPI-->>UI: 403 Forbidden
         else Authorization Passed
@@ -334,7 +328,6 @@ sequenceDiagram
             ProtectedAPI-->>UI: 200 OK
         end
     else No Re-validation (simple mode)
-        ProtectedAPI->>DB: Only check local user status + roles
         ProtectedAPI-->>UI: 200 OK (until Hub token expires)
     end
 
