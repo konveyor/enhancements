@@ -270,7 +270,6 @@ sequenceDiagram
     participant UI as UI / API Client
     participant Hub as Hub Provider<br>(OIDC Provider)
     participant ProtectedAPI as Protected API / Resource Server
-    participant DB as Database<br>(Optional)
 
     Note over UI,ProtectedAPI: Token Validation Flow (most common pattern)
 
