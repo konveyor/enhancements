@@ -268,7 +268,7 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by the Hub Provider<br>containing both external identity + local authorization (roles/scopes)
 ```
 
-### LDAP | Activity Directory
+### Login (LDAP | Activity Directory)
 
 TLDR:
 - ODDC (started)
