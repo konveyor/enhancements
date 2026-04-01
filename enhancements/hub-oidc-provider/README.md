@@ -268,81 +268,16 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by the Hub Provider<br>containing both external identity + local authorization (roles/scopes)
 ```
 
-### Login (LDAP)
-
-
-
-### Token Validation
-
-```mermaid
-sequenceDiagram
-    participant UI as UI / API Client
-    participant Hub as Hub Provider<br>(OIDC Provider)
-    participant ProtectedAPI as Protected API / Resource Server
-
-    Note over UI,ProtectedAPI: Token Validation Flow (most common pattern)
-
-    UI->>ProtectedAPI: GET /api/projects<br>Authorization: Bearer <access_token>
-    activate ProtectedAPI
-
-    ProtectedAPI->>ProtectedAPI: 1. Verify JWT Signature<br>(using Hub's JWKS)
-    ProtectedAPI->>ProtectedAPI: 2. Validate Standard Claims<br>(iss, aud, exp, nbf, iat)
-
-    alt Token is Invalid or Expired
-        ProtectedAPI-->>UI: 401 Unauthorized
-    else Token is Valid
-        ProtectedAPI->>ProtectedAPI: 3. Extract Claims<br>(sub, scope, roles if present)
-        ProtectedAPI->>ProtectedAPI: 4. Check Required Scopes<br>e.g. HasScope("api:read") or role-based check
-        alt Authorization Failed
-            ProtectedAPI-->>UI: 403 Forbidden
-        else Authorization Passed
-            ProtectedAPI-->>UI: 200 OK + Response Data
-        end
-    end
-
-    deactivate ProtectedAPI
-
-    Note over ProtectedAPI: Common Validation Order:<br>1. Signature + Issuer<br>2. Expiration<br>3. Audience<br>4. Scopes / Claims<br>5. Custom business rules
-```
-
-### Token validation (external authentication)
-
-```mermaid
-sequenceDiagram
-    participant UI as UI / Client
-    participant Hub as Hub Provider
-    participant ProtectedAPI as Protected API
-    participant DB as Database
-    participant ExternalIdP as External IdP (Google, etc.)
-
-    Note over Hub,DB: During initial login: Store external refresh_token linked to local user
-
-    UI->>ProtectedAPI: Request with Hub access_token
-    activate ProtectedAPI
-
-    ProtectedAPI->>ProtectedAPI: Verify Hub JWT signature + claims
-    ProtectedAPI->>DB: Lookup user + stored external refresh_token
-
-    alt Re-validation Enabled
-        ProtectedAPI->>ExternalIdP: Attempt refresh<br>(POST /token with refresh_token)
-        ExternalIdP-->>ProtectedAPI: Success → new external tokens<br>OR Failure (invalid_grant / revoked)
-        
-        alt External Refresh Failed (Revoked)
-            ProtectedAPI->>ProtectedAPI: Mark session as invalid / force re-login
-            ProtectedAPI-->>UI: 401 Unauthorized + prompt to re-authenticate
-        else External Refresh Succeeded
-            ProtectedAPI->>ProtectedAPI: Optional: Update stored tokens
-            ProtectedAPI->>ProtectedAPI: Check local roles/scopes
-            ProtectedAPI-->>UI: 200 OK
-        end
-    else No Re-validation (simple mode)
-        ProtectedAPI-->>UI: 200 OK (until Hub token expires)
-    end
-
-    deactivate ProtectedAPI
-```
-
 ### LDAP | Activity Directory
+
+TLDR:
+- ODDC (started)
+- Query user using service account.
+- Bind as user. (authentication)
+- Query for group membership.
+- Map groups to roles (and then scopes)
+- OIDC (continued).
+
 
 ```mermaid
 sequenceDiagram
@@ -409,6 +344,76 @@ sequenceDiagram
         ProtectedAPI-->>UI: 200 OK + response
     else Access Denied
         ProtectedAPI-->>UI: 403 Forbidden
+    end
+
+    deactivate ProtectedAPI
+```
+
+### Token Validation
+
+```mermaid
+sequenceDiagram
+    participant UI as UI / API Client
+    participant Hub as Hub Provider<br>(OIDC Provider)
+    participant ProtectedAPI as Protected API / Resource Server
+
+    Note over UI,ProtectedAPI: Token Validation Flow (most common pattern)
+
+    UI->>ProtectedAPI: GET /api/projects<br>Authorization: Bearer <access_token>
+    activate ProtectedAPI
+
+    ProtectedAPI->>ProtectedAPI: 1. Verify JWT Signature<br>(using Hub's JWKS)
+    ProtectedAPI->>ProtectedAPI: 2. Validate Standard Claims<br>(iss, aud, exp, nbf, iat)
+
+    alt Token is Invalid or Expired
+        ProtectedAPI-->>UI: 401 Unauthorized
+    else Token is Valid
+        ProtectedAPI->>ProtectedAPI: 3. Extract Claims<br>(sub, scope, roles if present)
+        ProtectedAPI->>ProtectedAPI: 4. Check Required Scopes<br>e.g. HasScope("api:read") or role-based check
+        alt Authorization Failed
+            ProtectedAPI-->>UI: 403 Forbidden
+        else Authorization Passed
+            ProtectedAPI-->>UI: 200 OK + Response Data
+        end
+    end
+
+    deactivate ProtectedAPI
+
+    Note over ProtectedAPI: Common Validation Order:<br>1. Signature + Issuer<br>2. Expiration<br>3. Audience<br>4. Scopes / Claims<br>5. Custom business rules
+```
+
+### Token validation (external Idp)
+
+```mermaid
+sequenceDiagram
+    participant UI as UI / Client
+    participant Hub as Hub Provider
+    participant ProtectedAPI as Protected API
+    participant DB as Database
+    participant ExternalIdP as External IdP (Google, etc.)
+
+    Note over Hub,DB: During initial login: Store external refresh_token linked to local user
+
+    UI->>ProtectedAPI: Request with Hub access_token
+    activate ProtectedAPI
+
+    ProtectedAPI->>ProtectedAPI: Verify Hub JWT signature + claims
+    ProtectedAPI->>DB: Lookup user + stored external refresh_token
+
+    alt Re-validation Enabled
+        ProtectedAPI->>ExternalIdP: Attempt refresh<br>(POST /token with refresh_token)
+        ExternalIdP-->>ProtectedAPI: Success → new external tokens<br>OR Failure (invalid_grant / revoked)
+        
+        alt External Refresh Failed (Revoked)
+            ProtectedAPI->>ProtectedAPI: Mark session as invalid / force re-login
+            ProtectedAPI-->>UI: 401 Unauthorized + prompt to re-authenticate
+        else External Refresh Succeeded
+            ProtectedAPI->>ProtectedAPI: Optional: Update stored tokens
+            ProtectedAPI->>ProtectedAPI: Check local roles/scopes
+            ProtectedAPI-->>UI: 200 OK
+        end
+    else No Re-validation (simple mode)
+        ProtectedAPI-->>UI: 200 OK (until Hub token expires)
     end
 
     deactivate ProtectedAPI
