@@ -65,9 +65,9 @@ The UI fragment used for the login page will be read from a ConfigMap managed by
 customizations will be handled by the operator.
 
 The hub may be configured to integrate with external (remote) auth providers. The primary mechanism will be OIDC but will
-also support LDAP.  In both cases, scopes (OIDC) and groups (LDAP) may need to be mapped to tackle roles. External
+also support LDAP/ActiveDirectory.  In both cases, scopes (OIDC) and groups (LDAP) may need to be mapped to tackle roles. External
 providers may be created, updated and deleted using the UI/API. Configuration includes connection information
-credentials and mapping information.
+credentials and group:role mapping rules. 
 
 Publish a README.md that contains expected roles and a catalog of scopes to support user's bringing their
 own external OIDC provider. This _may_ also include a recommended keycloak Realm specification.
@@ -201,7 +201,7 @@ sequenceDiagram
     Note over UI: UI now has tokens issued by Hub Provider<br>with local user identity + authorization from roles
 ```
 
-### Login (external Authentication)
+### Login (external Idp)
 
 when and external provider is configured, the login page rendered by the hub will contain a
 button for this.  For example: "Login with Google".
@@ -267,6 +267,10 @@ sequenceDiagram
 
     Note over UI: UI now has tokens issued by the Hub Provider<br>containing both external identity + local authorization (roles/scopes)
 ```
+
+### Login (LDAP)
+
+
 
 ### Token Validation
 
@@ -337,6 +341,104 @@ sequenceDiagram
 
     deactivate ProtectedAPI
 ```
+
+### LDAP | Activity Directory
+
+```mermaid
+sequenceDiagram
+    participant UI as UI / Client
+    participant Hub as Hub Provider (OIDC)
+    participant LDAP as LDAP / Active Directory
+    participant ProtectedAPI as Protected API
+    participant DB as Database
+
+    Note over Hub,LDAP: Authentication uses Search + Bind pattern<br>Group retrieval via memberOf (AD) or group search
+
+    %% === Initial Login Flow (Authorization Code Flow) ===
+    UI->>Hub: GET /authorize (client_id, scope=openid profile email, redirect_uri...)
+    Hub-->>UI: Redirect to Hub Login Page
+
+    UI->>Hub: POST Login (username + password)
+    activate Hub
+
+    Hub->>LDAP: 1. Search for user (by sAMAccountName / uid) → get DN
+    LDAP-->>Hub: User DN + basic attributes
+
+    Hub->>LDAP: 2. Bind as user DN with provided password
+    LDAP-->>Hub: Bind Success / Failure
+
+    alt Authentication Failed
+        Hub-->>UI: Login failed → show error
+    else Authentication Succeeded
+        Hub->>LDAP: 3. Fetch groups (memberOf attribute or group search)
+        LDAP-->>Hub: List of group DNs / CNs (e.g. IT-Admins, Finance-Users...)
+
+        Hub->>Hub: Apply YAML group rules (any/and + glob matching)<br>→ Compute internal roles & scopes
+        Hub->>DB: Create / update local user session (optional: store last groups, roles)
+
+        Hub-->>UI: Redirect back with authorization code
+    end
+
+    deactivate Hub
+
+    UI->>Hub: POST /token (grant_type=authorization_code, code=...)
+    activate Hub
+    Hub->>Hub: Validate code + issue tokens
+    Hub-->>UI: Access Token (JWT with roles/scopes) + ID Token + Refresh Token
+    deactivate Hub
+
+    Note over Hub,DB: Access Token contains pre-computed roles/scopes from LDAP groups
+
+    %% === Subsequent API Requests ===
+    UI->>ProtectedAPI: Request with Hub access_token
+    activate ProtectedAPI
+
+    ProtectedAPI->>ProtectedAPI: Verify Hub JWT signature + claims (roles/scopes)
+    ProtectedAPI->>DB: Optional: Lookup user + session metadata
+
+    alt Re-validation / Group Refresh Enabled
+        ProtectedAPI->>Hub: Optional introspection or /userinfo (or direct LDAP check if designed)
+        Hub->>LDAP: Re-fetch current groups (if needed)
+        Hub->>Hub: Re-apply rules → updated roles
+        Hub-->>ProtectedAPI: Updated claims / decision
+    else Simple Mode (no re-validation)
+        ProtectedAPI->>ProtectedAPI: Check local roles/scopes from token
+    end
+
+    alt Access Allowed
+        ProtectedAPI-->>UI: 200 OK + response
+    else Access Denied
+        ProtectedAPI-->>UI: 403 Forbidden
+    end
+
+    deactivate ProtectedAPI
+```
+
+#### Policy
+
+The role mapping policy can be expressed and edit by the UI as simple YAML.
+
+```yaml
+groups:
+- any:
+  - g0 # group name
+  - g1 # group name
+  roles:
+  - r0
+  - r1
+- and:
+  - g2  # group name
+  - g3  # group name
+  roles:
+  - r2
+  - r3
+- any:
+  - dev*  # group name (glob)
+  roles:
+  - dev*  # group name (glob)
+```
+
+
 
 ### Test Plan
 
