@@ -40,14 +40,11 @@ Eliminate dependence on Keycloak.
 ### Goals
 
 - **To discontinue dependence on keycloak**.
-- To provide AuthZ _out-of-the-box_.
-- To (optionally) delegate authentication to an external OIDC provider
-- To (optionally) delegate authorization to an external OIDC provider.
 - To discontinue seeding the realm in keycloak.
-- To support user management in the tackle UI.
-  - User CRUD.
-  - Role CRUD with association scopes.
-  - Grant roles to users.
+- To provide OIDC-based Auth _out-of-the-box_.
+- To delegate AuthN, AuthZ to an _external_ OIDC provider. (option)
+- To delegate AuthN, AuthZ to an _external_ LDAP, Active Directory with group mapping. (option)
+- To provide RBAC (users, roles, permissions) management in the inventory.
 
 ### Non-Goals
 
