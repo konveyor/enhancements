@@ -425,23 +425,25 @@ The role mapping policy can be expressed and edit by the UI as simple YAML.
 
 ```yaml
 groups:
-  # 1. Full Administrators - Broad OR logic (multiple ways to be an admin)
+  # Administrators
   - any:
       - Engineering-Admins
       - Platform-Admins
       - IT-Admins
       - SEC-Global-Admins
+      - Infrastructure-Admins
     roles:
       - admin
 
-  # 2. Managers - Usually requires both department + manager flag
+  # Managers
   - and:
       - Engineering
       - Engineering-Managers
+      - Managers
     roles:
       - manager
 
-  # 3. Architects - Senior technical leadership
+  # Architects
   - any:
       - Engineering-Architects
       - Principal-Architects
@@ -450,38 +452,17 @@ groups:
     roles:
       - architect
 
-  # 4. Migrators - Teams allowed to run data/system migrations
+  # Migrators
   - any:
       - Engineering-Migration-Team
       - Database-Admins
       - SRE-Migration
       - Platform-Migration
+      - Data-Migration-Team
     roles:
       - migrator
 
-  # 5. Development teams - Any dev-related group gets base developer access
-  #    (you can later decide if "developer" should map to one of the above roles or be implicit)
-  - any:
-      - dev*
-      - engineering-*
-      - backend-*
-      - frontend-*
-      - mobile-*
-      - qa*
-      - sre*
-    roles:
-      - developer        # Optional base role - you can remove if not needed
-
-  # 6. Read-only access for support / auditors (common in engineering orgs)
-  - any:
-      - Helpdesk*
-      - IT-Support-RO
-      - Security-Auditors
-      - Compliance-Team
-    roles:
-      - readonly
-
-  # 7. Strict production admin access (example of tighter control)
+  # High-privilege production access
   - and:
       - Engineering
       - Prod-Admins
