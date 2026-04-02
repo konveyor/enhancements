@@ -160,7 +160,7 @@ Tracking issue: [konveyor/enhancements#268](https://github.com/konveyor/enhancem
 
 When opening the pull request in [konveyor/enhancements](https://github.com/konveyor/enhancements), this file is already at the expected path relative to that repository:
 
-`enhancements/ui-oidc-modernization/README.md`
+`enhancements/ui-oidc/README.md`
 
 Include in the PR description:
 
