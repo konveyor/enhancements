@@ -91,15 +91,6 @@ The UI currently depends on PatternFly 5 (`@patternfly/patternfly`, `@patternfly
 
 ### High-level approach
 
-```mermaid
-flowchart TB
-  prep [PF5_deprecation_cleanup]
-  deps [Bump_PatternFly_and_peers]
-  app [Fix_breakages_styles_a11y]
-  test [Unit_e2e_visual_regression]
-  prep --> deps --> app --> test
-```
-
 1. **Inventory** — List `@patternfly/*` and dependent packages; run PatternFly migration notes against the codebase (deprecated imports, token renames, layout changes).
 2. **Pre-migration cleanup** — Resolve PF5 deprecation warnings where they block or complicate PF6 (tracked under [tackle2-ui#3042](https://github.com/konveyor/tackle2-ui/issues/3042) and related PRs).
 3. **Dependency upgrade** — Move `@patternfly/patternfly`, `@patternfly/react-core`, `@patternfly/react-table`, `@patternfly/react-tokens`, `@patternfly/react-charts`, `@patternfly/react-code-editor`, and aligned versions in one or more coordinated PRs ([tackle2-ui#3150](https://github.com/konveyor/tackle2-ui/issues/3150) and successors).
