@@ -85,7 +85,9 @@ Add support for API-Keys (Reference [RFE-266](https://github.com/konveyor/enhanc
 #### Generation
 
 POST /auth/apikey returns a 256-bit base64URL-encoded generated key which has been stored in the DB along 
-with associated permissions (scopes).
+with associated permissions (scopes). The API key inherits all permissions (scopes) from the user who creates it,
+based on their assigned roles at the time of creation.
+
 Body:
 ```yaml
 expiration: # OPTIONAL
@@ -498,7 +500,22 @@ sequenceDiagram
 
 #### Policy
 
-The role mapping policy can be expressed and edit by the UI as simple YAML.
+The role mapping policy can be expressed and edited by the UI as simple YAML. This policy maps LDAP/Active Directory 
+group memberships to internal roles, which in turn define the user's permissions (scopes).
+
+**Schema:**
+- Each mapping rule contains a conditional expression (`any` or `and`) and a list of `roles` to assign
+- **`any`**: User matches if they belong to **at least one** of the listed groups (logical OR)
+- **`and`**: User matches if they belong to **all** of the listed groups (logical AND)
+- **`roles`**: List of internal role names to assign when the condition matches
+
+**Evaluation:**
+- All rules are evaluated for each user during authentication
+- A user may match multiple rules and accumulate roles from all matches
+- The final set of permissions (scopes) is derived from the union of all assigned roles
+- Group names are matched exactly (case-sensitive) against the groups returned from LDAP/AD
+
+**Example policy:**
 
 ```yaml
 groups:
