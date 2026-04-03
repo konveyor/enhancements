@@ -142,6 +142,7 @@ Standard OIDC endpoints Provided by `go-oidc`
 erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
+    USER ||--o{ API_KEY : "owns"
     IDP_IDENTITY ||--|| USER : "EXTERNAL identity"
     IDP_IDENTITY ||--|| TOKEN : "delegated authentication"
 
@@ -162,7 +163,14 @@ erDiagram
         string name "human readable name"
         string scope "scope"
     }
-    
+
+    API_KEY {
+        uint id PK
+        uint user_id FK
+        string key "unique"
+        datetime expiration
+    }
+
     IDP_IDENTITY {
         uint id PK
         uint user_id FK
@@ -176,11 +184,11 @@ erDiagram
     
     TOKEN {
         uint id PK
-        uint user_id
-        uint idp_identity_id FK "0 = none" 
+        uint user_id FK
+        uint idp_identity_id FK "0 = none"
         string jti "jwt id"
         datetime expiration
-        datetime revoked
+        datetime revoked "nullable"
         datetime last_authenticated
         datetime last_refreshed
     }
