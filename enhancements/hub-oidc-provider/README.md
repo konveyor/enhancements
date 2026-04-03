@@ -178,6 +178,7 @@ erDiagram
 #### Notes:
 - The Token table contains hub issued tokens.
 - The _expiration_ column is mainly used for reaping.
+- API-Key will be stored in the DB but cached in memory for performance and less pressure on the DB.
 
 ### Login
 
@@ -527,8 +528,6 @@ groups:
       - admin
       - migrator
 ```
-
-
 
 ### Test Plan
 
