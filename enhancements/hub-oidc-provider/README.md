@@ -78,7 +78,7 @@ All sensitive information will be stored encrypted.
 
 Access tokens may be revoked (effective next refresh).
 
-### API Keys
+### API-Key
 
 Add support for API-Keys (Reference [RFE-266](https://github.com/konveyor/enhancements/issues/266)).
 
