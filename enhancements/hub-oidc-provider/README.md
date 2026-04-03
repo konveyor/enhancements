@@ -169,7 +169,7 @@ erDiagram
     API_KEY {
         uint id PK
         uint user_id FK
-        string key "unique"
+        string key "unique (encrypted)"
         datetime expiration
     }
 
