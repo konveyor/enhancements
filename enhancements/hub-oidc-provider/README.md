@@ -83,12 +83,18 @@ Access tokens may be revoked (effective next refresh).
 Add support for API-Keys (Reference [RFE-266](https://github.com/konveyor/enhancements/issues/266)).
 
 #### Generation
-POST /auth/apikey returns a 256-bit base64-encoded generated key which has been stored in the DB along with associated
-permissions (scopes).
+
+POST /auth/apikey returns a 256-bit base64URL-encoded generated key which has been stored in the DB along 
+with associated permissions (scopes).
+Body:
+```yaml
+expiration: # OPTIONAL
+```
 Returned:
 ```yaml
 id: uint
-key: base64-encoded key. (This is the key presented to the API).
+expiration: # OPTIONAL
+key: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY # base64URL-encoded key. (This is the key presented to the API).
 ```
 
 #### Revocation
