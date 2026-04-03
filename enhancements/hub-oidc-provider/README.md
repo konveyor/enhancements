@@ -92,7 +92,7 @@ expiration: # OPTIONAL
 ```
 Returned:
 ```yaml
-id: uint
+id: 18
 expiration: # OPTIONAL
 key: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY
 ```
