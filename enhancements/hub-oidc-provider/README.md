@@ -87,8 +87,8 @@ POST /auth/apikey returns a 256-bit base64-encoded generated key which has been 
 permissions (scopes).
 Returned:
 ```yaml
-ID: uint
-Key: base64-encoded key. (This is the key presented to the API).
+id: uint
+key: base64-encoded key. (This is the key presented to the API).
 ```
 
 #### Revocation
