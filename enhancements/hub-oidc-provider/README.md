@@ -94,7 +94,7 @@ Returned:
 ```yaml
 id: uint
 expiration: # OPTIONAL
-key: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY # base64URL-encoded key. (This is the key presented to the API).
+key: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY
 ```
 
 #### Revocation
