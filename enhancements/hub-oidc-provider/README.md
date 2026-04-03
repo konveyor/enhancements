@@ -85,10 +85,15 @@ Add support for API-Keys (Reference [RFE-266](https://github.com/konveyor/enhanc
 #### Generation
 POST /auth/apikey returns a 256-bit base64-encoded generated key which has been stored in the DB along with associated
 permissions (scopes).
+Returned:
+```yaml
+ID: uint
+Key: base64-encoded key. (This is the key presented to the API).
+```
 
 #### Revocation
 
-DELETE /auth/apikey/:key
+DELETE /auth/apikey/:id
 
 #### Authentication
 
@@ -178,7 +183,7 @@ erDiagram
 #### Notes:
 - The Token table contains hub issued tokens.
 - The _expiration_ column is mainly used for reaping.
-- API-Key will be stored in the DB but cached in memory for performance and less pressure on the DB.
+- API-Key will be stored (encrypted) in the DB but cached in memory for performance and less pressure on the DB.
 
 ### Login
 
