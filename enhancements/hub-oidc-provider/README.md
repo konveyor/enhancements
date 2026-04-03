@@ -47,10 +47,13 @@ Eliminate dependence on Keycloak.
 - To delegate AuthN, AuthZ to an _external_ OIDC provider. (option)
 - To delegate AuthN, AuthZ to an _external_ LDAP, Active Directory with group mapping. (option)
 - To provide RBAC (users, roles, permissions) management in the inventory.
+- To provide for API-Key authentication.  An API-Key is a generated secret used for application integration.
 
 ### Non-Goals
 
 ## Proposal
+
+### OIDC
 
 Make the hub an OIDC provider. The security policy may be self-contained or configured
 to delegate authentication and/or authorization to an external provider. The hub inventory
@@ -74,6 +77,32 @@ own external OIDC provider. This _may_ also include a recommended keycloak Realm
 All sensitive information will be stored encrypted.
 
 Access tokens may be revoked (effective next refresh).
+
+### API Keys
+
+Add support for API-Keys (Reference [RFE-266](https://github.com/konveyor/enhancements/issues/266)).
+
+#### Generation
+POST /auth/apikey returns a 256-bit base64-encoded generated key which has been stored in the DB along with associated
+permissions (scopes).
+
+#### Revocation
+
+DELETE /auth/apikey/:key
+
+#### Authentication
+
+HTTP requests with header: Authentication: Bearer `<key>` is detected and validated:
+1. Find/match stored key.
+2. Get mapped permissions (scopes).
+3. Authorize endpoint access.
+
+#### Addon tokens
+
+Refit task manager and addon API authorization to use API-Key instead of custom JWT token generation.
+For backwards compatibility, Tokens with SigningMethod=HMAC still honored to support in-flight tasks
+with these tokens.  However, new tasks will be configured to present API-Keys.
+
 
 ### Security, Risks, and Mitigations
 
@@ -354,31 +383,60 @@ sequenceDiagram
 sequenceDiagram
     participant UI as UI / API Client
     participant Hub as Hub Provider<br>(OIDC Provider)
-    participant ProtectedAPI as Protected API / Resource Server
+    participant API as REST API
+    participant DB as API Key Database / Store
 
-    Note over UI,ProtectedAPI: Token Validation Flow (most common pattern)
+    Note over UI,ProtectedAPI: Updated Bearer Token Validation Flow<br>(JWT RSA + JWT HMAC deprecated + API Keys)
 
-    UI->>ProtectedAPI: GET /api/projects<br>Authorization: Bearer <access_token>
+    UI->>ProtectedAPI: GET /api/projects<br>Authorization: Bearer <token>
     activate ProtectedAPI
 
-    ProtectedAPI->>ProtectedAPI: 1. Verify JWT Signature<br>(using Hub's JWKS)
-    ProtectedAPI->>ProtectedAPI: 2. Validate Standard Claims<br>(iss, aud, exp, nbf, iat)
+    ProtectedAPI->>ProtectedAPI: 1. Extract Bearer token
 
-    alt Token is Invalid or Expired
+    alt Token is a JWT (contains exactly two '.' characters)
+        ProtectedAPI->>ProtectedAPI: 2. Decode JWT Header (read alg)
+
+        alt alg starts with "RS" (RSA)
+            ProtectedAPI->>ProtectedAPI: 3a. Verify RSA Signature using Hub JWKS
+            note right of ProtectedAPI: Recommended
+        else alg starts with "HS" (HMAC)
+            ProtectedAPI->>ProtectedAPI: 3b. Verify HMAC Signature using shared secret
+            note right of ProtectedAPI: Deprecated but supported for backwards compat
+        else Unsupported algorithm
+            ProtectedAPI-->>UI: 401 Unauthorized
+            note right of ProtectedAPI: Reject unknown algs including "none"
+        end
+
+        ProtectedAPI->>ProtectedAPI: 4. Validate Standard JWT Claims (iss, aud, exp, etc.)
+        ProtectedAPI->>ProtectedAPI: 5. Extract Claims (sub, scope, roles...)
+
+    else Token is NOT a valid JWT → Treat as API Key
+        ProtectedAPI->>DB: 2b. Lookup API Key in DB
+        activate DB
+        DB-->>ProtectedAPI: Key record (active?, scopes/permissions)
+        deactivate DB
+
+        alt API Key invalid or revoked
+            ProtectedAPI-->>UI: 401 Unauthorized
+        else API Key valid
+            ProtectedAPI->>ProtectedAPI: 3c. Map DB permissions to scopes
+        end
+    end
+
+    alt Token validation failed
         ProtectedAPI-->>UI: 401 Unauthorized
-    else Token is Valid
-        ProtectedAPI->>ProtectedAPI: 3. Extract Claims<br>(sub, scope, roles if present)
-        ProtectedAPI->>ProtectedAPI: 4. Check Required Scopes<br>e.g. HasScope("api:read") or role-based check
-        alt Authorization Failed
+    else Token is valid
+        ProtectedAPI->>ProtectedAPI: 6. Perform Authorization Check<br>(unified scope check)
+        alt Authorization fails
             ProtectedAPI-->>UI: 403 Forbidden
-        else Authorization Passed
-            ProtectedAPI-->>UI: 200 OK + Response Data
+        else Authorization passed
+            ProtectedAPI-->>UI: 200 OK + Response
         end
     end
 
     deactivate ProtectedAPI
 
-    Note over ProtectedAPI: Common Validation Order:<br>1. Signature + Issuer<br>2. Expiration<br>3. Audience<br>4. Scopes / Claims<br>5. Custom business rules
+    Note over ProtectedAPI: Key Notes<br/>RSA via JWKS is strongly preferred.<br/>HMAC is deprecated but honored for backwards compatibility.<br/>API Keys are mapped to the same scope model as JWTs.<br/>Always reject alg="none" and unknown algorithms.<br/>Consider logging HMAC usage for migration tracking.
 ```
 
 ### Token validation (external Idp)
