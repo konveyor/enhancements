@@ -78,6 +78,8 @@ All sensitive information will be stored encrypted.
 
 Access tokens may be revoked (effective next refresh).
 
+Clients will be loaded from a ConfigMap seeded by the operator.
+
 ### API-Key
 
 Add support for API-Keys (Reference [RFE-266](https://github.com/konveyor/enhancements/issues/266)).
@@ -169,7 +171,7 @@ erDiagram
     API_KEY {
         uint id PK
         uint user_id FK
-        string key "unique (encrypted)"
+        string digest "unique"
         datetime expiration
     }
 
