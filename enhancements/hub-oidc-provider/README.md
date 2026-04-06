@@ -116,7 +116,7 @@ with these tokens.  However, new tasks will be configured to present API-Keys.
 
 ### Revocation
 
-Tokens and APIKeys are revoked by deletion.
+Tokens and API-Keys are revoked by deletion.
 
 DELETE /auth/tokens/:id
 
@@ -139,7 +139,7 @@ Resources:
 | ANY           | /auth/roles          | Roles collection               |
 | GET           | /auth/permissions    | Permission collection          |
 | GET \| DELETE | /auth/tokens         | Issued tokens                  |
-| ANY           | /auth/apikeys        | APIKey collection              |
+| ANY           | /auth/apikeys        | API-Key collection             |
 | GET           | /auth/idp/identities | Remote IDP identity collection |
 
 
