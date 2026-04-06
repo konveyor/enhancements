@@ -145,15 +145,15 @@ Resources:
 
 Standard OIDC endpoints:
 
-| Method | Path                                | Purpose                                                                                        |
-|--------|-------------------------------------|------------------------------------------------------------------------------------------------|
-| GET    | `/.well-known/openid-configuration` | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc.      |
-| GET    | `/oidc/authorize`                   | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
-| POST   | `/oidc/token`                       | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token      |
-| GET    | `/oidc/jwks`                        | JSON Web Key Set – Public keys used by clients to verify your JWT signatures                   |
-| GET    | `/oidc/userinfo`                    | UserInfo Endpoint – Returns user claims (optional, but commonly used)                          |
-| POST   | `/oidc/introspect`                  | Token Introspection – Allows resource servers to validate opaque tokens (optional)             |
-| POST   | `/oidc/revoke`                      | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended)          |
+| Method | Path                              | Purpose                                                                                        |
+|--------|-----------------------------------|------------------------------------------------------------------------------------------------|
+| GET    | /.well-known/openid-configuration | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc.      |
+| GET    | /oidc/authorize                   | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
+| POST   | /oidc/token                       | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token      |
+| GET    | /oidc/jwks                        | JSON Web Key Set – Public keys used by clients to verify your JWT signatures                   |
+| GET    | /oidc/userinfo                    | UserInfo Endpoint – Returns user claims (optional, but commonly used)                          |
+| POST   | /oidc/introspect                  | Token Introspection – Allows resource servers to validate opaque tokens (optional)             |
+| POST   | /oidc/revoke                      | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended)          |
 
 ### High Level Model:
 
