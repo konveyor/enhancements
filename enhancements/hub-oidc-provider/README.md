@@ -140,7 +140,7 @@ reports no vulnerabilities or backdoors.
 
 ## Design Details
 
-See [DESIGN.md](./DESIGN.md) for complete technical specifications including:
+See [DESIGN.md](./DESIGN.md) for complete technical specifications (for illustration not approval) including:
 - API endpoints and routes
 - Data model and entity relationships
 - Authentication flow diagrams (local, external OIDC, LDAP/AD)
