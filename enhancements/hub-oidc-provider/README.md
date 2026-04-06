@@ -106,9 +106,9 @@ The task manager and addon API will be refactored to use API keys instead of cus
 
 API keys support optional expiration dates and can be explicitly revoked. The keys themselves are not stored in the database—only cryptographic digests—ensuring that compromise of the database does not directly expose API keys.
 
-#### Integration
+#### Tools Integration
 
-Client tools such as KAI and Kantra should authenticate by getting an API-Key.  This is almost exactly like the current
+Client tools such as **Kantra** and **KAI** should authenticate by getting an API-Key.  This is almost exactly like the current
 process of getting a (JWT) token (POST `/auth/login`), the client will POST to a new endpoint that instead returns an API-Key.
 The returned key is specified in future requests using authentication header: `Authentication Bearer <key>`.
 
