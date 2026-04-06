@@ -147,12 +147,13 @@ erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
     USER ||--o{ API_KEY : "owns"
+    TASK ||--0{ API_KEY : "owns"
     IDP_IDENTITY ||--|| USER : "EXTERNAL identity"
     IDP_IDENTITY ||--|| TOKEN : "delegated authentication"
 
     USER {
         uint id PK
-        string username "unique"
+        string userid "unique"
         string password "encrypted"
         string email "unique"
     }
@@ -171,7 +172,8 @@ erDiagram
     API_KEY {
         uint id PK
         uint user_id FK
-        string digest "unique"
+        uint task_id FK
+        string digest "unique, hashed-secret"
         datetime expiration
     }
 
@@ -195,6 +197,10 @@ erDiagram
         datetime revoked "nullable"
         datetime last_authenticated
         datetime last_refreshed
+    }
+    
+    TASK {
+    uint id PK
     }
 ```
 
