@@ -108,9 +108,9 @@ API keys support optional expiration dates and can be explicitly revoked. The ke
 
 #### Integration
 
-Client tools such as KAI and Kantra will obtain an API-Key by posting to the API-Key endpoint.  The
-request body will include the userid, password and _optional_ lifespan (minutes). For Go clients
-such as Kantra, this will behave much like the current token-based authentication.
+Client tools such as KAI and Kantra should authenticate by getting an API-Key.  This is almost exactly like the current
+process of getting a (JWT) token (POST `/auth/login`), the client will POST to a new endpoint that instead returns an API-Key.
+The returned key is specified in future requests using authentication header: `Authentication Bearer <key>`.
 
 #### Task-Scoped Authentication
 
