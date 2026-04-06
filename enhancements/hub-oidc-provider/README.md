@@ -164,6 +164,8 @@ Entities:
 - Token - issued (valid) tokens. 
 - APIKey - issued (valid) API-Keys.
 
+---
+
 ```mermaid
 erDiagram
     USER }o--o{ ROLE : "granted"
