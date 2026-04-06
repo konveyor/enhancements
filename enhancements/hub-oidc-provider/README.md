@@ -101,10 +101,6 @@ expiration: # OPTIONAL
 key: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY
 ```
 
-#### Revocation
-
-DELETE /auth/apikey/:id
-
 #### Authentication
 
 HTTP requests with header: Authentication: Bearer `<key>` is detected and validated:
@@ -118,6 +114,12 @@ Refit task manager and addon API authorization to use API-Key instead of custom 
 For backwards compatibility, Tokens with SigningMethod=HMAC still honored to support in-flight tasks
 with these tokens.  However, new tasks will be configured to present API-Keys.
 
+### Revocation
+
+Tokens and APIKeys are revoked by deletion.
+
+DELETE /auth/tokens/:id
+DELETE /auth/apikeys/:id
 
 ### Security, Risks, and Mitigations
 
@@ -128,19 +130,39 @@ reports no vulnerabilities or backdoors.
 
 ### Routes/Endpoints
 
-Standard OIDC endpoints Provided by `go-oidc`
+Resources:
 
-| Method | Endpoint Path                       | Purpose |
-|--------|-------------------------------------|---------|
-| GET    | `/.well-known/openid-configuration` | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc. |
+| Method        | Path            | Purpose                        |
+|---------------|-----------------|--------------------------------|
+| ANY           | /users          | User collection                |
+| ANY           | /roles          | Roles collection               |
+| GET           | /permissions    | Permission collection          |
+| GET \| DELETE | /tokens         | Issued tokens                  |
+| ANY           | /apikeys        | APIKey collection              |
+| GET           | /idp/identities | Remote IDP identity collection |
+
+
+Standard OIDC endpoints:
+
+| Method | Path                                | Purpose                                                                                        |
+|--------|-------------------------------------|------------------------------------------------------------------------------------------------|
+| GET    | `/.well-known/openid-configuration` | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc.      |
 | GET    | `/oidc/authorize`                   | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
-| POST   | `/oidc/token`                       | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token |
-| GET    | `/oidc/jwks`                        | JSON Web Key Set – Public keys used by clients to verify your JWT signatures |
-| GET    | `/oidc/userinfo`                    | UserInfo Endpoint – Returns user claims (optional, but commonly used) |
-| POST   | `/oidc/introspect`                  | Token Introspection – Allows resource servers to validate opaque tokens (optional) |
-| POST   | `/oidc/revoke`                      | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended) |
+| POST   | `/oidc/token`                       | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token      |
+| GET    | `/oidc/jwks`                        | JSON Web Key Set – Public keys used by clients to verify your JWT signatures                   |
+| GET    | `/oidc/userinfo`                    | UserInfo Endpoint – Returns user claims (optional, but commonly used)                          |
+| POST   | `/oidc/introspect`                  | Token Introspection – Allows resource servers to validate opaque tokens (optional)             |
+| POST   | `/oidc/revoke`                      | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended)          |
 
 ### High Level Model:
+
+Entities:
+- User - known users.
+- Role - named groups of permissions (scopes).
+- Permission - named permissions mapped to a scopes. 
+- IdpIdentity - identities authenticated by remote Idp provider. Contains the refresh token.
+- Token - issued (valid) tokens. 
+- APIKey - issued (valid) API-Keys.
 
 ```mermaid
 erDiagram
@@ -194,9 +216,6 @@ erDiagram
         uint idp_identity_id FK "0 = none"
         string jti "jwt id"
         datetime expiration
-        datetime revoked "nullable"
-        datetime last_authenticated
-        datetime last_refreshed
     }
     
     TASK {
@@ -206,8 +225,8 @@ erDiagram
 
 #### Notes:
 - The Token table contains hub issued tokens.
-- The _expiration_ column is mainly used for reaping.
-- API-Key will be stored (encrypted) in the DB but cached in memory for performance and less pressure on the DB.
+- The Token._expiration_ column is mainly used for reaping.
+- API-Key stored in the DB but cached in memory for performance and mitigate DB pressure.
 
 ### Login
 
