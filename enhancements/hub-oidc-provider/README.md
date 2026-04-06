@@ -119,6 +119,7 @@ with these tokens.  However, new tasks will be configured to present API-Keys.
 Tokens and APIKeys are revoked by deletion.
 
 DELETE /auth/tokens/:id
+
 DELETE /auth/apikeys/:id
 
 ### Security, Risks, and Mitigations
