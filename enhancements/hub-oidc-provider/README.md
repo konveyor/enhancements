@@ -133,14 +133,14 @@ reports no vulnerabilities or backdoors.
 
 Resources:
 
-| Method        | Path            | Purpose                        |
-|---------------|-----------------|--------------------------------|
-| ANY           | /users          | User collection                |
-| ANY           | /roles          | Roles collection               |
-| GET           | /permissions    | Permission collection          |
-| GET \| DELETE | /tokens         | Issued tokens                  |
-| ANY           | /apikeys        | APIKey collection              |
-| GET           | /idp/identities | Remote IDP identity collection |
+| Method        | Path                 | Purpose                        |
+|---------------|----------------------|--------------------------------|
+| ANY           | /auth/users          | User collection                |
+| ANY           | /auth/roles          | Roles collection               |
+| GET           | /auth/permissions    | Permission collection          |
+| GET \| DELETE | /auth/tokens         | Issued tokens                  |
+| ANY           | /auth/apikeys        | APIKey collection              |
+| GET           | /auth/idp/identities | Remote IDP identity collection |
 
 
 Standard OIDC endpoints:
