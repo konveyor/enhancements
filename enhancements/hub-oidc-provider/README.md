@@ -147,7 +147,7 @@ erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
     USER ||--o{ API_KEY : "owns"
-    TASK ||--0{ API_KEY : "owns"
+    TASK ||--o{ API_KEY : "owns"
     IDP_IDENTITY ||--|| USER : "EXTERNAL identity"
     IDP_IDENTITY ||--|| TOKEN : "delegated authentication"
 
