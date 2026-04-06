@@ -29,11 +29,7 @@ Add builtin AuthN and AuthZ functionality so that KeyCloak is no longer required
 
 ## Summary
 
-Currently, keycloak is required to provide user authentication and authorization. Both the Hub
-and the UI integrate with Keycloak using keycloak clients. The goal convert to OIDC (OpenID)
-for AuthZ integration and remove the dependence on keycloak.  Further, to provide an
-internal OIDC provider with optional delegation to an external OIDC provider (such as Keycloak
-but can be anything).
+Currently, Keycloak is required to provide user authentication and authorization. Both the Hub and the UI integrate with Keycloak using Keycloak clients. The goal is to convert to OIDC (OpenID Connect) for authentication and authorization integration and remove the dependence on Keycloak. This will be achieved by providing an internal OIDC provider within the Hub, with optional delegation to external OIDC providers (such as Keycloak, Google, Okta, or others).
 
 ## Motivation
 
@@ -77,11 +73,30 @@ The Hub will implement a standards-compliant OIDC provider supporting the author
 
 3. **LDAP/Active Directory integration**: The Hub authenticates users against LDAP or Active Directory using the standard bind pattern, queries group memberships, and maps groups to local roles using configurable YAML-based rules.
 
-The Hub inventory will be extended with new entities for users, roles, permissions, tokens, API keys, and external identity mappings. Users are assigned to roles, and roles are associated with permissions (represented as OAuth scopes). See [DESIGN.md](./DESIGN.md) for the complete data model.
+The Hub inventory will be extended with new entities for users, roles, permissions, tokens, API keys, and external identity mappings. Users are assigned to roles, and roles are associated with permissions (represented as OAuth scopes).
 
 The UI will be refactored to use OIDC for authentication (replacing the current Keycloak client integration) and will include new pages for managing users, roles, and permissions. The login page will be served from a ConfigMap managed by the operator, enabling branding customization without code changes.
 
 All standard OIDC discovery endpoints will be implemented (`.well-known/openid-configuration`, authorization, token, JWKS, userinfo, introspection, and revocation), allowing any OIDC-compliant client to integrate with the Hub.
+
+#### Default Role Definitions
+
+The system will include predefined roles tailored to common migration project personas (administrators, architects, project managers, migration specialists). These roles provide sensible permission defaults out-of-the-box while remaining fully customizable. Organizations can use these as-is for quick deployments or customize them to match their specific governance requirements.
+
+#### Flexible Role and Permission Management
+
+Role and permission definitions support multiple management approaches to accommodate different operational models:
+- **Operator-managed**: Roles can be defined in configuration files and deployed consistently across environments
+- **UI-managed**: Administrators can create, modify, and delete roles and permissions through the web interface
+- **Hybrid**: Organizations can seed baseline roles via configuration while allowing runtime customization through the UI
+
+This flexibility enables both centralized governance (via operator control) and decentralized administration (via UI self-service).
+
+#### Resource-Based Authorization Model
+
+Authorization is enforced using a resource-and-action permission model. Permissions define what actions (create, read, update, delete) can be performed on which resources (applications, assessments, tasks, etc.). This maps naturally to REST API operations and provides fine-grained access control without requiring administrators to understand OAuth scope syntax.
+
+Permissions can be scoped broadly (all operations on a resource) or narrowly (specific operations on specific sub-resources), supporting both simple and complex authorization requirements.
 
 #### API Key Authentication
 
@@ -90,6 +105,10 @@ API keys provide a secure mechanism for programmatic access, addressing [RFE-266
 The task manager and addon API will be refactored to use API keys instead of custom HMAC-signed JWTs. For backwards compatibility, existing HMAC tokens will continue to be honored for in-flight tasks.
 
 API keys support optional expiration dates and can be explicitly revoked. The keys themselves are not stored in the database—only cryptographic digests—ensuring that compromise of the database does not directly expose API keys.
+
+#### Task-Scoped Authentication
+
+API keys can be associated with either users or individual tasks. This enables task-specific authentication where a running task (such as an analysis addon) has exactly the permissions it needs for its operation, independent of the user who initiated it. This separation improves security by limiting the blast radius of compromised credentials and enables better audit trails for automated operations.
 
 #### Security Considerations
 
@@ -105,6 +124,14 @@ API keys support optional expiration dates and can be explicitly revoked. The ke
 When configured with external providers, the Hub stores refresh tokens (encrypted) to enable ongoing validation. For LDAP/AD integrations, group-to-role mapping is expressed as simple YAML rules supporting both "any" (OR) and "and" (AND) logic, allowing flexible policy definition without code changes.
 
 A README will be published documenting the expected roles and permission scopes catalog to support administrators who want to configure external OIDC providers or Keycloak realms to work with the Hub.
+
+#### Development and Testing Support
+
+The authentication system supports a development mode where authentication can be disabled entirely, simplifying local development and automated testing scenarios. This mode is controlled by configuration and clearly separated from the production authentication path to prevent accidental deployment with authentication disabled.
+
+#### Operational Flexibility
+
+The system is designed to adapt to different organizational requirements without architectural changes. Deployments can start simple with local authentication and evolve to integrate with enterprise identity providers as needs change, without requiring migration or re-architecture.
 
 ### Security, Risks, and Mitigations
 
