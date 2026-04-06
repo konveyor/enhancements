@@ -106,6 +106,12 @@ The task manager and addon API will be refactored to use API keys instead of cus
 
 API keys support optional expiration dates and can be explicitly revoked. The keys themselves are not stored in the database—only cryptographic digests—ensuring that compromise of the database does not directly expose API keys.
 
+#### Integration
+
+Client tools such as KAI and Kantra will obtain an API-Key by posting to the API-Key endpoint.  The
+request body will include the userid, password and _optional_ lifespan (minutes). For Go clients
+such as Kantra, this will behave much like the current token-based authentication.
+
 #### Task-Scoped Authentication
 
 API keys can be associated with either users or individual tasks. This enables task-specific authentication where a running task (such as an analysis addon) has exactly the permissions it needs for its operation, independent of the user who initiated it. This separation improves security by limiting the blast radius of compromised credentials and enables better audit trails for automated operations.
@@ -117,7 +123,7 @@ API keys can be associated with either users or individual tasks. This enables t
 - Token validation supports both RSA-signed JWTs (via JWKS) and API keys
 - HMAC-signed tokens are deprecated but maintained for backwards compatibility
 - Tokens and API keys can be explicitly revoked with immediate (API keys) or deferred (tokens on next refresh) effect
-- OIDC clients are configured via operator-managed ConfigMaps rather than stored in the database
+- OIDC clients are configured via operator-managed Secrets rather than stored in the database
 
 #### External Provider Integration
 
