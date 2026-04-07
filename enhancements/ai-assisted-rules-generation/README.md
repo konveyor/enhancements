@@ -103,7 +103,7 @@ A CI job monitors framework changelog feeds (Spring Boot, Quarkus, Jakarta EE). 
 
 #### Architecture
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────────────┐
 │ rulegen binary                                                          │
 │                                                                         │
@@ -165,7 +165,7 @@ A CI job monitors framework changelog feeds (Spring Boot, Quarkus, Jakarta EE). 
 
 ##### Generation Pipeline
 
-```
+```text
 Input (URL/file/text)
   │
   ▼ [ingestion]
@@ -181,7 +181,7 @@ Rules (grouped by concern) + Ruleset
 Valid rules written to workspace
 ```
 
-**Step 1: Ingestion** — Accepts URLs, file paths, or raw text. URLs are fetched and converted from HTML to markdown.
+**Step 1: Ingestion** — Accepts URLs, file paths, or raw text. URLs are fetched and converted from HTML to Markdown.
 Content is chunked by document structure (headers) to fit within LLM context windows.
 
 **Step 2: Extraction** — Each chunk is sent to the LLM to extract migration patterns (deprecated APIs, renamed packages, removed configurations, etc.). Patterns are deduplicated across chunks. If `--source`/`--target` are not provided, metadata is auto-detected from the content.
@@ -258,7 +258,7 @@ external dependencies. The client's LLM does all reasoning; the server ensures s
 
 **Interactive session flow** (Story 2: bulk rule creation from migration guide):
 
-```
+```text
 Developer                Client LLM               MCP Server
     │                        │                        │
     │  "Create Konveyor      │                        │
@@ -341,7 +341,7 @@ The CLI binary provides full pipeline access. An Agent Skill (`SKILL.md`) follow
 
 **CLI Architecture**:
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │  Agent Skill (SKILL.md)                                  │
 │  (Claude Code, Cursor, VS Code/Copilot, Gemini CLI,      │
@@ -364,7 +364,7 @@ The CLI binary provides full pipeline access. An Agent Skill (`SKILL.md`) follow
 
 **Full CLI pipeline** (generate → test):
 
-```
+```text
                           rulegen generate
 ┌───────────┐     ┌─────────────────────────────────────────────────┐
 │           │     │                                                 │
@@ -463,7 +463,7 @@ Workflow:
 
 **Agent Skill workflow** (Story 3: agentic workflow in IDE):
 
-```
+```text
 Developer                    Agent (via SKILL.md)              rulegen CLI
     │                              │                               │
     │  "Generate migration         │                               │
@@ -596,8 +596,8 @@ description: >
 
 ### Security, Risks, and Mitigations
 
-- **LLM API keys**: Configured via environment variables (CLI only). Never logged, committed, or included in rule
-  output. MCP server has no API keys.
+- **LLM API keys**: Configured via environment variables (CLI only). Keys are never logged, committed, or included in
+  rule output. The MCP server requires no API keys.
 - **Prompt injection**: Migration guides from URLs could contain adversarial content. Input sanitization and prompt
   guardrails required.
 - **File system access**: `validate_rules` (MCP) reads files at client-provided paths. Path traversal is restricted to
