@@ -517,7 +517,7 @@ Key properties: Zero infrastructure (just a markdown file), leverages agent's na
 
 **Example `SKILL.md`**:
 
-```markdown
+`````markdown
 ---
 name: konveyor-rules-generation
 description: >
@@ -570,7 +570,7 @@ description: >
 7. Present results: number of rules generated, validation status,
    and test pass rate (if tests were run). Let the user review,
    edit, and commit.
-```
+`````
 
 #### Existing Work
 
