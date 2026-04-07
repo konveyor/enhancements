@@ -62,7 +62,7 @@ erDiagram
     USER {
         uint id PK
         string userid "unique"
-        string password "encrypted"
+        string password "bcrypt hash"
         string email "unique"
     }
 
@@ -553,4 +553,4 @@ The login page UI fragment is read from a ConfigMap managed by the operator. Thi
 
 ### Security
 
-All sensitive information (passwords, refresh tokens) is stored encrypted in the database. API keys are stored as cryptographic hashes (digests) only, never in plain text.
+All sensitive information is stored securely in the database: passwords as bcrypt hashes, refresh tokens encrypted. API keys are stored as cryptographic hashes (digests) only, never in plain text.

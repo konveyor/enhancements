@@ -118,7 +118,7 @@ API keys can be associated with either users or individual tasks. This enables t
 
 #### Security Considerations
 
-- All sensitive data (passwords, refresh tokens) will be stored encrypted
+- All sensitive data will be stored securely: passwords as bcrypt hashes, refresh tokens encrypted
 - API keys are stored as hashed digests, never in plain text
 - Token validation supports both RSA-signed JWTs (via JWKS) and API keys
 - HMAC-signed tokens are deprecated but maintained for backwards compatibility
