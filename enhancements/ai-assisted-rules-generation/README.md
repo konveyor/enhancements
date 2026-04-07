@@ -7,14 +7,15 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-04-03
-last-updated: 2026-04-03
-status: provisional
+last-updated: 2026-04-07
+status: implementable
 replaces:
   - N/A
 superseded-by:
   - N/A
 see-also:
   - https://github.com/konveyor/enhancements/pull/259
+  - https://github.com/konveyor/enhancements/pull/274
 ---
 
 # AI-Assisted Rules Generation
@@ -31,6 +32,12 @@ Extract migration patterns from documentation via LLM and generate structurally 
 ## Open Questions
 
 1. **Test data generation validity**: LLM-generated test data is biased toward the LLM's understanding of the rule. Is synthetic test data useful beyond smoke testing?
+
+2. **Degraded mode without LLM key**: Should the Agent Skill be usable without an LLM API key (agent does extraction, MCP tools handle construction/validation, no test generation)?
+
+3. **Binary distribution**: How should the `rulegen` binary be distributed to users? GitHub Releases, Homebrew, container image, or bundled with the editor extension?
+
+4. **Merge with analyzer-lsp MCP?**: The analyzer-lsp MCP (PR #259) already exposes `rules_validate`. Should rule construction tools (`construct_rule`, `construct_ruleset`, `get_help`) live in the analyzer-lsp MCP server instead of a separate server, avoiding duplication and giving users a single MCP server for all rule operations?
 
 ## Summary
 
@@ -508,6 +515,63 @@ Developer                    Agent (via SKILL.md)              rulegen CLI
 
 Key properties: Zero infrastructure (just a markdown file), leverages agent's native capabilities (web search, file I/O, user interaction), embeds domain knowledge in the prompt, multi-step with reasoning, invokes CLI for all heavy lifting.
 
+**Example `SKILL.md`**:
+
+```markdown
+---
+name: konveyor-rules-generation
+description: >
+  Generate Konveyor analyzer rules from migration guides and documentation.
+  Use when creating rules for a new migration path or expanding coverage
+  for an existing one. Requires the rulegen binary and an LLM API key.
+---
+
+# Konveyor Rules Generation
+
+## Prerequisites
+- `rulegen` binary installed and on PATH
+- LLM provider configured: `export RULEGEN_LLM_PROVIDER=anthropic`
+- Corresponding API key set (e.g., `export ANTHROPIC_API_KEY=<key>`)
+- `kantra` installed (optional, for test data generation)
+
+## Workflow
+
+1. Ask the user: What migration are they targeting? Do they have a
+   migration guide URL or documentation?
+
+2. Run rule generation:
+   ```sh
+   rulegen generate \
+     --input <url-or-file> \
+     --source <source> --target <target> \
+     --provider $RULEGEN_LLM_PROVIDER \
+     --output ./output
+   ```
+
+3. Validate the generated rules (mandatory):
+   ```sh
+   rulegen validate --rules ./output/rules/
+   ```
+
+4. If validation fails, review errors and fix rules manually or
+   regenerate with adjusted input. Do not proceed until validation
+   passes.
+
+5. Ask the user: Want to generate test data and run functional
+   tests via kantra? (optional)
+
+6. If yes, run tests:
+   ```sh
+   rulegen test \
+     --rules ./output/rules/ \
+     --provider $RULEGEN_LLM_PROVIDER
+   ```
+
+7. Present results: number of rules generated, validation status,
+   and test pass rate (if tests were run). Let the user review,
+   edit, and commit.
+```
+
 #### Existing Work
 
 - Project: [konveyor/rulesets](https://github.com/konveyor/rulesets)
@@ -536,8 +600,8 @@ Key properties: Zero infrastructure (just a markdown file), leverages agent's na
   output. MCP server has no API keys.
 - **Prompt injection**: Migration guides from URLs could contain adversarial content. Input sanitization and prompt
   guardrails required.
-- **File system access**: `validate_rules` (MCP) reads files at client-provided paths. Path traversal should be
-  restricted to the working directory.
+- **File system access**: `validate_rules` (MCP) reads files at client-provided paths. Path traversal is restricted to
+  the working directory by resolving and rejecting paths that escape it (e.g., `../../../etc/passwd`).
 - **Supply chain**: Generated rules affect how kantra analyzes applications. Human review before committing to rulesets is essential.
 - **LLM hallucination**: Structural validation catches invalid regex and wrong condition types. Semantic errors require human review.
 
@@ -567,21 +631,32 @@ Not applicable
 
 ### CLI Only
 
-Just the binary. Any agent can shell out to it. No server, no skill, no protocol. Simplest option but no IDE integration beyond CLI invocation.
+Just the binary. Any agent can shell out to it. No server, no skill, no protocol.
+
+- **Pros**: Simplest to build and maintain. Works in CI/CD natively. Single binary distribution.
+- **Cons**: No IDE integration beyond shell invocation. No tool discovery or schema enforcement. Agents must parse CLI output as unstructured text.
 
 ### MCP Only
 
-MCP server without CLI commands. Provides tool discovery and schema enforcement but no batch/CI mode, no test data
-generation (requires server-side LLM), and no Agent Skill portability.
+MCP server without CLI commands. Provides tool discovery and schema enforcement.
 
-### CLI + Agent Skill (without MCP)
+- **Pros**: Standardized protocol for IDE integration. Schema-enforced inputs prevent malformed rules. Works across all MCP-compatible clients.
+- **Cons**: No batch/CI mode. Test data generation requires server-side LLM (MCP sampling not widely supported). No Agent Skill portability for non-MCP agents.
 
-CLI binary as the engine, Agent Skill as the agentic workflow. Skill invokes CLI for validation. Covers batch/CI but
-lacks standardized tool discovery and schema enforcement that MCP provides for IDE clients.
+### Agent Skill using MCP
+
+Agent Skill orchestrates the workflow, using MCP tools (`construct_rule`, `validate_rules`) for rule construction and
+validation. The agent's own LLM handles pattern extraction — no server-side LLM or API keys needed.
+
+- **Pros**: No API key management for the skill. Schema-enforced rule construction via MCP tools. Agent extracts patterns natively.
+- **Cons**: No batch/CI mode. No test data generation or kantra fix loop. Extraction quality depends on the client LLM.
 
 ### Agent Skill Only
 
-Purely prompt-based approach with no binary. Relies entirely on the agent's LLM for rule construction and validation. Zero infrastructure but no structural validation, no batch mode, and quality depends entirely on the client LLM.
+Purely prompt-based approach with no binary or MCP server. Relies entirely on the agent's LLM for rule construction and validation.
+
+- **Pros**: Zero infrastructure — just a markdown file. No binary to install or distribute. Works anywhere an agent runs.
+- **Cons**: No structural validation — quality depends entirely on the client LLM. No batch mode. No kantra integration for functional testing. Rules may have syntax errors that only surface at analysis time.
 
 ## Future Extensions
 
