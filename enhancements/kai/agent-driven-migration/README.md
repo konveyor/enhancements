@@ -7,13 +7,15 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-03-31
-last-updated: 2026-03-31
+last-updated: 2026-04-09
 status: provisional
 see-also:
   - "https://github.com/konveyor/editor-extensions/issues/1243"
   - "https://github.com/konveyor/editor-extensions/issues/1334"
   - "/enhancements/kai/solution_server.md"
   - "/enhancements/distributed-language-extensions/README.md"
+  - "/enhancements/kai/migration-intelligence/README.md"
+  - "https://github.com/konveyor/enhancements/pull/259"
 replaces: []
 superseded-by: []
 ---
@@ -47,12 +49,10 @@ permission policies.
    - Credential file sidecar pattern (extension writes refreshed tokens to disk,
      agent re-reads on auth failure)
 
-2. **AI artifact distribution**: Migration-specific skills, prompts, and MCP
-   server configurations need a distribution mechanism. Should they live in the
-   rulesets repository alongside rules (same labels, same selection mechanism)?
-   In language provider extensions? Distributed via Hub profile bundles? This is
-   explored in a separate internal design document and will likely become its own
-   enhancement proposal.
+2. ~~**AI artifact distribution**~~: **Resolved** — addressed by the
+   [Migration Intelligence](/enhancements/kai/migration-intelligence/README.md)
+   enhancement. Skills follow the [Agent Skills](https://agentskills.io) format
+   and are distributed via hub profile bundles alongside rulesets.
 
 3. **Backend consolidation**: The POC supports Goose and OpenCode as agent
    backends. Should the project commit to supporting multiple backends long-term,
@@ -162,8 +162,9 @@ users choose their preferred AI tool requires significant refactoring.
    scope.
 
 5. **AI artifact distribution**: The mechanism for distributing migration-specific
-   skills, prompts, and MCP configurations is a separate concern that will be
-   addressed in a follow-up enhancement.
+   skills and prompts is addressed by the
+   [Migration Intelligence](/enhancements/kai/migration-intelligence/README.md)
+   enhancement.
 
 ## Proposal
 
@@ -352,7 +353,7 @@ The policy is translated to backend-native formats:
 - Goose: `GOOSE_MODE` environment variable
 - OpenCode: Permission block configuration
 
-#### MCP Bridge Architecture
+#### MCP Bridge Architecture (Interim)
 
 The extension exposes Konveyor's analysis capabilities to agents via MCP:
 
@@ -377,6 +378,13 @@ environment variable. The MCP server exposes four tools:
 This two-hop architecture (agent → MCP server → bridge → extension) exists
 because the agent communicates with MCP servers via stdio, but the analysis state
 lives in the extension process. The bridge server is the boundary between them.
+
+**Note**: This MCP bridge is an interim solution. The
+[Analyzer MCP proposal](https://github.com/konveyor/enhancements/pull/259)
+proposes a standalone MCP server for analyzer-lsp that would provide these
+analysis tools directly. When the Analyzer MCP lands, the bridge's analysis
+tools (`run_analysis`, `get_analysis_results`, `incidents_by_file`) will be
+replaced by the Analyzer MCP, and the bridge will be simplified or removed.
 
 #### File Change Tracking
 
