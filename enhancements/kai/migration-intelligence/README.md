@@ -11,7 +11,7 @@ approvers:
   - "@sjd78"
   - "@jwmatthews"
 creation-date: 2026-04-02
-last-updated: 2026-04-03
+last-updated: 2026-04-09
 status: implementable
 see-also:
   - "/enhancements/kai/agent-driven-migration/README.md"
@@ -27,8 +27,8 @@ superseded-by: []
 Enable AI agents to produce high-quality, phased migration plans by
 providing them with migration-specific context through reusable skill
 files, interactive user engagement, and analysis results — delivered
-via an MCP server (stdio and HTTP) that works in the IDE today and in
-hub containers at scale.
+as a portable skills package that works in the IDE, from the CLI, and
+in hub containers at scale.
 
 ## Release Signoff Checklist
 
@@ -65,10 +65,10 @@ definitions consistently.
 
 - **Migration intelligence package**: A standalone package in the
   editor-extensions repo (with its own `package.json`) containing
-  built-in prompts, skills, agent instructions (`agents.md`), and
-  MCP configuration. This is the portable unit of migration
-  intelligence — the extension bundles it, but any MCP-compatible
-  agent can consume it directly.
+  built-in prompts, skills, and agent instructions (`AGENTS.md`).
+  This is the portable unit of migration intelligence — the extension
+  bundles it, but any agent can consume it directly by pointing at
+  the package directory.
 
 - **Profile**: An existing Konveyor concept — a bundle of rulesets
   (and now skills and prompts) synced from the hub. Profiles are
@@ -112,24 +112,21 @@ Migration Intelligence addresses this by introducing:
   Migration plans are a specific type of skill focused on high-level
   guidance for a class of applications.
 
-- **A Migration Intelligence MCP server** — tools for skill management
-  (`get_migration_context`, `save_skill`, `ask_user`) that any
-  MCP-compatible agent can use. Supports both stdio and HTTP transports.
-  Separate from the Analyzer MCP (PR #259) which provides analysis
-  capabilities.
-
 - **A migration intelligence package** — a standalone package in the
-  editor-extensions repo containing built-in prompts, skills, agent
-  instructions, and MCP configuration. The extension bundles this
-  package, but it has its own `package.json` so others can consume it
+  editor-extensions repo containing built-in skills, prompts, and
+  agent instructions (`AGENTS.md`). The extension bundles this package,
+  but it has its own `package.json` so any agent can consume it
   directly. This is what makes the CLI and IDE experiences equivalent.
+  Analysis tools come from the
+  [Analyzer MCP](https://github.com/konveyor/enhancements/pull/259);
+  the intelligence package provides migration context, not analysis
+  capabilities.
 
 - **A curated IDE experience** — a guided flow that takes users from
   analysis results through skill creation, plan generation, phased
   execution, and review — without requiring freeform prompt engineering.
-  The extension acts as a thin MCP client, with intelligence driven by
-  the migration intelligence package and workspace skills rather than
-  hardcoded logic.
+  Intelligence is driven by the migration intelligence package and
+  workspace skills rather than hardcoded logic in the extension.
 
 - **Skill distribution via the hub** — skills travel in profile bundles
   alongside rulesets, managed by architects via the hub UI and
@@ -179,9 +176,11 @@ across the portfolio.
    to write prompts. The extension orchestrates skill creation,
    planning, and phased execution with structured interactions.
 
-5. **Portable MCP tools**: The intelligence layer is an MCP server
-   supporting stdio and HTTP transports — running in the IDE via
-   stdio, from the CLI, or in hub containers via HTTP.
+5. **Portable skills and prompts**: The intelligence layer is a
+   package of skills and prompts that any agent can consume —
+   in the IDE, from the CLI, or in hub containers. Analysis
+   capabilities come from the
+   [Analyzer MCP](https://github.com/konveyor/enhancements/pull/259).
 
 ### Non-Goals
 
@@ -254,54 +253,60 @@ only the `name` and `description` at discovery time, reading full
 `scripts/`, `references/`, and `assets/` directories alongside
 `SKILL.md` for executable code, documentation, and templates.
 
-### Migration Intelligence MCP Server
+### Migration Intelligence Package
 
-A separate MCP server (distinct from the Analyzer MCP in PR #259) that
-provides migration intelligence tools:
+The intelligence package is a standalone directory in the
+editor-extensions repo with its own `package.json`. It contains:
 
-| Tool | Purpose |
-|------|---------|
-| `get_migration_context` | Returns active profile, labels, workspace info, existing skills |
-| `get_skills` | Lists skills (name + description for discovery, full SKILL.md on activation) |
-| `save_skill` | Creates a skill directory with SKILL.md in `.konveyor/skills/` |
-| `ask_user` | Presents structured questions with options, returns answers |
+```text
+intelligence/
+├── package.json
+├── AGENTS.md                    # Agent instructions (Claude Code, Cursor)
+├── SKILL.md                     # Agent Skills standard (Goose, OpenCode)
+├── skills/
+│   ├── create-migration-guide/
+│   │   └── SKILL.md             # Workflow: interview user, explore code, create guide
+│   ├── generate-migration-plan/
+│   │   └── SKILL.md             # Workflow: guide + violations → phased plan
+│   └── execute-migration-phase/
+│       └── SKILL.md             # Workflow: execute one phase, re-analyze, prompt user
+└── prompts/
+    └── ...                      # Workflow prompt templates
+```
 
-#### Transport
+The skills in this package define the migration workflows. They are
+not MCP tools — they are instructions that any agent reads and follows.
+The agent uses its built-in file tools to read/write skills in
+`.konveyor/skills/`, and the
+[Analyzer MCP](https://github.com/konveyor/enhancements/pull/259)
+for analysis capabilities (`run_analysis`, `get_analysis_results`).
 
-The MCP server must support both **stdio** and **HTTP** transports:
-
-- **stdio**: Primary transport for IDE use. The extension (or any MCP
-  client) starts the MCP server as a subprocess. No ports opened, no
-  HTTP connections required — critical for users who cannot open ports
-  on their machines.
-
-- **HTTP**: Transport for hub containers, DevSpaces, and remote
-  scenarios where the MCP server runs as a long-lived service.
-
-The same server binary supports both transports, selected at startup.
-This ensures the tools work identically whether loaded by an IDE
-extension, a CLI agent, or a hub container agent.
+**Key principle**: A developer running any MCP-compatible agent on a
+project with this package gets the same migration intelligence as a
+developer using the VS Code extension. The extension adds UI
+affordances (clickable options, guided flows, chat panel rendering)
+— it does not add different intelligence.
 
 ### Curated IDE Experience
 
 The extension provides a guided flow that does not require freeform
-prompt input. The extension acts as a thin MCP client — intelligence
-is driven by skills and prompts from `.konveyor/skills/` and
-`.konveyor/prompts/`, not by hardcoded logic in the extension.
+prompt input. Intelligence is driven by skills and prompts from the
+intelligence package and `.konveyor/`, not by hardcoded logic in the
+extension.
 
 #### Phase 1: Skill Creation
 
 When a user has analysis results and no existing skills:
 
 1. Extension detects analysis results are available
-2. Offers: "Would you like to create a migration plan for this project?"
-3. Agent calls `get_migration_context` + analysis tools (via Analyzer MCP)
-4. Agent explores the codebase (reads key files)
-5. Agent summarizes findings in the chat
-6. Agent calls `ask_user` with structured questions about preferences
-7. User responds with preferences (messaging provider, REST framework, etc.)
-8. Agent calls `save_skill` with synthesized knowledge
-9. Skill file appears in `.konveyor/skills/`
+2. Offers: "Would you like to create a migration guide for this project?"
+3. Agent activates the `create-migration-guide` skill from the package
+4. Agent calls analysis tools (via Analyzer MCP) to understand violations
+5. Agent explores the codebase (reads key files)
+6. Agent summarizes findings in the chat
+7. Agent asks structured questions about organizational preferences
+8. User responds with preferences (messaging provider, REST framework, etc.)
+9. Agent writes the migration guide to `.konveyor/skills/`
 
 #### Phase 2: Plan Generation
 
@@ -323,9 +328,8 @@ With an approved migration plan:
 4. Process repeats until migration is complete
 
 Phased execution leverages prompts and skills to guide the user through
-the migration plan step by step. The specific MCP tools needed to
-support this workflow will be defined as the implementation matures —
-changes to the Migration Intelligence MCP server may be required.
+the migration plan step by step. The specific tooling needed to support
+this workflow will be defined as the implementation matures.
 
 ### Skill Distribution via Hub
 
@@ -413,43 +417,21 @@ bundle.
 ```
 ┌──────────────────────────────────────────────────┐
 │  Agent (IDE / CLI / Container)                   │
+│                                                  │
+│  reads skills/prompts        uses analysis tools │
+│  from package + workspace    from Analyzer MCP   │
 └──────┬───────────────────────────┬───────────────┘
-       │ stdio or HTTP             │ stdio or HTTP
+       │ reads from disk           │ stdio or HTTP
 ┌──────┴──────────────┐  ┌────────┴────────────────┐
 │ Migration           │  │ Analyzer MCP (PR #259)  │
-│ Intelligence MCP    │  │                         │
-│                     │  │ Analysis tools          │
-│ get_migration_ctx   │  │ (run analysis,          │
-│ get_skills          │  │  get results, etc.)     │
-│ save_skill          │  │                         │
-│ ask_user            │  │                         │
-└──────┬──────────────┘  └────────┬────────────────┘
-       │ reads from                │
-┌──────┴───────────────────────────┴───────────────┐
-│                                                  │
-│  Migration intelligence package                  │
-│  (editor-extensions repo, own package.json)      │
-│  ├── prompts/     (workflow prompt templates)    │
-│  ├── skills/      (built-in default skills)      │
-│  ├── agents.md    (agent instructions)           │
-│  └── mcp config   (MCP server configuration)     │
-│                                                  │
-│  .konveyor/ (workspace)                          │
-│  ├── skills/      (local + hub-distributed)      │
-│  ├── prompts/     (local + hub-distributed)      │
-│  └── profiles/    (synced from hub)              │
-│                                                  │
-└──────────────────────────────────────────────────┘
+│ intelligence        │  │                         │
+│ package + workspace │  │ run_analysis             │
+│                     │  │ get_analysis_results     │
+│ skills/  (workflows)│  │ analyze_incidents        │
+│ prompts/ (templates)│  │ dependencies_get         │
+│ AGENTS.md           │  │                         │
+└─────────────────────┘  └─────────────────────────┘
 ```
-
-**Key principle**: A developer running `claude --mcp konveyor` (or any
-MCP-compatible agent) on a project should get the same migration
-intelligence as a developer using the VS Code extension. The migration
-intelligence package is the portable unit — the extension bundles it,
-but it has its own `package.json` so anyone can point their agent at
-it directly. The extension adds UI affordances (clickable options,
-guided flows, chat panel rendering) — it does not add different
-intelligence.
 
 **Intelligence layering** — context is assembled from three sources,
 with later sources able to extend or override earlier ones:
@@ -461,48 +443,40 @@ with later sources able to extend or override earlier ones:
 3. **Workspace-local**: User or agent-created skills in
    `.konveyor/skills/` and `.konveyor/prompts/`
 
-The extension acts as a **thin MCP client**. It:
-
-- Starts MCP servers as subprocesses (stdio transport, no ports opened)
-- Renders agent responses and user interactions in the chat UI
-- Translates MCP interactions to VS Code commands where needed
-  (e.g., rendering `ask_user` questions in the chat panel)
-
 The extension does **not**:
 
-- Run an HTTP server or open ports
 - Hardcode migration intelligence or prompt construction logic
 - Duplicate analysis context that the Analyzer MCP provides
 
 All intelligence lives in the migration intelligence package and in
-workspace skill/prompt files. The prompt builder does not construct
-complex prompts from hardcoded logic — it assembles context from
-the package and `.konveyor/`, the same content any MCP-connected
-agent would consume.
+workspace skill/prompt files. Skills and prompts are files — shipped
+in the package, authored by architects, or created locally — consumed
+identically by any agent.
 
-#### `ask_user` Tool Design
+#### Structured User Interaction
 
-The `ask_user` tool enables structured user interaction through the
-MCP protocol:
+Skills that need user input (e.g., the `create-migration-guide` skill
+asking about organizational preferences) instruct the agent to ask
+structured questions. How these questions are presented depends on the
+runtime:
 
-1. Agent calls `ask_user` with `{ questions: [{ question, options }] }`
-2. MCP server uses the protocol's interaction capabilities to present
-   questions to the MCP client (the IDE or CLI)
-3. The MCP client renders the questions in its UI (e.g., chat panel
-   with clickable options in VS Code)
-4. User selects options
-5. Responses return through the MCP protocol to the agent
+- **IDE**: The extension renders questions with clickable option
+  buttons in the chat panel (PatternFly `quickResponses`). The POC
+  demonstrated this via an `ask_user` MCP tool on a bridge server.
+- **CLI**: The agent presents questions as numbered options in the
+  terminal.
+- **Container**: The container pauses, answers arrive via the hub
+  API, and the container resumes.
 
-In a container context: the container pauses, answers arrive via the
-hub API, and the container resumes.
-
-This works over both stdio and HTTP transports without requiring the
-extension to run an HTTP server.
+The mechanism for structured interaction is an implementation detail
+that varies by runtime. The skill's instructions describe what
+questions to ask and what options to offer — the runtime decides how
+to present them.
 
 #### Skill and Prompt Loading
 
-When the agent needs migration context, the MCP server assembles it
-from three layers:
+When the agent needs migration context, it reads skills and prompts
+from three layers (same as the intelligence layering described above):
 
 1. **Package defaults**: Built-in prompts and skills from the migration
    intelligence package
@@ -511,15 +485,15 @@ from three layers:
 3. **Workspace-local**: Skills and prompts from `.konveyor/skills/`
    and `.konveyor/prompts/`
 
-Content from later layers can extend or override earlier layers. Skills
-matching the active profile (via label overlap or frontmatter) are
-included in the agent's context. Prompts for the current workflow phase
-are included.
+Content from later layers can extend or override earlier layers. The
+agent discovers skills via the Agent Skills format — reading `name`
+and `description` from SKILL.md frontmatter, activating relevant skills
+by reading their full content.
 
 This replaces the current approach where the extension's prompt builder
 hardcodes intelligence. Skills and prompts are files — shipped in the
 package, authored by architects, or created locally — consumed
-identically by any MCP-connected agent.
+identically by any agent.
 
 ### Security, Risks, and Mitigations
 
@@ -528,11 +502,10 @@ identically by any MCP-connected agent.
   to the same access controls as source code. Hub-distributed skills
   go through the hub's authentication.
 
-**Risk: `ask_user` tool used to social-engineer users**
-- *Mitigation*: Konveyor MCP tools are auto-approved (no permission
-  prompt), but `ask_user` questions are clearly labeled as coming
-  from the agent. Users choose from predefined options, not freeform
-  input to the agent.
+**Risk: Agent-generated questions used to social-engineer users**
+- *Mitigation*: Questions are clearly labeled as coming from the
+  agent. In the IDE, users choose from predefined options, not
+  freeform input. Skills define what questions are appropriate.
 
 **Risk: Stale skills produce bad plans**
 - *Mitigation*: Skills are versioned alongside profiles. Hub sync
@@ -552,8 +525,7 @@ identically by any MCP-connected agent.
 **Integration tests**:
 - Full skill creation flow: agent explores -> asks -> saves
 - Skill distribution via profile bundle sync
-- MCP server stdio and HTTP transport lifecycle
-- `ask_user` interaction lifecycle
+- Structured user interaction lifecycle
 
 **E2E tests**:
 - Guided skill creation with coolstore application
@@ -562,10 +534,10 @@ identically by any MCP-connected agent.
 ### Upgrade / Downgrade Strategy
 
 **Upgrade**: Skills are opt-in. Existing workspaces without
-`.konveyor/skills/` work exactly as before. The MCP server
+`.konveyor/skills/` work exactly as before. The intelligence package
 gracefully handles the absence of skills and prompts.
 
-**Downgrade**: Removing the migration intelligence MCP server has no
+**Downgrade**: Removing the migration intelligence package has no
 effect on analysis or existing fix workflows. Skills and prompts
 remain as inert markdown files in the workspace.
 
@@ -576,11 +548,11 @@ understand these directories ignore them during extraction.
 ## Implementation History
 
 - **2026-04**: POC on `feature/migration-intelligence` branch
-  - Migration Intelligence MCP server with 4 tools
   - Skill creation demonstrated with coolstore application
-  - Interactive `ask_user` with clickable options in chat UI
+  - Interactive user engagement with clickable options in chat UI
   - Skill injection into migration prompts
-  - Auto-approval of Konveyor MCP tools
+  - POC used an MCP bridge server (interim approach); direction is
+    skills-based with analysis tools from the Analyzer MCP
 
 ## Drawbacks
 
@@ -627,11 +599,10 @@ capture organizational preferences or codebase-wide patterns.
 
 - **Migration intelligence package**: Standalone package in the
   editor-extensions repo with its own `package.json` containing
-  built-in prompts, skills, `agents.md`, and MCP configuration
+  built-in skills, prompts, and `AGENTS.md`
 - **Hub API**: Endpoints for skill and prompt CRUD operations on profiles
 - **Hub UI**: Skill management interface (upload, associate with
   archetypes, preview)
 - **Profile bundle format**: Support for `skills/` and `prompts/`
   directories in bundles (hub-side bundle creation, extension-side
   extraction)
-- **MCP server binary**: Must support both stdio and HTTP transports
