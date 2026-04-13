@@ -44,6 +44,7 @@ Eliminate dependence on Keycloak.
 - To delegate AuthN, AuthZ to an _external_ LDAP, Active Directory with group mapping. (option)
 - To provide RBAC (users, roles, permissions) management in the inventory.
 - To provide for API-Key authentication.  An API-Key is a generated secret used for application integration.
+- To support explicit revocation of both access tokens and API keys for immediate credential invalidation.
 
 ### Non-Goals
 
@@ -108,7 +109,7 @@ API keys provide a secure mechanism for programmatic access, addressing [RFE-266
 
 The task manager and addon API will be refactored to use API keys instead of custom HMAC-signed JWTs. For backwards compatibility, existing HMAC tokens will continue to be honored for in-flight tasks.
 
-API keys support optional expiration dates and can be explicitly revoked. The keys themselves are not stored in the database—only cryptographic digests—ensuring that compromise of the database does not directly expose API keys.
+API keys support optional expiration dates and can be explicitly revoked through the Hub API. The keys themselves are not stored in the database—only cryptographic digests—ensuring that compromise of the database does not directly expose API keys.
 
 #### Tools Integration
 
@@ -119,6 +120,18 @@ The returned key is specified in future requests using authentication header: `A
 #### Task-Scoped Authentication
 
 API keys can be associated with either users or individual tasks. This enables task-specific authentication where a running task (such as an analysis addon) has exactly the permissions it needs for its operation, independent of the user who initiated it. This separation improves security by limiting the blast radius of compromised credentials and enables better audit trails for automated operations.
+
+#### Credential Lifecycle and Revocation
+
+Both access tokens and API keys support explicit revocation to enable immediate response to security incidents or access changes:
+
+- **API Key Revocation**: API keys can be revoked immediately through the Hub API (`DELETE /auth/apikeys/:id`). Revoked keys are rejected instantly on the next authentication attempt, ensuring compromised keys cannot be used.
+
+- **Token Revocation**: Access tokens issued via OIDC flows can be revoked through the Hub API (`DELETE /auth/tokens/:id`). Token revocation takes effect on the next token refresh or when the current access token expires, following standard OIDC patterns. Refresh tokens can also be revoked to prevent re-authentication.
+
+- **Automatic Expiration**: Both tokens and API keys support configurable expiration dates. Expired credentials are automatically rejected without requiring explicit revocation.
+
+This dual-mechanism approach ensures that administrators can quickly respond to security events (compromised credentials, employee departure, role changes) while maintaining compatibility with OIDC client expectations.
 
 #### Security Considerations
 
