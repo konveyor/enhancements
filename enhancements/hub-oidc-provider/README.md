@@ -81,16 +81,20 @@ All standard OIDC discovery endpoints will be implemented (`.well-known/openid-c
 
 #### Default Role Definitions
 
-The system will include predefined roles tailored to common migration project personas (administrators, architects, project managers, migration specialists). These roles provide sensible permission defaults out-of-the-box while remaining fully customizable. Organizations can use these as-is for quick deployments or customize them to match their specific governance requirements.
+The system will include predefined roles tailored to common migration project personas (administrators, architects, project managers, migration specialists). These default roles provide sensible permission defaults out-of-the-box and are immutable—they cannot be modified or deleted. Organizations can use these as-is for quick deployments or create custom roles with different permission combinations to match their specific governance requirements.
 
 #### Flexible Role and Permission Management
 
-Role and permission definitions support multiple management approaches to accommodate different operational models:
-- **Operator-managed**: Roles can be defined in configuration files and deployed consistently across environments
-- **UI-managed**: Administrators can create, modify, and delete roles and permissions through the web interface
-- **Hybrid**: Organizations can seed baseline roles via configuration while allowing runtime customization through the UI
+The system provides a fixed catalog of permissions that map to specific API operations and resources. This permission catalog is immutable—permissions cannot be added, modified, or deleted at runtime. This ensures consistent authorization semantics across deployments and simplifies security auditing.
 
-This flexibility enables both centralized governance (via operator control) and decentralized administration (via UI self-service).
+Custom role definitions support multiple management approaches to accommodate different operational models:
+- **Operator-managed**: Custom roles can be defined in configuration files and deployed consistently across environments
+- **UI-managed**: Administrators can create, modify, and delete custom roles through the web interface, selecting from the available permission catalog
+- **Hybrid**: Organizations can seed custom roles via configuration while allowing runtime customization through the UI
+
+Default roles (admin, architect, manager, migrator) are immutable and cannot be modified or deleted. Organizations needing different permission combinations should create custom roles using the available permissions.
+
+This approach enables both centralized governance (via operator control and immutable defaults) and decentralized administration (via UI self-service for custom roles).
 
 #### Resource-Based Authorization Model
 
