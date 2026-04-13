@@ -110,7 +110,7 @@ API keys support optional expiration dates and can be explicitly revoked. The ke
 
 Client tools such as **Kantra** and **KAI** should authenticate by getting an API-Key.  This is almost exactly like the current
 process of getting a (JWT) token (POST `/auth/login`), the client will POST to a new endpoint that instead returns an API-Key.
-The returned key is specified in future requests using authentication header: `Authentication Bearer <key>`.
+The returned key is specified in future requests using authentication header: `Authorization Bearer <key>`.
 
 #### Task-Scoped Authentication
 
