@@ -29,7 +29,12 @@ Add builtin AuthN and AuthZ functionality so that KeyCloak is no longer required
 
 ## Summary
 
-Currently, Keycloak is required to provide user authentication and authorization. Both the Hub and the UI integrate with Keycloak using Keycloak clients. The goal is to convert to OIDC (OpenID Connect) for authentication and authorization integration and remove the dependence on Keycloak. This will be achieved by providing an internal OIDC provider within the Hub, with optional delegation to external OIDC providers (such as Keycloak, Google, Okta, or others).
+Currently, Keycloak is required to provide user authentication and authorization.
+Both the Hub and the UI integrate with Keycloak using Keycloak clients. The goal
+is to convert to OIDC (OpenID Connect) for authentication and authorization
+integration and remove the dependence on Keycloak. This will be achieved by
+providing an internal OIDC provider within the Hub, with optional delegation to
+external OIDC providers (such as Keycloak, Google, Okta, or others).
 
 ## Motivation
 
@@ -43,127 +48,224 @@ Eliminate dependence on Keycloak.
 - To delegate AuthN, AuthZ to an _external_ OIDC provider. (option)
 - To delegate AuthN, AuthZ to an _external_ LDAP, Active Directory with group mapping. (option)
 - To provide RBAC (users, roles, permissions) management in the inventory.
-- To provide for API-Key authentication.  An API-Key is a generated secret used for application integration.
-- To support explicit revocation of both access tokens and API keys for immediate credential invalidation.
+- To provide for API-Key authentication.  An API-Key is a generated secret used
+  for application integration.
+- To support explicit revocation of both access tokens and API keys for
+  immediate credential invalidation.
 
 ### Non-Goals
 
 ## Proposal
 
-This proposal transforms the Hub into an OIDC-compliant identity provider, eliminating the hard dependency on Keycloak while providing flexible authentication options.
+This proposal transforms the Hub into an OIDC-compliant identity provider,
+eliminating the hard dependency on Keycloak while providing flexible
+authentication options.
 
 ### User Stories
 
-**As a cluster administrator**, I want to deploy Konveyor without requiring Keycloak, so that I can reduce infrastructure complexity and resource overhead.
+**As a cluster administrator**, I want to deploy Konveyor without requiring
+Keycloak, so that I can reduce infrastructure complexity and resource overhead.
 
-**As a security administrator**, I want to integrate Konveyor with my organization's existing identity provider (OIDC, LDAP, or Active Directory), so that I can enforce centralized authentication policies and maintain a single source of truth for user identities.
+**As a security administrator**, I want to integrate Konveyor with my
+organization's existing identity provider (OIDC, LDAP, or Active Directory), so
+that I can enforce centralized authentication policies and maintain a single
+source of truth for user identities.
 
-**As a developer**, I want to use API keys for programmatic access to Konveyor APIs, so that I can build automated integrations without managing user credentials.
+**As a developer**, I want to use API keys for programmatic access to Konveyor
+APIs, so that I can build automated integrations without managing user
+credentials.
 
-**As a Hub administrator**, I want to manage users, roles, and permissions directly within the Hub UI, so that I can control access without needing to configure external identity systems for simple deployments.
+**As an administrator**, I want to manage users, roles, and permissions directly
+within the Hub UI, so that I can control access without needing to configure
+external identity systems for simple deployments.
 
 ### High-Level Approach
 
 #### OIDC Provider
 
-The Hub will implement a standards-compliant OIDC provider supporting the authorization code flow with PKCE. This provider can operate in several modes:
+The Hub will implement a standards-compliant OIDC provider supporting the
+authorization code flow with PKCE. This provider can operate in several modes:
 
-1. **Self-contained mode**: Users, roles, and permissions are managed entirely within the Hub's inventory. Authentication uses locally stored credentials.
+1. **Self-contained mode**: Users, roles, and permissions are managed entirely
+   within the Hub's inventory. Authentication uses locally stored credentials.
 
-2. **External OIDC delegation**: The Hub acts as an OIDC broker, delegating authentication to external providers (Google, Keycloak, Okta, etc.) while maintaining local authorization (role and permission management). This allows organizations to leverage existing identity providers while keeping fine-grained access control within Konveyor.
+2. **External OIDC delegation**: The Hub acts as an OIDC broker, delegating
+   authentication to external providers (Google, Keycloak, Okta, etc.) while
+   maintaining local authorization (role and permission management). This allows
+   organizations to leverage existing identity providers while keeping
+   fine-grained access control within Konveyor.
 
-3. **LDAP/Active Directory integration**: The Hub authenticates users against LDAP or Active Directory using the standard bind pattern, queries group memberships, and maps groups to local roles using configurable YAML-based rules.
+3. **LDAP/Active Directory integration**: The Hub authenticates users against
+   LDAP or Active Directory using the standard bind pattern, queries group
+   memberships, and maps groups to local roles using configurable YAML-based
+   rules.
 
-The Hub inventory will be extended with new entities for users, roles, permissions, tokens, API keys, and external identity mappings. Users are assigned to roles, and roles are associated with permissions (represented as OAuth scopes).
+The Hub inventory will be extended with new entities for users, roles,
+permissions, tokens, API keys, and external identity mappings. Users are
+assigned to roles, and roles are associated with permissions (represented as
+OAuth scopes).
 
-The UI will be refactored to use OIDC for authentication (replacing the current Keycloak client integration) and will include new pages for managing users, roles, and permissions. The login page will be served from a ConfigMap managed by the operator, enabling branding customization without code changes.
+The UI will be refactored to use OIDC for authentication (replacing the current
+Keycloak client integration) and will include new pages for managing users,
+roles, and permissions. The login page will be served from a ConfigMap managed
+by the operator, enabling branding customization without code changes.
 
-All standard OIDC discovery endpoints will be implemented (`.well-known/openid-configuration`, authorization, token, JWKS, userinfo, introspection, and revocation), allowing any OIDC-compliant client to integrate with the Hub.
+All standard OIDC discovery endpoints will be implemented
+(`.well-known/openid-configuration`, authorization, token, JWKS, userinfo,
+introspection, and revocation), allowing any OIDC-compliant client to integrate
+with the Hub.
 
 #### Default Role Definitions
 
-The system will include predefined roles tailored to common migration project personas (administrators, architects, project managers, migration specialists). These default roles provide sensible permission defaults out-of-the-box and are immutable—they cannot be modified or deleted. Organizations can use these as-is for quick deployments or create custom roles with different permission combinations to match their specific governance requirements.
+The system will include predefined roles tailored to common migration project
+personas (administrators, architects, project managers, migration specialists).
+These default roles provide sensible permission defaults out-of-the-box and are
+immutable—they cannot be modified or deleted. Organizations can use these as-is
+for quick deployments or create custom roles with different permission
+combinations to match their specific governance requirements.
 
 #### Flexible Role and Permission Management
 
-The system provides a fixed catalog of permissions that map to specific API operations and resources. This permission catalog is immutable—permissions cannot be added, modified, or deleted at runtime. This ensures consistent authorization semantics across deployments and simplifies security auditing.
+The system provides a fixed catalog of permissions that map to specific API
+operations and resources. This permission catalog is immutable—permissions
+cannot be added, modified, or deleted at runtime. This ensures consistent
+authorization semantics across deployments and simplifies security auditing.
 
-Custom role definitions support multiple management approaches to accommodate different operational models:
-- **Operator-managed**: Custom roles can be defined in configuration files and deployed consistently across environments
-- **UI-managed**: Administrators can create, modify, and delete custom roles through the web interface, selecting from the available permission catalog
-- **Hybrid**: Organizations can seed custom roles via configuration while allowing runtime customization through the UI
+Custom role definitions support multiple management approaches to accommodate
+different operational models:
+- **Operator-managed**: Custom roles can be defined in configuration files and
+  deployed consistently across environments
+- **UI-managed**: Administrators can create, modify, and delete custom roles
+  through the web interface, selecting from the available permission catalog
+- **Hybrid**: Organizations can seed custom roles via configuration while
+  allowing runtime customization through the UI
 
-Default roles (admin, architect, manager, migrator) are immutable and cannot be modified or deleted. Organizations needing different permission combinations should create custom roles using the available permissions.
+Default roles (admin, architect, manager, migrator) are immutable and cannot be
+modified or deleted. Organizations needing different permission combinations
+should create custom roles using the available permissions.
 
-This approach enables both centralized governance (via operator control and immutable defaults) and decentralized administration (via UI self-service for custom roles).
+This approach enables both centralized governance (via operator control and
+immutable defaults) and decentralized administration (via UI self-service for
+custom roles).
 
 #### Resource-Based Authorization Model
 
-Authorization is enforced using a resource-and-action permission model. Permissions define what actions (create, read, update, delete) can be performed on which resources (applications, assessments, tasks, etc.). This maps naturally to REST API operations and provides fine-grained access control without requiring administrators to understand OAuth scope syntax.
+Authorization is enforced using a resource-and-action permission model.
+Permissions define what actions (create, read, update, delete) can be performed
+on which resources (applications, assessments, tasks, etc.). This maps naturally
+to REST API operations and provides fine-grained access control without
+requiring administrators to understand OAuth scope syntax.
 
-Permissions can be scoped broadly (all operations on a resource) or narrowly (specific operations on specific sub-resources), supporting both simple and complex authorization requirements.
+Permissions can be scoped broadly (all operations on a resource) or narrowly
+(specific operations on specific sub-resources), supporting both simple and
+complex authorization requirements.
 
 #### API Key Authentication
 
-API keys provide a secure mechanism for programmatic access, addressing [RFE-266](https://github.com/konveyor/enhancements/issues/266). Users can generate API keys through the Hub API, which inherit the user's permissions at the time of creation. Keys are presented as Bearer tokens and validated using the same scope-based authorization model as JWT tokens.
+API keys provide a secure mechanism for programmatic access, addressing
+[RFE-266](https://github.com/konveyor/enhancements/issues/266). Users can
+generate API keys through the Hub API, which inherit the user's permissions at
+the time of creation. Keys are presented as Bearer tokens and validated using
+the same scope-based authorization model as JWT tokens.
 
-The task manager and addon API will be refactored to use API keys instead of custom HMAC-signed JWTs. For backwards compatibility, existing HMAC tokens will continue to be honored for in-flight tasks.
+The task manager and addon API will be refactored to use API keys instead of
+custom HMAC-signed JWTs. For backwards compatibility, existing HMAC tokens will
+continue to be honored for in-flight tasks.
 
-API keys support optional expiration dates and can be explicitly revoked through the Hub API. The keys themselves are not stored in the database—only cryptographic digests—ensuring that compromise of the database does not directly expose API keys.
+API keys support optional expiration dates and can be explicitly revoked through
+the Hub API. The keys themselves are not stored in the database—only
+cryptographic digests—ensuring that compromise of the database does not directly
+expose API keys.
 
 #### Tools Integration
 
-Client tools such as **Kantra** and **KAI** should authenticate by getting an API-Key.  This is almost exactly like the current
-process of getting a (JWT) token (POST `/auth/login`), the client will POST to a new endpoint that instead returns an API-Key.
-The returned key is specified in future requests using authentication header: `Authorization Bearer <key>`.
+Client tools such as **Kantra** and **KAI** should authenticate by getting an
+API-Key.  This is almost exactly like the current process of getting a (JWT)
+token (POST `/auth/login`), the client will POST to a new endpoint that instead
+returns an API-Key. The returned key is specified in future requests using
+authentication header: `Authorization Bearer <key>`.
 
 #### Task-Scoped Authentication
 
-API keys can be associated with either users or individual tasks. This enables task-specific authentication where a running task (such as an analysis addon) has exactly the permissions it needs for its operation, independent of the user who initiated it. This separation improves security by limiting the blast radius of compromised credentials and enables better audit trails for automated operations.
+API keys can be associated with either users or individual tasks. This enables
+task-specific authentication where a running task (such as an analysis addon)
+has exactly the permissions it needs for its operation, independent of the user
+who initiated it. This separation improves security by limiting the blast radius
+of compromised credentials and enables better audit trails for automated
+operations.
 
 #### Credential Lifecycle and Revocation
 
-Both access tokens and API keys support explicit revocation to enable immediate response to security incidents or access changes:
+Both access tokens and API keys support explicit revocation to enable immediate
+response to security incidents or access changes:
 
-- **API Key Revocation**: API keys can be revoked immediately through the Hub API (`DELETE /auth/apikeys/:id`). Revoked keys are rejected instantly on the next authentication attempt, ensuring compromised keys cannot be used.
+- **API Key Revocation**: API keys can be revoked immediately through the Hub
+  API (`DELETE /auth/apikeys/:id`). Revoked keys are rejected instantly on the
+  next authentication attempt, ensuring compromised keys cannot be used.
 
-- **Token Revocation**: Access tokens issued via OIDC flows can be revoked through the Hub API (`DELETE /auth/tokens/:id`). Token revocation takes effect on the next token refresh or when the current access token expires, following standard OIDC patterns. Refresh tokens can also be revoked to prevent re-authentication.
+- **Token Revocation**: Access tokens issued via OIDC flows can be revoked
+  through the Hub API (`DELETE /auth/tokens/:id`). Token revocation takes effect
+  on the next token refresh or when the current access token expires, following
+  standard OIDC patterns. Refresh tokens can also be revoked to prevent
+  re-authentication.
 
-- **Automatic Expiration**: Both tokens and API keys support configurable expiration dates. Expired credentials are automatically rejected without requiring explicit revocation.
+- **Automatic Expiration**: Both tokens and API keys support configurable
+  expiration dates. Expired credentials are automatically rejected without
+  requiring explicit revocation.
 
-This dual-mechanism approach ensures that administrators can quickly respond to security events (compromised credentials, employee departure, role changes) while maintaining compatibility with OIDC client expectations.
+This dual-mechanism approach ensures that administrators can quickly respond to
+security events (compromised credentials, employee departure, role changes)
+while maintaining compatibility with OIDC client expectations.
 
 #### Security Considerations
 
-- All sensitive data will be stored securely: passwords as bcrypt hashes, refresh tokens encrypted
+- All sensitive data will be stored securely: passwords as bcrypt hashes,
+  refresh tokens encrypted
 - API keys are stored as hashed digests, never in plain text
 - Token validation supports both RSA-signed JWTs (via JWKS) and API keys
 - HMAC-signed tokens are deprecated but maintained for backwards compatibility
-- Tokens and API keys can be explicitly revoked with immediate (API keys) or deferred (tokens on next refresh) effect
-- OIDC clients are configured via operator-managed Secrets rather than stored in the database
+- Tokens and API keys can be explicitly revoked with immediate (API keys) or
+  deferred (tokens on next refresh) effect
+- OIDC clients are configured via operator-managed Secrets rather than stored in
+  the database
 
 #### External Provider Integration
 
-When configured with external providers, the Hub stores refresh tokens (encrypted) to enable ongoing validation. For LDAP/AD integrations, group-to-role mapping is expressed as simple YAML rules supporting both "any" (OR) and "and" (AND) logic, allowing flexible policy definition without code changes.
+When configured with external providers, the Hub stores refresh tokens
+(encrypted) to enable ongoing validation. For LDAP/AD integrations,
+group-to-role mapping is expressed as simple YAML rules supporting both "any"
+(OR) and "and" (AND) logic, allowing flexible policy definition without code
+changes.
 
-A README will be published documenting the expected roles and permission scopes catalog to support administrators who want to configure external OIDC providers or Keycloak realms to work with the Hub.
+A README will be published documenting the expected roles and permission scopes
+catalog to support administrators who want to configure external OIDC providers
+or Keycloak realms to work with the Hub.
 
 #### Development and Testing Support
 
-The authentication system supports a development mode where authentication can be disabled entirely, simplifying local development and automated testing scenarios. This mode is controlled by configuration and clearly separated from the production authentication path to prevent accidental deployment with authentication disabled.
+The authentication system supports a development mode where authentication can
+be disabled entirely, simplifying local development and automated testing
+scenarios. This mode is controlled by configuration and clearly separated from
+the production authentication path to prevent accidental deployment with
+authentication disabled.
 
 #### Operational Flexibility
 
-The system is designed to adapt to different organizational requirements without architectural changes. Deployments can start simple with local authentication and evolve to integrate with enterprise identity providers as needs change, without requiring migration or re-architecture.
+The system is designed to adapt to different organizational requirements without
+architectural changes. Deployments can start simple with local authentication
+and evolve to integrate with enterprise identity providers as needs change,
+without requiring migration or re-architecture.
 
 ### Security, Risks, and Mitigations
 
-The [go-oidc](https://github.com/luikyv/go-oidc) package is **OpenID certified** and is actively maintained. It has no reported CVEs.  AI code analysis
-reports no vulnerabilities or backdoors.
+Both the [go-oidc](https://github.com/luikyv/go-oidc) and [oidc](https://github.com/zitadel/oidc)
+packages are **OpenID certified** and are actively maintained. They have no 
+reported CVEs.  AI code analysis reports no vulnerabilities or backdoors.
 
 ## Design Details
 
-See [DESIGN.md](./DESIGN.md) for complete technical specifications (for illustration not approval) including:
+See [DESIGN.md](./DESIGN.md) for complete technical specifications (for
+illustration not approval) including:
 - API endpoints and routes
 - Data model and entity relationships
 - Authentication flow diagrams (local, external OIDC, LDAP/AD)
