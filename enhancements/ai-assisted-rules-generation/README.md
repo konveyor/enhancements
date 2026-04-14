@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-04-03
-last-updated: 2026-04-07
+last-updated: 2026-04-14
 status: implementable
 replaces:
   - N/A
@@ -47,8 +47,7 @@ domain-specific migration knowledge and Konveyor rule syntax expertise, which is
 This enhancement proposes `rulegen`, a Go binary that extracts migration patterns from documentation (migration guides, changelogs, code snippets) via LLM and generates structurally valid Konveyor rules. The core engine handles ingestion, pattern extraction, rule generation, validation, and test data generation. It is exposed through two interfaces:
 
 - **Interface A: MCP Server** (`rulegen serve`) -- 4 deterministic tools for interactive rule construction in IDEs. No server-side LLM needed.
-- **Interface B: CLI + Agent Skill** (`rulegen generate/validate/test` + `SKILL.md`) -- Full pipeline access for
-  batch/CI and agentic workflows.
+- **Interface B: CLI + Agent Skill** (`rulegen generate/validate/test/pipeline` + `SKILL.md`) -- Full pipeline access for batch/CI and agentic workflows.
 
 Both interfaces share the same core library. The architecture is designed to integrate complementary engines (e.g.,
 [semver-analyzer](https://github.com/shawn-hurley/semver-analyzer) for deterministic rule generation from code diffs) in the future.
@@ -123,7 +122,7 @@ A CI job monitors framework changelog feeds (Spring Boot, Quarkus, Jakarta EE). 
 │  │               • Structural validator, YAML serializer             │  │
 │  │                                                                   │  │
 │  │  testgen/     • LLM test data generation, kantra runner           │  │
-│  │               • Three-phase fix loop (compile → kantra → hints)   │  │
+│  │               • Fix loop (kantra test → analyze failures → hints) │  │
 │  │                                                                   │  │
 │  │  llm/         • llm interface                                     │  │
 │  │               • Anthropic, OpenAI, Gemini, Ollama providers       │  │
@@ -146,6 +145,8 @@ A CI job monitors framework changelog feeds (Spring Boot, Quarkus, Jakarta EE). 
 │  │ • construct_ruleset          │  │ rulegen test                    │  │
 │  │ • validate_rules             │  │ • Test data gen + fix loop      │  │
 │  │ • get_help                   │  │                                 │  │
+│  │                              │  │ rulegen pipeline                │  │
+│  │                              │  │ • generate → test → report      │  │
 │  │                              │  │                                 │  │
 │  │                              │  │ + SKILL.md                      │  │
 │  └──────────────┬───────────────┘  └────────────────┬────────────────┘  │
@@ -229,12 +230,13 @@ labels:
 
 ##### Supported Condition Types
 
-- Language: Java; Condition Types: `java.referenced`, `java.dependency`
-- Language: Go; Condition Types: `go.referenced`, `go.dependency`
-- Language: Node.js/TypeScript; Condition Types: `nodejs.referenced`
-- Language: C#; Condition Types: `csharp.referenced`
-- Language: Any; Condition Types: `builtin.filecontent`, `builtin.file`, `builtin.xml`, `builtin.json`,
-  `builtin.hasTags`, `builtin.xmlPublicID`
+| Language | Condition Types |
+|----------|----------------|
+| Java | `java.referenced`, `java.dependency` |
+| Go | `go.referenced`, `go.dependency` |
+| Node.js/TypeScript | `nodejs.referenced` |
+| C# | `csharp.referenced` |
+| Any | `builtin.filecontent`, `builtin.file`, `builtin.xml`, `builtin.json`, `builtin.hasTags`, `builtin.xmlPublicID` |
 
 Each condition type has specific fields (see `construct_rule` tool inputs under Interface A for details). Conditions can be combined with `Or` and `And` combinators.
 
@@ -242,12 +244,10 @@ Each condition type has specific fields (see `construct_rule` tool inputs under 
 
 **Test data generation**: For each rule file (grouped by concern), the LLM generates compilable application code that triggers the rules. Supports Java, Go, Node.js/TypeScript, and C# with language-appropriate build files and dependency resolution. A `.test.yaml` file is generated for kantra with test entries expecting at least one incident per rule.
 
-**Three-phase fix loop** (up to `--max-iterations`, default 3):
+**Fix loop** (up to `--max-iterations`, default 3):
 
-1. **Phase A -- Compilation**: Run the language-specific compiler. On failure, gather API docs, send errors + docs +
-   current code to LLM for fixes (up to 5 inner attempts).
-2. **Phase B -- Kantra tests**: Run kantra against the test data. Report passed/total.
-3. **Phase C -- Fix test data** (if failures remain): For each failing rule, generate a code hint via LLM. Regenerate test data with hints. Continue to next iteration. Note: this phase fixes the test data, not the rules themselves.
+1. **Kantra tests**: Run kantra against the test data. Report passed/total.
+2. **Fix test data** (if failures remain): For each failing rule, analyze the kantra debug output to extract the pattern and provider. Generate a code hint via LLM explaining what the test data needs to trigger the rule. Regenerate test data with hints. Continue to next iteration. Note: this phase fixes the test data, not the rules themselves.
 
 #### Interface A: MCP Server
 
@@ -359,6 +359,7 @@ The CLI binary provides full pipeline access. An Agent Skill (`SKILL.md`) follow
 │  rulegen generate   ← Full LLM-driven pipeline           │
 │  rulegen validate   ← Structural validation              │
 │  rulegen test       ← Test data gen + kantra + fix loop  │
+│  rulegen pipeline   ← generate → test → report (unified) │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -383,17 +384,17 @@ The CLI binary provides full pipeline access. An Agent Skill (`SKILL.md`) follow
                           rulegen test                                          │
                    ┌─────────────────────────────────────────────────┐          │
                    │                                                 ◄──────────┘
-                   │  ┌────────────┐   ┌─────────────┐   ┌────────┐  │     ┌─────────┐
-                   │  │ generate   │──>│ Phase A     │──>│ Phase  │  │────>│ output/ │
-                   │  │ test data  │   │ Compile     │   │ B      │  │     │  tests/ │
-                   │  │            │   │             │   │ Kantra │  │     │         │
-                   │  │ LLM gen    │   │ build, fix  │   │        │  │     └─────────┘
-                   │  │ test app   │   │ via LLM     │   │ run    │  │
-                   │  └────────────┘   │ (5 attempts)│   │ tests  │  │
-                   │                   └─────────────┘   └───┬────┘  │
-                   │                                         │       │
-                   │  Phase C: fix test data via LLM  ◄──────┘       │
-                   │  regenerate test app, iterate                   │
+                   │  ┌────────────┐   ┌─────────────┐               │     ┌─────────┐
+                   │  │ generate   │──>│ run kantra  │               │────>│ output/ │
+                   │  │ test data  │   │ tests       │               │     │  tests/ │
+                   │  │            │   │             │               │     │         │
+                   │  │ LLM gen    │   │ report      │               │     └─────────┘
+                   │  │ test app   │   │ passed/total│               │
+                   │  └────────────┘   └──────┬──────┘               │
+                   │                          │                      │
+                   │  fix test data via LLM  ◄┘                      │
+                   │  analyze failures, generate hints,              │
+                   │  regenerate test data, iterate                  │
                    │  (up to --max-iterations)                       │
                    └─────────────────────────────────────────────────┘
 ```
@@ -444,7 +445,18 @@ rulegen test --rules ./output/rules/ --provider anthropic --max-iterations 3
   flag or env var.
 - Flag: `--max-iterations`; Required: No; Default: `3`; Description: Max fix loop iterations
 
-Runs the three-phase fix loop (compilation -> kantra -> fix hints).
+Runs the fix loop: generate test data, run kantra, analyze failures, regenerate with hints.
+
+**`rulegen pipeline`**:
+
+```sh
+rulegen pipeline \
+  --input https://example.com/spring-boot-migration-guide \
+  --source spring-boot-3 --target spring-boot-4 \
+  --language java --output ./output --provider gemini
+```
+
+Accepts all flags from `generate` plus `--max-iterations` (default: `3`). Runs the full end-to-end pipeline: generate rules → generate test data → run kantra fix loop → write summary report. Equivalent to running `rulegen generate` followed by `rulegen test`, but as a single command for CI/batch use.
 
 **Agent Skill (`SKILL.md`)**: Portable markdown file defining the agentic workflow. Works across 30+ agents via the
 [Agent Skills](https://agentskills.io) open standard.
@@ -539,37 +551,25 @@ description: >
 1. Ask the user: What migration are they targeting? Do they have a
    migration guide URL or documentation?
 
-2. Run rule generation:
+2. Run the full pipeline (generate + test in one step):
    ```sh
-   rulegen generate \
+   rulegen pipeline \
      --input <url-or-file> \
      --source <source> --target <target> \
      --provider $RULEGEN_LLM_PROVIDER \
      --output ./output
    ```
 
-3. Validate the generated rules (mandatory):
+   Or run steps individually for more control:
    ```sh
+   rulegen generate --input <url-or-file> --source <source> \
+     --target <target> --provider $RULEGEN_LLM_PROVIDER --output ./output
    rulegen validate --rules ./output/rules/
+   rulegen test --rules ./output/rules/ --provider $RULEGEN_LLM_PROVIDER
    ```
 
-4. If validation fails, review errors and fix rules manually or
-   regenerate with adjusted input. Do not proceed until validation
-   passes.
-
-5. Ask the user: Want to generate test data and run functional
-   tests via kantra? (optional)
-
-6. If yes, run tests:
-   ```sh
-   rulegen test \
-     --rules ./output/rules/ \
-     --provider $RULEGEN_LLM_PROVIDER
-   ```
-
-7. Present results: number of rules generated, validation status,
-   and test pass rate (if tests were run). Let the user review,
-   edit, and commit.
+3. Present results: number of rules generated, validation status,
+   and test pass rate. Let the user review, edit, and commit.
 `````
 
 #### Existing Work
@@ -596,12 +596,11 @@ description: >
 
 ### Security, Risks, and Mitigations
 
-- **LLM API keys**: Configured via environment variables (CLI only). Keys are never logged, committed, or included in
-  rule output. The MCP server requires no API keys.
+- **LLM API keys**: Configured via environment variables (CLI only). Keys are never logged, committed, or included in rule output. Raw user input (URLs, file content) is not logged — only input type and size are recorded. 
 - **Prompt injection**: Migration guides from URLs could contain adversarial content. Input sanitization and prompt
   guardrails required.
-- **File system access**: `validate_rules` (MCP) reads files at client-provided paths. Path traversal is restricted to
-  the working directory by resolving and rejecting paths that escape it (e.g., `../../../etc/passwd`).
+- **URL ingestion**: URLs are fetched with a hardened HTTP client with SSRF mitigation that blocks loopback and private IP addresses.
+- **File system access**: `validate_rules` (MCP) reads files at client-provided paths. Path traversal is restricted to the working directory by resolving and rejecting paths that escape it (e.g., `../../../etc/passwd`). Workspace directory names are sanitized (no `..`, `/`, `\`).
 - **Supply chain**: Generated rules affect how kantra analyzes applications. Human review before committing to rulesets is essential.
 - **LLM hallucination**: Structural validation catches invalid regex and wrong condition types. Semantic errors require human review.
 
@@ -616,7 +615,11 @@ description: >
 
 ### Upgrade / Downgrade Strategy
 
-Not applicable
+**Upgrade**: `rulegen` is a new standalone binary. No existing installations or data to migrate. Generated rules use the standard Konveyor YAML format and work with any version of kantra that supports the condition types used.
+
+**Downgrade**: No persistent state — no databases, caches, or config files. Replacing the binary with an older version has no side effects. Generated output files are plain YAML and do not depend on the generating version.
+
+**MCP tool compatibility**: Breaking changes to tool inputs will use new tool names (e.g., `construct_rule_v2`).
 
 ## Implementation History
 
