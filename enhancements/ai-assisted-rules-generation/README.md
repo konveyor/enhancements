@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-04-03
-last-updated: 2026-04-14
+last-updated: 2026-04-15
 status: implementable
 replaces:
   - N/A
@@ -33,7 +33,7 @@ Extract migration patterns from documentation via LLM and generate structurally 
 
 1. **Test data generation validity**: LLM-generated test data is biased toward the LLM's understanding of the rule. Is synthetic test data useful beyond smoke testing?
 
-2. **Degraded mode without LLM key**: Should the Agent Skill be usable without an LLM API key (agent does extraction, MCP tools handle construction/validation, no test generation)?
+2. The Agent Skill works without an LLM API key by default. The agent does extraction natively, `construct` handles deterministic rule construction, and `validate` checks structural correctness. An LLM API key is only needed for `test` (test data generation) and `pipeline` (end-to-end).
 
 3. **Binary distribution**: How should the `rulegen` binary be distributed to users? GitHub Releases, Homebrew, container image, or bundled with the editor extension?
 
@@ -47,10 +47,9 @@ domain-specific migration knowledge and Konveyor rule syntax expertise, which is
 This enhancement proposes `rulegen`, a Go binary that extracts migration patterns from documentation (migration guides, changelogs, code snippets) via LLM and generates structurally valid Konveyor rules. The core engine handles ingestion, pattern extraction, rule generation, validation, and test data generation. It is exposed through two interfaces:
 
 - **Interface A: MCP Server** (`rulegen serve`) -- 4 deterministic tools for interactive rule construction in IDEs. No server-side LLM needed.
-- **Interface B: CLI + Agent Skill** (`rulegen generate/validate/test/pipeline` + `SKILL.md`) -- Full pipeline access for batch/CI and agentic workflows.
+- **Interface B: CLI + Agent Skill** (`rulegen generate/validate/test/pipeline/extract/construct` + `SKILL.md`) -- Full pipeline access for batch/CI and agentic workflows. Includes a composable pipeline (`extract` → `construct`) that separates LLM-dependent extraction from deterministic rule construction.
 
-Both interfaces share the same core library. The architecture is designed to integrate complementary engines (e.g.,
-[semver-analyzer](https://github.com/shawn-hurley/semver-analyzer) for deterministic rule generation from code diffs) in the future.
+Both interfaces share the same core library. Generated rules carry verification labels (`konveyor.io/generated-by`, `konveyor.io/test-result`, `konveyor.io/review`) that track provenance and verification status through the pipeline. The architecture is designed to integrate complementary engines (e.g., [semver-analyzer](https://github.com/shawn-hurley/semver-analyzer) for deterministic rule generation from code diffs) in the future.
 
 ## Motivation
 
@@ -120,6 +119,7 @@ A CI job monitors framework changelog feeds (Spring Boot, Quarkus, Jakarta EE). 
 │  │                                                                   │  │
 │  │  rules/       • Rule/Ruleset types, condition builders            │  │
 │  │               • Structural validator, YAML serializer             │  │
+│  │               • Verification labels, consistency checks           │  │
 │  │                                                                   │  │
 │  │  testgen/     • LLM test data generation, kantra runner           │  │
 │  │               • Fix loop (kantra test → analyze failures → hints) │  │
@@ -127,7 +127,7 @@ A CI job monitors framework changelog feeds (Spring Boot, Quarkus, Jakarta EE). 
 │  │  llm/         • llm interface                                     │  │
 │  │               • Anthropic, OpenAI, Gemini, Ollama providers       │  │
 │  │                                                                   │  │
-│  │  workspace/   • Output directory management                       │  │
+│  │  workspace/   • Output directory management, rules report          │  │
 │  │  templates/   • Embedded LLM prompt templates (go:embed)          │  │
 │  └──────────────────────┬────────────────────┬───────────────────────┘  │
 │                         │                    │                          │
@@ -147,6 +147,12 @@ A CI job monitors framework changelog feeds (Spring Boot, Quarkus, Jakarta EE). 
 │  │ • get_help                   │  │                                 │  │
 │  │                              │  │ rulegen pipeline                │  │
 │  │                              │  │ • generate → test → report      │  │
+│  │                              │  │                                 │  │
+│  │                              │  │ rulegen extract                 │  │
+│  │                              │  │ • Patterns to JSON (LLM)        │  │
+│  │                              │  │                                 │  │
+│  │                              │  │ rulegen construct               │  │
+│  │                              │  │ • JSON to rules (no LLM)        │  │
 │  │                              │  │                                 │  │
 │  │                              │  │ + SKILL.md                      │  │
 │  └──────────────┬───────────────┘  └────────────────┬────────────────┘  │
@@ -192,41 +198,48 @@ Each pattern captures: what to detect (source API/class/config), what replaces i
 **Step 3: Generation** — Each pattern maps to a Konveyor rule. The provider type determines the condition type (e.g., java → `java.referenced`, go → `go.referenced`). Complexity maps to effort (trivial=1 through expert=9). Rule messages are generated via LLM with fallback to a simple template. Rules are grouped by concern (e.g., ejb, security, web) into separate YAML files.
 
 **Step 4: Validation** — Deterministic structural checks: required fields, valid categories, condition-specific
-requirements (patterns, locations, regex syntax), duplicate rule IDs. Returns `{ valid, errors, warnings, rule_count }`.
+requirements (patterns, locations, regex syntax), duplicate rule IDs, dependency version bounds. Returns `{ valid, errors, warnings, rule_count }`.
 
-##### Rule Types (`internal/rules/`)
+##### Composable Pipeline (`extract` → `construct`)
 
-**Rule struct**:
+The generation pipeline can also be run as two discrete stages via separate CLI commands, enabling composition with external tools and deterministic rule construction without LLM overhead:
 
-```yaml
-- ruleID: spring-boot-3-to-4-00010
-  description: "Short description"
-  when:
-    java.referenced:
-      pattern: javax.servlet.http.HttpServlet
-      location: IMPORT
-  message: "Migration guidance with Before/After examples"
-  category: mandatory
-  effort: 3
-  labels:
-    - konveyor.io/source=spring-boot-3
-    - konveyor.io/target=spring-boot-4
-  links:
-    - title: "Migration Guide"
-      url: "https://example.com/guide"
-  tag:                       # optional, alternative to message
-    - "tag-value"
+```text
+Stage 1: Extract (LLM)              Stage 2: Construct (deterministic)
+┌─────────────────────────┐          ┌─────────────────────────┐
+│ rulegen extract          │         │ rulegen construct       │
+│ --input <url>            │  JSON   │ --input patterns.json   │
+│ --provider gemini        │────────>│ --output ./output       │
+│                          │         │                         │
+│ ingest → extract patterns│         │ map patterns → rules    │
+│ Output: ExtractOutput    │         │ build messages (no LLM) │
+│ (JSON to stdout)         │         │ validate → write YAML   │
+└─────────────────────────┘          └─────────────────────────┘
 ```
 
-**Ruleset struct**:
+**`extract`** runs ingestion and LLM-powered pattern extraction, outputting `ExtractOutput` JSON (source, target, language, and an array of `MigrationPattern` objects). **`construct`** accepts this JSON (or the more explicit `ConstructInput` format with pre-mapped rule fields) and deterministically builds validated rule YAML — no LLM calls required.
 
-```yaml
-name: spring-boot-3/spring-boot-4
-description: "Rules for migrating from spring-boot-3 to spring-boot-4"
-labels:
-  - konveyor.io/source=spring-boot-3
-  - konveyor.io/target=spring-boot-4
-```
+This separation enables:
+- **Cost reduction**: Extract once, construct many times while iterating on mappings
+- **Auditability**: JSON artifacts between stages can be inspected and modified
+- **Tool composition**: Pipe extract output through external transforms before constructing
+- **Deterministic replay**: Same JSON input always produces the same rules
+
+##### Verification Labels (`internal/rules/labels.go`)
+
+Generated rules carry metadata labels that track provenance and verification status:
+
+| Label | Values | Description |
+|-------|--------|-------------|
+| `konveyor.io/generated-by` | `ai-rule-gen` | Marks rules as AI-generated |
+| `konveyor.io/test-result` | `untested`, `passed`, `failed` | Updated by `test`/`pipeline` after kantra runs |
+| `konveyor.io/review` | `unreviewed`, `approved`, `rejected` | For human review workflow |
+
+Labels are initialized when rules are generated (`InitialLabels`), stamped with test results after kantra runs (`StampTestResults`), and queryable via `GetLabel`/`SetLabel`. This enables CI pipelines to filter rules by verification status (e.g., only commit rules with `test-result=passed`).
+
+##### Rule ↔ Test Consistency Check
+
+After testing, `test` runs a bidirectional consistency check (`rules.ValidateConsistency`) verifying that every rule has a corresponding test entry and every test entry references an existing rule. Orphaned tests or untested rules are reported.
 
 ##### Supported Condition Types
 
@@ -360,6 +373,9 @@ The CLI binary provides full pipeline access. An Agent Skill (`SKILL.md`) follow
 │  rulegen validate   ← Structural validation              │
 │  rulegen test       ← Test data gen + kantra + fix loop  │
 │  rulegen pipeline   ← generate → test → report (unified) │
+│  rulegen extract    ← Patterns to JSON (LLM)             │
+│  rulegen construct  ← JSON to rules (no LLM)             │
+│  rulegen score      ← Kantra + LLM judge (experimental)  │
 └──────────────────────────────────────────────────────────┘
 ```
 
@@ -445,7 +461,7 @@ rulegen test --rules ./output/rules/ --provider anthropic --max-iterations 3
   flag or env var.
 - Flag: `--max-iterations`; Required: No; Default: `3`; Description: Max fix loop iterations
 
-Runs the fix loop: generate test data, run kantra, analyze failures, regenerate with hints.
+Runs the fix loop: generate test data, run kantra, analyze failures, regenerate with hints. After testing, stamps `konveyor.io/test-result` labels on rules, writes a `rules-report.yaml`, and runs a bidirectional rule ↔ test consistency check.
 
 **`rulegen pipeline`**:
 
@@ -456,7 +472,54 @@ rulegen pipeline \
   --language java --output ./output --provider gemini
 ```
 
-Accepts all flags from `generate` plus `--max-iterations` (default: `3`). Runs the full end-to-end pipeline: generate rules → generate test data → run kantra fix loop → write summary report. Equivalent to running `rulegen generate` followed by `rulegen test`, but as a single command for CI/batch use.
+Accepts all flags from `generate` plus `--max-iterations` (default: `3`). Runs the full end-to-end pipeline: generate rules → generate test data → run kantra fix loop → stamp test results on rules → write rules report. Equivalent to running `rulegen generate` followed by `rulegen test`, but as a single command for CI/batch use.
+
+**`rulegen extract`**:
+
+```sh
+rulegen extract \
+  --input https://example.com/spring-boot-migration-guide \
+  --source spring-boot-3 --target spring-boot-4 \
+  --language java --provider anthropic > patterns.json
+```
+
+- Flag: `--input`; Required: Yes; Description: URL, file path, or text content
+- Flag: `--source`; Required: No; Default: auto-detected; Description: Source technology
+- Flag: `--target`; Required: No; Default: auto-detected; Description: Target technology
+- Flag: `--language`; Required: No; Default: auto-detected; Description: Programming language
+- Flag: `--provider`; Required: No; Default: `RULEGEN_LLM_PROVIDER` env var; Description: LLM provider. Required.
+
+Runs ingestion and LLM-powered pattern extraction only. Outputs `ExtractOutput` JSON to stdout (source, target, language, patterns array). Does not generate rules or write files. Designed to pipe into `rulegen construct` or external tools.
+
+**`rulegen construct`**:
+
+```sh
+rulegen construct --input patterns.json --output ./output
+# or pipe from extract:
+rulegen extract --input <url> --provider anthropic | rulegen construct --input - --output ./output
+```
+
+- Flag: `--input`; Required: No; Default: `-` (stdin); Description: Path to JSON input file, or `-` for stdin
+- Flag: `--output`; Required: No; Default: `output`; Description: Output directory
+
+Accepts two JSON formats: `ExtractOutput` (from `extract` command — raw patterns are deterministically mapped to rule fields) or `ConstructInput` (pre-mapped rule fields, same schema as the MCP `construct_rule` tool). No LLM needed. Validates all rules and writes YAML files.
+
+**`rulegen score`** *(experimental)*:
+
+```sh
+rulegen --experimental score \
+  --tests ./output/tests/ --rules ./output/rules/ \
+  --output ./output --provider anthropic
+```
+
+- Flag: `--tests`; Required: Yes; Description: Path to tests directory containing `.test.yaml` files
+- Flag: `--rules`; Required: No; Description: Path to rules directory (required when using `--provider` for LLM judge)
+- Flag: `--output`; Required: No; Description: Output directory for scores
+- Flag: `--provider`; Required: No; Description: LLM provider for judge (optional)
+- Flag: `--kantra`; Required: No; Default: `kantra` on PATH; Description: Path to kantra binary
+- Flag: `--timeout`; Required: No; Default: `900`; Description: Kantra timeout in seconds
+
+Runs kantra tests as the primary signal, then optionally uses LLM-as-judge to evaluate rule quality (pattern correctness, message quality, category appropriateness, effort accuracy, false positive risk). Hidden behind `--experimental` flag.
 
 **Agent Skill (`SKILL.md`)**: Portable markdown file defining the agentic workflow. Works across 30+ agents via the
 [Agent Skills](https://agentskills.io) open standard.
@@ -465,15 +528,16 @@ Workflow:
 
 1. Gather context: What is the migration? Docs available? Code available?
 2. Route to appropriate engine:
-   - Documentation available -> `rulegen generate`
+   - Documentation available -> agent extracts patterns, `rulegen construct` builds rules (no API key)
+   - Documentation available + LLM API key -> `rulegen generate` or `rulegen pipeline` (end-to-end)
    - Both codebases available -> semver-analyzer (future integration)
    - Both -> semver-analyzer first (higher confidence), rulegen fills gaps
-3. Run generation
+3. Run generation or construction
 4. Validate output (`rulegen validate`)
-5. Optionally generate test data (`rulegen test`)
+5. Optionally generate test data (`rulegen test` — requires LLM API key)
 6. Present results for human review
 
-**Agent Skill workflow** (Story 3: agentic workflow in IDE):
+**Agent Skill workflow** (Story 3: agentic workflow in IDE — no LLM API key needed):
 
 ```text
 Developer                    Agent (via SKILL.md)              rulegen CLI
@@ -490,13 +554,13 @@ Developer                    Agent (via SKILL.md)              rulegen CLI
     │  "Here: <url>"               │                               │
     │─────────────────────────────>│                               │
     │                              │                               │
-    │                              │  (web fetch, read guide,      │
-    │                              │   determine: docs available   │
-    │                              │   → route to rulegen)         │
+    │                              │  (fetches URL, reads guide,   │
+    │                              │   identifies patterns,        │
+    │                              │   builds ConstructInput JSON)  │
     │                              │                               │
-    │                              │  rulegen generate             │
-    │                              │  --input <url>                │
-    │                              │  --provider anthropic         │
+    │                              │  rulegen construct             │
+    │                              │  --input patterns.json         │
+    │                              │  --output ./output             │
     │                              │──────────────────────────────>│
     │                              │  output/rules/*.yaml   <──────│
     │                              │                               │
@@ -506,26 +570,14 @@ Developer                    Agent (via SKILL.md)              rulegen CLI
     │                              │  { valid: true }   <──────────│
     │                              │                               │
     │  "Generated 12 rules.        │                               │
-    │   Want me to run tests?"     │                               │
-    │<─────────────────────────────│                               │
-    │                              │                               │
-    │  "Yes"                       │                               │
-    │─────────────────────────────>│                               │
-    │                              │                               │
-    │                              │  rulegen test                 │
-    │                              │  --rules ./output/rules/      │
-    │                              │──────────────────────────────>│
-    │                              │  12/12 passed      <──────────│
-    │                              │                               │
-    │  "All 12 rules passed        │                               │
-    │   kantra. Files saved        │                               │
-    │   to output/."               │                               │
+    │   All valid. Want me to      │                               │
+    │   run tests? (requires       │                               │
+    │   LLM API key + kantra)"     │                               │
     │<─────────────────────────────│                               │
     │                              │                               │
     │  (reviews, edits, commits)   │                               │
 ```
 
-Key properties: Zero infrastructure (just a markdown file), leverages agent's native capabilities (web search, file I/O, user interaction), embeds domain knowledge in the prompt, multi-step with reasoning, invokes CLI for all heavy lifting.
 
 **Example `SKILL.md`**:
 
@@ -535,40 +587,42 @@ name: konveyor-rules-generation
 description: >
   Generate Konveyor analyzer rules from migration guides and documentation.
   Use when creating rules for a new migration path or expanding coverage
-  for an existing one. Requires the rulegen binary and an LLM API key.
+  for an existing one. Requires the rulegen binary. No LLM API keys needed —
+  you (the agent) do the extraction, rulegen handles construction and validation.
 ---
 
 # Konveyor Rules Generation
 
 ## Prerequisites
 - `rulegen` binary installed and on PATH
-- LLM provider configured: `export RULEGEN_LLM_PROVIDER=anthropic`
-- Corresponding API key set (e.g., `export ANTHROPIC_API_KEY=<key>`)
-- `kantra` installed (optional, for test data generation)
+- `kantra` installed (optional, for testing generated rules)
 
 ## Workflow
 
 1. Ask the user: What migration are they targeting? Do they have a
    migration guide URL or documentation?
 
-2. Run the full pipeline (generate + test in one step):
+2. Fetch and read the migration guide. Identify migration patterns:
+   deprecated APIs, renamed packages, removed configurations, etc.
+
+3. For each pattern, use the MCP `construct_rule` tool (or build
+   ConstructInput JSON) with the appropriate condition type, pattern,
+   message, category, and effort. Then run:
    ```sh
-   rulegen pipeline \
-     --input <url-or-file> \
-     --source <source> --target <target> \
-     --provider $RULEGEN_LLM_PROVIDER \
-     --output ./output
+   rulegen construct --input patterns.json --output ./output
    ```
 
-   Or run steps individually for more control:
+4. Validate the generated rules:
    ```sh
-   rulegen generate --input <url-or-file> --source <source> \
-     --target <target> --provider $RULEGEN_LLM_PROVIDER --output ./output
    rulegen validate --rules ./output/rules/
+   ```
+
+5. If the user has an LLM API key and wants automated testing:
+   ```sh
    rulegen test --rules ./output/rules/ --provider $RULEGEN_LLM_PROVIDER
    ```
 
-3. Present results: number of rules generated, validation status,
+6. Present results: number of rules generated, validation status,
    and test pass rate. Let the user review, edit, and commit.
 `````
 
@@ -602,16 +656,16 @@ description: >
 - **URL ingestion**: URLs are fetched with a hardened HTTP client with SSRF mitigation that blocks loopback and private IP addresses.
 - **File system access**: `validate_rules` (MCP) reads files at client-provided paths. Path traversal is restricted to the working directory by resolving and rejecting paths that escape it (e.g., `../../../etc/passwd`). Workspace directory names are sanitized (no `..`, `/`, `\`).
 - **Supply chain**: Generated rules affect how kantra analyzes applications. Human review before committing to rulesets is essential.
-- **LLM hallucination**: Structural validation catches invalid regex and wrong condition types. Semantic errors require human review.
+- **LLM hallucination**: Structural validation catches invalid regex, wrong condition types, and missing dependency version bounds. Verification labels and rules reports provide transparency into what has been tested. Semantic errors require human review.
 
 ## Design Details
 
 ### Test Plan
 
-- **Unit tests**: Core library functions (ingestion, rule construction, condition builders, validation, serialization). No LLM or kantra needed.
-- **Integration tests**: Full pipeline with mock LLM.
-- **E2E tests**: Real LLM + kantra. Requires API keys and kantra binary
-- **MCP protocol tests**: Tool discovery, invocation, response format
+- **Unit tests** (`go test ./internal/...`): Core library functions (ingestion, rule construction, condition builders, validation, serialization, labels, workspace, tools). No LLM or kantra needed.
+- **Integration tests** (`go test -tags=integration ./test/integration/`): Full pipeline with mock LLM.
+- **E2E tests** (`go test -tags=e2e ./test/e2e/`): Real LLM + kantra. Requires API keys and kantra binary. Tests composable and unified pipelines.
+- **MCP protocol tests**: Tool discovery, invocation, response format via server tests.
 
 ### Upgrade / Downgrade Strategy
 
