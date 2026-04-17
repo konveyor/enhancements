@@ -31,6 +31,58 @@ superseded-by: []
 
 # Stack-Graphs-Based Language Analyzers
 
+- [Stack-Graphs-Based Language Analyzers](#stack-graphs-based-language-analyzers)
+  - [Release Signoff Checklist](#release-signoff-checklist)
+  - [Summary](#summary)
+  - [The Problem](#the-problem)
+    - [The language servers don't work well](#the-language-servers-dont-work-well)
+    - [No shared infrastructure or standardized queries](#no-shared-infrastructure-or-standardized-queries)
+  - [What Are Stack Graphs?](#what-are-stack-graphs)
+    - [The core idea](#the-core-idea)
+    - [Worked example: name resolution](#worked-example-name-resolution)
+    - [Partial paths: precomputing work](#partial-paths-precomputing-work)
+    - [The stack-graphs library](#the-stack-graphs-library)
+  - [What's Already Been Built](#whats-already-been-built)
+    - [C# Grammar](#c-grammar)
+    - [Java Analyzer (jmle)](#java-analyzer-jmle)
+    - [Moving Into a Fork](#moving-into-a-fork)
+  - [What We Discovered Along the Way](#what-we-discovered-along-the-way)
+    - [The SQLite Gap](#the-sqlite-gap)
+    - [The Need for Schema Standardization](#the-need-for-schema-standardization)
+    - [FQN Computation](#fqn-computation)
+    - [The Resolution Engine Is Forward-Only](#the-resolution-engine-is-forward-only)
+    - [Stack Graphs Don't Store the CST](#stack-graphs-dont-store-the-cst)
+    - [Incrementality vs. Full-Project Queries](#incrementality-vs-full-project-queries)
+  - [Open Questions](#open-questions)
+    - [1. TSG vs Lua](#1-tsg-vs-lua)
+    - [2. CST/Source Storage](#2-cstsource-storage)
+    - [3. Graduated Replacement Criteria](#3-graduated-replacement-criteria)
+    - [4. Type Information: Graph Edges vs. Re-parsing](#4-type-information-graph-edges-vs-re-parsing)
+    - [5. How Should FQN Work?](#5-how-should-fqn-work)
+    - [6. How jmle's Java Work Fits In](#6-how-jmles-java-work-fits-in)
+    - [7. Incrementality and Full-Project Queries](#7-incrementality-and-full-project-queries)
+    - [8. External Dependencies (JARs, NuGet Packages, Third-Party Libraries)](#8-external-dependencies-jars-nuget-packages-third-party-libraries)
+    - [9. Resolution Failure and Diagnostics](#9-resolution-failure-and-diagnostics)
+  - [What Needs to Change in Stack Graphs](#what-needs-to-change-in-stack-graphs)
+    - [Clear: Fix `SourceInfo` serialization](#clear-fix-sourceinfo-serialization)
+    - [Clear: Add reverse reference index](#clear-add-reverse-reference-index)
+    - [Needs design: FQN mechanism](#needs-design-fqn-mechanism)
+    - [Needs design: Schema and metadata model](#needs-design-schema-and-metadata-model)
+    - [Needs design: Source/CST storage](#needs-design-sourcecst-storage)
+  - [Proposed Architecture](#proposed-architecture)
+    - [Introspection Query API](#introspection-query-api)
+    - [Grammar Schema](#grammar-schema)
+    - [Provider Integration](#provider-integration)
+  - [Test Plan](#test-plan)
+  - [Risks](#risks)
+  - [Alternatives Considered](#alternatives-considered)
+    - [Language servers (JDTLS, csharp-ls, Roslyn)](#language-servers-jdtls-csharp-ls-roslyn)
+    - [Tree-sitter only (no stack graphs)](#tree-sitter-only-no-stack-graphs)
+    - [Separate analyzers per language](#separate-analyzers-per-language)
+  - [Implementation History](#implementation-history)
+  - [Infrastructure Needed](#infrastructure-needed)
+
+
 ## Release Signoff Checklist
 
 - [ ] Enhancement is `implementable`
@@ -42,7 +94,7 @@ superseded-by: []
 
 We propose building Konveyor's language analysis on top of a maintained fork of [GitHub's stack-graphs](https://github.com/github/stack-graphs) — a Rust library for cross-file name resolution using tree-sitter. The fork would consolidate language-specific grammars (starting with C# and Java) into a single repository, fix gaps in the core library, and extend stack graphs beyond name resolution to support introspection queries like "find all references to `javax.servlet.http.HttpServlet`" or "what depends on namespace `NerdDinner.Models`."
 
-This replaces the approach of maintaining separate Go-based language providers that depend on heavyweight language servers (JDTLS for Java, csharp-ls for C#).
+This replaces the approach of maintaining separate Go-based language providers that depend on heavyweight language servers (JDTLS for Java, etc...).
 
 ## The Problem
 
@@ -50,18 +102,22 @@ Konveyor needs to analyze codebases to support application migration. Today that
 
 ### The language servers don't work well
 
-- **`dotnet-external-provider`** uses `csharp-ls`, which fails to reliably resolve references. Analysis results are incomplete or wrong. The [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) uses a stack-graphs-based C# grammar, but the grammar itself has correctness issues — the underlying stack-graphs approach is sound, but the grammar needs significant work to produce correct results. The [tree-sitter-only enhancement](/enhancements/dotnet-provider-treesitter/README.md) was proposed in 2024 as a simpler alternative, but explicitly excluded cross-file analysis — making it insufficient for migration rules that track dependencies across files.
+- **`c-sharp-external-provider`** used to use `roslyn`, which failed to reliably resolve references and work cross-platform. Analysis results were incomplete or wrong. The current [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) uses a stack-graphs-based C# grammar, but the grammar itself has correctness issues. The underlying stack-graphs approach is sound, but the grammar needs significant work to produce correct results. The [tree-sitter-only enhancement](/enhancements/dotnet-provider-treesitter/README.md) was proposed in 2024 as a simpler alternative, but explicitly excluded cross-file analysis, making it insufficient for migration rules that track dependencies across files.
 - **`java-external-provider`** uses JDTLS. This works better, but requires a running JVM, is slow to start, memory-hungry, and creates duplicate processes when used alongside IDE extensions.
 
-These language servers are also *very large*. JDTLS pulls in the entire Eclipse JDT infrastructure. csharp-ls pulls in the .NET SDK tooling. Containerizing them means shipping enormous images. And when they break, debugging requires deep knowledge of the language server internals — not the analysis domain.
+These language servers are also *very large*. Containerizing them means shipping enormous images (Kantra is over 1 GiB!). And when they break, debugging requires deep knowledge of the language server internals, not the analysis domain.
 
 ### No shared infrastructure or standardized queries
 
-Each provider is built independently with its own architecture, query capabilities, and rule format. There is no way to write a query that works across languages. Adding a new language means building a new provider from scratch — new Go code, new language server dependency, new containerization, new bugs.
+Each provider is built independently with its own architecture, query capabilities, and rule format. There is no way to write a query that works across languages. Adding a new language means building a new provider from scratch: new Go code, new language server dependency, new containerization, new bugs.
 
-A migration rule like "find all references to `com.example.OldClass`" should be expressible the same way regardless of whether the codebase is Java, C#, or Python. Today, it can't be.
+Additionally, a migration rule like "find all references to `com.example.OldClass`" should be expressible in roughly the same way regardless of whether the codebase is Java, C#, or Python. Today, it can't be.
 
 ## What Are Stack Graphs?
+
+> **A note on terminology:** Tree-sitter produces a *Concrete Syntax Tree* (CST), a parse tree that preserves every token, including punctuation and whitespace. This is distinct from an *Abstract Syntax Tree* (AST), which strips syntactic noise. This document uses "CST" throughout since that's what tree-sitter actually produces. 
+> 
+> It also uses "stack graphs" (unhyphenated) for the formalism and "stack-graphs" (hyphenated) for the GitHub library and repository.
 
 Stack graphs are a language-agnostic framework for cross-file name resolution. They build on the *scope graphs* formalism from programming language theory ([Néron et al., 2015](https://doi.org/10.1007/978-3-662-46669-8_9); [van Antwerpen et al., 2016](https://doi.org/10.1145/2847538.2847543)) and were developed at GitHub for code navigation at scale. The [stack graphs paper](https://arxiv.org/pdf/2211.01224) (Creager & van Antwerpen, 2023) describes the full formalism.
 
@@ -71,19 +127,21 @@ In scope graphs, name binding information is encoded as a graph. Definitions and
 
 Stack graphs extend this with two key innovations:
 
-> **A note on terminology:** Tree-sitter produces a *Concrete Syntax Tree* (CST) — a parse tree that preserves every token, including punctuation and whitespace. This is distinct from an *Abstract Syntax Tree* (AST), which strips syntactic noise. This document uses "CST" throughout since that's what tree-sitter actually produces. It also uses "stack graphs" (unhyphenated) for the formalism and "stack-graphs" (hyphenated) for the GitHub library and repository.
+1. **Push and pop symbol nodes.** Instead of simple definition/reference nodes, stack graphs use *push symbol nodes* (↓x, which prepend a symbol onto a stack) and *pop symbol nodes* (↑x, which require and remove a matching symbol from the stack).
+   1. A reference `x` becomes a push node ↓x: it *pushes* the name it's looking for onto the stack. 
+   2. A definition `x` becomes a pop node ↑x: it *pops* the name it provides, consuming the request.
 
-1. **Push and pop symbol nodes.** Instead of simple definition/reference nodes, stack graphs use *push symbol nodes* (↓x, which prepend a symbol onto a stack) and *pop symbol nodes* (↑x, which require and remove a matching symbol from the stack). A reference `x` becomes a push node ↓x — it *pushes* the name it's looking for onto the stack. A definition `x` becomes a pop node ↑x — it *pops* the name it provides, consuming the request. Name resolution is finding a path where all pushes and pops cancel out, leaving an empty stack. This mechanism also handles *type-dependent* lookups — see the worked example below.
+2. **Name resolution.** Name resolution is finding a path where all pushes and pops cancel out, leaving an empty stack. This mechanism also handles *type-dependent* lookups (see the worked example below).
 
-2. **File incrementality via root nodes.** Each source file produces a disjoint subgraph with no edges crossing file boundaries. Files connect to each other only through *root nodes* — special nodes that act as entry/exit points. At query time, the path-finding algorithm creates virtual edges between root nodes in different files, allowing cross-file resolution. This means each file can be analyzed independently: no knowledge of other files is needed at index time.
+3. **File incrementality via root nodes.** Each source file produces a disjoint subgraph with no edges crossing file boundaries. Files connect to each other only through *root nodes*, special nodes that act as entry/exit points. At query time, the path-finding algorithm creates virtual edges between root nodes in different files, allowing cross-file resolution. This means each file can be analyzed independently: no knowledge of other files is needed at index time.
 
 The practical consequence: the name binding rules for a language are encoded entirely in the graph structure. The resolution algorithm is language-independent — the same algorithm resolves names in Python, Java, C#, or any other language.
 
 ### Worked example: name resolution
 
-Push/pop is the mechanism for *all* name resolution in stack graphs — even the simplest intra-file reference.
+Push/pop is the mechanism for *all* name resolution in stack graphs.
 
-**Intra-file resolution** — the simplest case:
+**Intra-file resolution** - the simplest case:
 
 ```csharp
 class Foo {
@@ -95,38 +153,40 @@ class Foo {
 ```
 
 The TSG grammar rules process this file and create graph nodes:
-- ↑title (pop node — the field *definition*)
-- ↓title (push node — the *reference* inside `Bar`)
+- ↑title (pop node: the field *definition*)
+- ↓title (push node: the *reference* inside `Bar`)
 - Scope nodes connected by edges encoding lexical scoping: Bar's scope → Foo's member scope
 
 The TSG grammar rules create edges that encode the scoping rules. For this example, the edges look like:
 
 ```
-  ↑title      ↑Bar           <-- pop nodes (definitions in this scope)
+  ↑title      ↑Bar     <-- pop nodes (definitions in this scope)
     ^           ^
     |           |
-  [Foo's member scope]       <-- "Bar is nested in Foo, so Foo's members are visible"
+  [Foo's member scope]   <-- "Bar is nested in Foo, so Foo's members are visible"
     ^
     |
-  [Bar's scope]              <-- "resolve references in Bar here"
+  [Bar's scope]          <-- "resolve references in Bar here"
     ^
     |
-  ↓title                     <-- push node (reference to title)
+  ↓title                <-- push node (reference to title)
 ```
 
-The edge from ↓title to Bar's scope says "to resolve references in Bar, look in Bar's scope." The edge from Bar's scope to Foo's member scope says "Bar's scope is nested inside Foo — names from Foo's members are visible here." The edges from Foo's member scope to ↑title and ↑Bar say "title and Bar are defined in this scope."
+- The edge from ↓title to Bar's scope says "to resolve references in Bar, look in Bar's scope." 
+- The edge from Bar's scope to Foo's member scope says "Bar's scope is nested inside Foo. Names from Foo's members are visible here."
+- The edges from Foo's member scope to ↑title and ↑Bar say "title and Bar are defined in this scope."
 
 Resolution:
 1. Start at ↓title. Push `title` onto the stack. Stack: `⟨title⟩`
-2. Walk edges. The algorithm follows every outgoing edge — it's a breadth-first search, not a targeted lookup. ↓title → Bar's scope → Foo's member scope.
-3. From Foo's member scope, there are two outgoing edges: one to ↑title, one to ↑Bar. The algorithm tries both. Pop nodes act as *gates*: you can only pass through if the symbol matches the top of the stack. ↑Bar requires `Bar` on top — doesn't match `title`, path pruned. ↑title requires `title` — matches, so pop it. Stack: `⟨⟩`
+2. Walk edges. The algorithm follows every outgoing edge via a breadth-first search. ↓title → Bar's scope → Foo's member scope.
+3. From Foo's member scope, there are two outgoing edges: one to ↑title, one to ↑Bar. The algorithm tries both. Pop nodes act as *gates*: you can only pass through if the symbol matches the top of the stack.
+   1. ↑Bar requires `Bar` on top. It doesn't match `title` and thus the is path pruned. 
+   2. ↑title requires `title`. It matches, so pop it. Stack: `⟨⟩`
 4. Stack is empty, we're at a definition node. **Path is complete.** The reference `title` resolves to the field definition.
 
-(If there were also a ↑other node in the same scope, the algorithm would try that edge too — but ↑other requires `other` on top of the stack, `title` doesn't match, so that path is pruned.)
+Every name resolution, no matter how complex, reduces to this: push symbols onto the stack, walk edges, pop matching symbols off. When the stack is empty at a definition node, you've found the answer.
 
-Every name resolution — no matter how complex — reduces to this: push symbols onto the stack, walk edges, pop matching symbols off. When the stack is empty at a definition node, you've found the answer.
-
-**Cross-file resolution** — adding namespaces and imports:
+**Cross-file resolution** - adding namespaces and imports:
 
 ```csharp
 // Models.cs
@@ -147,15 +207,15 @@ class App {
 
 Each file produces an independent subgraph:
 
-- **`Models.cs`** creates pop nodes for its namespace chain: ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner — connected through scope nodes back to a *root node*. This is the "export" side: it says "I define something reachable via `NerdDinner.Models.Dinner`."
+- **`Models.cs`** creates pop nodes for its namespace chain: ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner. This is connected through scope nodes back to a *root node*. This is the "export" side: it says "I define something reachable via `NerdDinner.Models.Dinner`."
 
-- **`App.cs`** creates a push node ↓Dinner for the reference. The `using NerdDinner.Models` directive creates a chain of push nodes — ↓NerdDinner, ↓`.`, ↓Models, ↓`.` — that lead to a root node. These push nodes are wired so that when you start at ↓Dinner, the path first passes through the `using` directive's push chain, building up the full namespace on the stack before reaching the root node.
+- **`App.cs`** creates a push node ↓Dinner for the reference. The `using NerdDinner.Models` directive creates a chain of push nodes - ↓NerdDinner, ↓`.`, ↓Models, ↓`.` - that lead to a root node. These push nodes are wired so that when you start at ↓Dinner, the path first passes through the `using` directive's push chain, building up the full namespace on the stack before reaching the root node.
 
 Resolution of `Dinner` in `App.cs`:
 1. Start at ↓Dinner. Stack: `⟨Dinner⟩`
 2. Follow edges through the `using` directive's push chain: ↓`.`, ↓Models, ↓`.`, ↓NerdDinner. Each push node prepends its symbol onto the stack. Stack is now: `⟨NerdDinner.Models.Dinner⟩`
-3. Reach a root node. The algorithm creates a *virtual edge* to root nodes in other files — this is the only way paths cross file boundaries.
-4. Enter `Models.cs`. Pop ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner — each pop matches and removes the top of the stack. Stack: `⟨⟩`
+3. Reach a root node. The algorithm creates a *virtual edge* to root nodes in other files - this is the only way paths cross file boundaries.
+4. Enter `Models.cs`. Pop ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner - each pop matches and removes the top of the stack. Stack: `⟨⟩`
 5. Path complete. `Dinner` resolves to the class definition in `Models.cs`.
 
 No file needs to know about any other file at index time. The virtual edges between root nodes are created at query time.
@@ -167,21 +227,32 @@ Dinner d = new Dinner();
 d.Title;  // <-- resolve this
 ```
 
-The expression `d.Title` involves multiple lookups: resolve `d`, then resolve `Title` within `d`'s type. The grammar encodes this as a chain of push nodes. The algorithm starts at ↓Title and walks through the chain, building up the stack:
+The expression `d.Title` involves *type-dependent* name resolution: resolve `d`, determine its type (`Dinner`), then resolve `Title` within `Dinner`'s member scope. This is the case that makes stack graphs interesting — the stack handles the nested lookups without any eager cross-file resolution.
+
+The grammar encodes this using two mechanisms:
+- **Pop nodes as gates.** The grammar places ↑`.` and ↑`:` pop nodes between definitions and their member/type scopes. You can only enter a scope by popping the matching symbol off the stack.
+- **Push nodes for type references.** The variable declaration `Dinner d` creates push nodes ↓`:` and ↓Dinner after d's definition, encoding "d has type Dinner" as symbols on the stack.
+
+The full trace:
 
 1. Start at ↓Title. Push `Title`. Stack: `⟨Title⟩`
 2. Walk to ↓`.`. Push `.`. Stack: `⟨.Title⟩`
 3. Walk to ↓d. Push `d`. Stack: `⟨d.Title⟩`
 4. Reach ↑d (the local variable definition). Pop `d`. Stack: `⟨.Title⟩`
-5. The grammar has placed edges from `d`'s definition scope *through the type's scope*. The details of how this routing works depend on the grammar's conventions — the Java grammar uses `":"` pop edges to model type-of relationships, while other grammars may wire scope edges directly. Either way, the path enters Dinner's member scope.
-6. Pop `.`. Stack: `⟨Title⟩`
-7. Reach ↑Title (the field definition). Pop `Title`. Stack: `⟨⟩`. Done.
+5. The grammar placed ↓`:` after d's definition to encode the type-of relationship. Push `:`. Stack: `⟨:.Title⟩`
+6. The grammar placed ↓Dinner after ↓`:` as a reference to d's type. Push `Dinner`. Stack: `⟨Dinner.:.Title⟩`
+7. Resolve `Dinner` through the namespace chain (same cross-file mechanism as the previous example). Reach ↑Dinner (the class definition). Pop `Dinner`. Stack: `⟨:.Title⟩`
+8. The grammar placed ↑`:` between the class definition and its member scope. Pop `:`. Stack: `⟨.Title⟩`
+9. The grammar placed ↑`.` between the `:` gate and the members. Pop `.`. Stack: `⟨Title⟩`. Now inside Dinner's member scope.
+10. Reach ↑Title (the field definition). Pop `Title`. Stack: `⟨⟩`. Done.
 
-The key insight: **the stack handles nested lookups.** While resolving `d`'s type (step 3), `Title` stays on the stack, waiting. Once the type is resolved and we're in the right scope, the stack "resumes" with the remaining lookup. This is why they're called *stack* graphs — the stack of pending symbols is the core data structure that makes type-dependent resolution work without eager cross-file lookups.
+The key insight: **the single stack handles nested lookups.** At step 6, the stack is `⟨Dinner.:.Title⟩` — `Dinner` is the *current* lookup (resolve the type), while `:.Title` represents the *pending* lookups (enter the type's scope via `:`, access members via `.`, find `Title`). As each lookup completes, its symbols are popped, and the next lookup's symbols are already in position. This is why they're called *stack* graphs.
+
+The paper's `B().x` example (Figure 3) uses the same mechanism with `()` instead of `:`: the grammar places ↑`()` between the class definition and the *instance* scope, so calling a constructor and accessing instance members works by pushing and popping `()` as a gate symbol.
 
 ### Partial paths: precomputing work
 
-A naive implementation would do all path-finding at query time — expensive for large codebases. Stack graphs address this with *partial paths*: precomputed path segments within a single file that are calculated at index time and stored. Each partial path has a *precondition* (what must be on the symbol stack when entering) and a *postcondition* (what will be on the stack when leaving).
+A naive implementation would do all path-finding at query time. This is expensive for large codebases. Stack graphs address this with *partial paths*: precomputed path segments within a single file that are calculated at index time and stored. Each partial path has a *precondition* (what must be on the symbol stack when entering) and a *postcondition* (what will be on the stack when leaving).
 
 For example, within `Models.cs`, there's a partial path that says: "if you arrive at my root node with `⟨NerdDinner.Models.Dinner.Title⟩` on the stack, I can resolve it down to the field definition with an empty stack." At query time, the algorithm concatenates compatible partial paths across files rather than walking individual edges. This shifts most of the computational work to index time while keeping file incrementality.
 
@@ -189,13 +260,13 @@ For example, within `Models.cs`, there's a partial path that says: "if you arriv
 
 The [stack-graphs](https://github.com/github/stack-graphs) repository is a Rust workspace implementing this formalism:
 
-- **`stack-graphs`** — The core library. Defines the graph data model (`StackGraph`), node types (root, scope, push symbol, pop symbol), the partial path data structures, and the path-stitching algorithm (`ForwardPartialPathStitcher`). Includes an **SQLite-based storage layer** for persisting graphs and partial paths across sessions. Each file's subgraph and partial paths are stored independently, keyed by a content hash — if a file hasn't changed, its stored data is reused without re-indexing. Nodes carry metadata via a `SourceInfo` struct (source span, syntax type, containing line, definiens span, fully qualified name).
+- **`stack-graphs`**: The core library. Defines the graph data model (`StackGraph`), node types (root, scope, push symbol, pop symbol), the partial path data structures, and the path-stitching algorithm (`ForwardPartialPathStitcher`). Includes an **SQLite-based storage layer** for persisting graphs and partial paths across sessions. Each file's subgraph and partial paths are stored independently, keyed by a content hash. If a file hasn't changed, its stored data is reused without re-indexing. Nodes carry metadata via a `SourceInfo` struct (source span, syntax type, containing line, definiens span, fully qualified name).
 
-- **`tree-sitter-stack-graphs`** — The bridge between tree-sitter and stack graphs. Defines a declarative DSL called TSG (tree-sitter-graph) for writing *rules* that transform tree-sitter parse trees into stack graph nodes and edges. Provides a CLI for indexing source files, querying the graph, and running resolution tests. Handles loading source files, running TSG rules, building the graph, computing partial paths, and persisting everything to SQLite.
+- **`tree-sitter-stack-graphs`**: The bridge between tree-sitter and stack graphs. Defines a declarative DSL called TSG (tree-sitter-graph) for writing *rules* that transform tree-sitter parse trees into stack graph nodes and edges. Provides a CLI for indexing source files, querying the graph, and running resolution tests. Handles loading source files, running TSG rules, building the graph, computing partial paths, and persisting everything to SQLite.
 
-- **`languages/`** — Per-language grammar crates. Each contains TSG rules (`.tsg` files), a Rust wrapper crate, and test cases. GitHub shipped grammars for Python, Java, JavaScript, and TypeScript. The repo is now archived and unmaintained.
+- **`languages/`** : Per-language grammar crates. Each contains TSG rules (`.tsg` files), a Rust wrapper crate, and test cases. GitHub shipped grammars for Python, Java, JavaScript, and TypeScript. The repo is now archived and unmaintained.
 
-The key thing for Konveyor: this gives us a single Rust binary that can parse source files, build a semantic graph with cross-file name resolution, persist it to SQLite, and answer "what does this reference resolve to?" — without a language server, JVM, or .NET runtime.
+The key thing for Konveyor: this gives us a single Rust binary that can parse source files, build a semantic graph with cross-file name resolution, persist it to SQLite, and answer "what does this reference resolve to?" without a language server, JVM, or .NET runtime.
 
 ## What's Already Been Built
 
@@ -206,9 +277,9 @@ Shawn Hurley started a C# stack-graphs grammar (`tree-sitter-stack-graph-csharp`
 - Name resolution for namespaces (simple, qualified, file-scoped), classes, structs, interfaces, enums, records, methods, constructors, fields, properties, parameters, local variables, delegates, events, type parameters, and local functions
 - Using directives (simple, qualified, aliased)
 - Inheritance and interface implementation
-- FQN (fully qualified name) reconstruction — `NerdDinner.Models.Dinner.Title`
-- Definiens tracking — knowing where a definition's body starts and ends
-- A `find-node` subcommand (of the `tree-sitter-stack-graphs` CLI) for querying definitions by FQN regex
+- FQN (fully qualified name) reconstruction, e.g., `NerdDinner.Models.Dinner.Title`
+- Definiens tracking (knowing where a definition's body starts and ends)
+- A proper `find-node` subcommand (of the `tree-sitter-stack-graphs` CLI) for querying definitions by FQN regex
 - ~40 resolution test files, ~15 FQN/definiens test files
 
 ### Java Analyzer (jmle)
@@ -230,7 +301,7 @@ The C# grammar has been moved into [a fork of the stack-graphs repo](https://git
 
 Building the C# grammar and introspection tooling revealed gaps in the stack-graphs library and important design questions that need to be resolved. The discoveries below are interconnected — they all point toward the same underlying need: **stack graphs need a standardized metadata schema and the infrastructure to persist and query it.**
 
-### The Serde Gap
+### The SQLite Gap
 
 `SourceInfo` — the struct that holds metadata about each graph node — has five fields in the core library:
 
@@ -250,7 +321,7 @@ We worked around this by storing definiens information as `debug_` attributes (t
 
 ### The Need for Schema Standardization
 
-The serde gap is really a symptom of a deeper problem: **stack graphs has no standardized schema for what metadata definitions should carry.** Each grammar is free to define whatever `syntax_type` values it wants, use whatever edge conventions it likes, and attach whatever `debug_` attributes it needs. There's no contract between grammars and the tools that query them.
+The SQLite gap is really a symptom of a deeper problem: **stack graphs has no standardized schema for what metadata definitions should carry.** Each grammar is free to define whatever `syntax_type` values it wants, use whatever edge conventions it likes, and attach whatever `debug_` attributes it needs. There's no contract between grammars and the tools that query them.
 
 Comparing the C# and Java grammars makes this concrete:
 
@@ -604,7 +675,7 @@ Keep java-analyzer-provider and future language analyzers as independent project
 - 2024-08: [Tree-sitter C# enhancement](/enhancements/dotnet-provider-treesitter/README.md) proposed (CST-only, no cross-file resolution)
 - 2025-04: Shawn Hurley begins C# stack-graphs grammar
 - 2026-04: C# grammar expanded with FQN reconstruction, definiens tracking, `find-node` subcommand, 40+ resolution tests
-- 2026-04: Serde gap, schema standardization needs, and other core issues discovered and documented
+- 2026-04: SQLite gap, schema standardization needs, and other core issues discovered and documented
 - 2026-04-14: This enhancement proposal created
 - 2026-04-16: @jmle's Rust-based Java analyzer with stack-graphs brought to the team's attention
 
