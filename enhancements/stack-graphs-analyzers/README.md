@@ -40,7 +40,7 @@ superseded-by: []
 
 ## Summary
 
-We propose building Konveyor's language analysis on top of a maintained fork of [GitHub's stack-graphs](https://github.com/github/stack-graphs) — a Rust library for cross-file name resolution using tree-sitter. The fork would consolidate language-specific grammars (starting with C# and Java) into a single repository, fix gaps in the core library, and extend stack graphs from a name resolution engine into a code introspection platform capable of answering questions like "find all references to `javax.servlet.http.HttpServlet`" or "what depends on namespace `NerdDinner.Models`."
+We propose building Konveyor's language analysis on top of a maintained fork of [GitHub's stack-graphs](https://github.com/github/stack-graphs) — a Rust library for cross-file name resolution using tree-sitter. The fork would consolidate language-specific grammars (starting with C# and Java) into a single repository, fix gaps in the core library, and extend stack graphs beyond name resolution to support code introspection queries like answering questions like "find all references to `javax.servlet.http.HttpServlet`" or "what depends on namespace `NerdDinner.Models`."
 
 This replaces the approach of maintaining separate Go-based language providers that depend on heavyweight language servers (JDTLS for Java, csharp-ls for C#).
 
@@ -70,6 +70,8 @@ Stack graphs are a language-agnostic framework for cross-file name resolution. T
 In scope graphs, name binding information is encoded as a graph. Definitions and references are nodes; scoping rules (lexical scope, imports, inheritance) are edges. Resolving a reference means finding a path through the graph from a reference node to a definition node.
 
 Stack graphs extend this with two key innovations:
+
+> **A note on terminology:** Tree-sitter produces a *Concrete Syntax Tree* (CST) — a parse tree that preserves every token, including punctuation and whitespace. This is distinct from an *Abstract Syntax Tree* (AST), which strips syntactic noise. This document uses "CST" throughout since that's what tree-sitter actually produces.
 
 1. **Push and pop symbol nodes.** Instead of simple definition/reference nodes, stack graphs use *push symbol nodes* (↓x, which prepend a symbol onto a stack) and *pop symbol nodes* (↑x, which require and remove a matching symbol from the stack). A reference `x` becomes a push node ↓x; a definition `x` becomes a pop node ↑x. Name resolution is finding a path where all pushes and pops cancel out, leaving an empty stack. This mechanism also handles *type-dependent* lookups — see the worked example below.
 
@@ -143,13 +145,17 @@ class App {
 }
 ```
 
-Each file produces an independent subgraph. `Models.cs` creates pop nodes for its namespace chain: ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner — connected through scope nodes back to a *root node*. `App.cs` creates a push node ↓Dinner for the reference, and the `using` directive creates edges that route through a root node, pushing the namespace path.
+Each file produces an independent subgraph:
+
+- **`Models.cs`** creates pop nodes for its namespace chain: ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner — connected through scope nodes back to a *root node*. This is the "export" side: it says "I define something reachable via `NerdDinner.Models.Dinner`."
+
+- **`App.cs`** creates a push node ↓Dinner for the reference. The `using NerdDinner.Models` directive creates a chain of push nodes — ↓NerdDinner, ↓`.`, ↓Models, ↓`.` — that lead to a root node. These push nodes are wired so that when you start at ↓Dinner, the path first passes through the `using` directive's push chain, building up the full namespace on the stack before reaching the root node.
 
 Resolution of `Dinner` in `App.cs`:
 1. Start at ↓Dinner. Stack: `⟨Dinner⟩`
-2. The `using` directive's edges push the namespace: `⟨NerdDinner.Models.Dinner⟩`
-3. Walk to a root node. The algorithm creates a *virtual edge* to root nodes in other files — this is the only way paths cross file boundaries.
-4. Enter `Models.cs`. Pop ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner. Stack: `⟨⟩`
+2. Follow edges through the `using` directive's push chain: ↓`.`, ↓Models, ↓`.`, ↓NerdDinner. Each push node prepends its symbol onto the stack. Stack is now: `⟨NerdDinner.Models.Dinner⟩`
+3. Reach a root node. The algorithm creates a *virtual edge* to root nodes in other files — this is the only way paths cross file boundaries.
+4. Enter `Models.cs`. Pop ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner — each pop matches and removes the top of the stack. Stack: `⟨⟩`
 5. Path complete. `Dinner` resolves to the class definition in `Models.cs`.
 
 No file needs to know about any other file at index time. The virtual edges between root nodes are created at query time.
@@ -161,13 +167,15 @@ Dinner d = new Dinner();
 d.Title;  // <-- resolve this
 ```
 
-The expression `d.Title` involves multiple lookups: resolve `d`, then resolve `Title` within `d`'s type. The graph encodes this as a chain of push nodes (right-to-left): ↓Title, ↓`.`, ↓d.
+The expression `d.Title` involves multiple lookups: resolve `d`, then resolve `Title` within `d`'s type. The grammar encodes this as a chain of push nodes. The algorithm starts at ↓Title and walks through the chain, building up the stack:
 
-1. Start at ↓d. Stack: `⟨d.Title⟩`
-2. Find ↑d (the local variable definition). Pop `d`. Stack: `⟨.Title⟩`
-3. The grammar has placed edges from `d`'s definition scope *through the type's scope*. The details of how this routing works depend on the grammar's conventions — the Java grammar uses `":"` pop edges to model type-of relationships, while other grammars may wire scope edges directly. Either way, the path enters Dinner's member scope.
-4. Pop `.`. Stack: `⟨Title⟩`
-5. Find ↑Title (the field definition). Pop `Title`. Stack: `⟨⟩`. Done.
+1. Start at ↓Title. Push `Title`. Stack: `⟨Title⟩`
+2. Walk to ↓`.`. Push `.`. Stack: `⟨.Title⟩`
+3. Walk to ↓d. Push `d`. Stack: `⟨d.Title⟩`
+4. Reach ↑d (the local variable definition). Pop `d`. Stack: `⟨.Title⟩`
+5. The grammar has placed edges from `d`'s definition scope *through the type's scope*. The details of how this routing works depend on the grammar's conventions — the Java grammar uses `":"` pop edges to model type-of relationships, while other grammars may wire scope edges directly. Either way, the path enters Dinner's member scope.
+6. Pop `.`. Stack: `⟨Title⟩`
+7. Reach ↑Title (the field definition). Pop `Title`. Stack: `⟨⟩`. Done.
 
 The key insight: **the stack handles nested lookups.** While resolving `d`'s type (step 3), `Title` stays on the stack, waiting. Once the type is resolved and we're in the right scope, the stack "resumes" with the remaining lookup. This is why they're called *stack* graphs — the stack of pending symbols is the core data structure that makes type-dependent resolution work without eager cross-file lookups.
 
@@ -198,7 +206,7 @@ Shawn Hurley started a C# stack-graphs grammar (`tree-sitter-stack-graph-csharp`
 - Name resolution for namespaces (simple, qualified, file-scoped), classes, structs, interfaces, enums, records, methods, constructors, fields, properties, parameters, local variables, delegates, events, type parameters, and local functions
 - Using directives (simple, qualified, aliased)
 - Inheritance and interface implementation
-- FQDN (fully qualified domain name) reconstruction — `NerdDinner.Models.Dinner.Title`
+- FQDN (fully qualified name) reconstruction — `NerdDinner.Models.Dinner.Title`
 - Definiens tracking — knowing where a definition's body starts and ends
 - A `find-node` CLI for querying definitions by FQDN regex
 - ~40 resolution test files, ~15 FQDN/definiens test files
@@ -212,7 +220,7 @@ Shawn Hurley started a C# stack-graphs grammar (`tree-sitter-stack-graph-csharp`
 - Dependency analysis for Maven/Gradle
 - 191+ tests, 34/42 existing analyzer-lsp rules passing
 
-This is proof that stack graphs can replace JDTLS for Konveyor's needs.
+This is strong evidence that stack graphs can replace JDTLS for Konveyor's needs, though the 34/42 pass rate (81%) means there's still work to do.
 
 ### Moving Into a Fork
 
@@ -273,7 +281,7 @@ The path stitcher (`ForwardPartialPathStitcher`) resolves references to definiti
 
 This is directly related to the incrementality question below. Indexing is per-file, but answering "who references X?" is inherently a full-project question. One approach: after indexing all files, do a single resolution pass that resolves every reference and persists the ref→def mappings in a SQLite table. Then "find all references" is just a SQL query. This resolution pass is full-project but cheap — it's only path stitching over already-indexed partial paths, no re-parsing.
 
-### Stack Graphs Don't Store the AST
+### Stack Graphs Don't Store the CST
 
 The stack graph is a *derived* structure — tree-sitter parses source into a CST, TSG rules transform relevant parts of that CST into graph nodes and edges, and then the CST is discarded. The original parse tree is not persisted.
 
@@ -315,7 +323,7 @@ But TSG's tree-sitter query pattern matching is good, and every existing grammar
 
 **Should we invest in a Lua-based alternative, or work within TSG's constraints for now?** The C# grammar already works with TSG (plus hacks). The question is whether the hacks accumulate to the point where a better DSL pays for itself.
 
-### 2. AST/Source Storage
+### 2. CST/Source Storage
 
 The stack graph persists to SQLite, but the original parse tree (CST) is discarded after graph construction. Introspection queries that need syntactic detail (types, modifiers, parameter lists) currently require re-parsing the original source files from disk.
 
@@ -323,7 +331,7 @@ There are several options:
 
 - **Store nothing extra** — require source files on disk during analysis. This is fine for Konveyor's batch analysis model (source is always available during `kantra` runs) but limits portability of the analysis database.
 - **Store source text** — persist the raw source text in SQLite alongside the graph. The database becomes self-contained; re-parse on demand with tree-sitter when syntactic detail is needed. Larger database, but source text compresses well.
-- **Store the AST** — persist a serialized form of the tree-sitter CST. Avoids re-parsing entirely, but tree-sitter CSTs are large and the serialization format would need to be defined.
+- **Store the CST** — persist a serialized form of the tree-sitter CST. Avoids re-parsing entirely, but CSTs are large and the serialization format would need to be defined.
 
 The right answer may depend on how often `inspect()`-style queries are used in practice and whether we lean toward encoding more information in the graph via type edges (see question 4).
 
@@ -336,6 +344,8 @@ The stack-graphs providers would initially run alongside existing Go providers, 
 - Specific rule categories passing (e.g., all `referenced` rules)
 - Performance parity (indexing time, query time, memory)
 - Manual sign-off from rule authors
+
+The most practical starting point is probably rule pass rate — it's concrete and measurable. But the threshold needs to be agreed on: is 90% enough, or do we need 100% parity?
 
 ### 4. Type Information: Graph Edges vs. Re-parsing
 
@@ -382,6 +392,31 @@ The approaches under consideration:
 
 This needs prototyping to understand the performance characteristics and whether the incremental approaches are worth the complexity.
 
+### 8. External Dependencies (JARs, NuGet Packages, Third-Party Libraries)
+
+Real projects reference types from libraries that aren't part of the source tree. Stack graphs are file-incremental over *source files*, but library types don't have source files to index.
+
+The [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) handles this well: it uses ILSpy to decompile .NET assemblies into C# source, then indexes that decompiled source alongside the project source. Everything ends up in the same graph, and cross-file resolution works naturally — the decompiled source is just more files to index.
+
+This approach could generalize:
+- **C#**: ILSpy decompilation of NuGet packages / .NET assemblies (already proven)
+- **Java**: Decompile JARs with CFR or Procyon, index the decompiled source
+- **Pre-indexed library graphs**: Ship pre-built SQLite databases for common libraries (e.g., the Java standard library), load them alongside the project graph at query time
+
+The decompilation approach is appealing because it requires no special handling in the stack-graphs library — decompiled source is just source. But it adds indexing time and may produce imperfect source for obfuscated or optimized bytecode.
+
+### 9. Resolution Failure and Diagnostics
+
+The current TSG DSL provides almost no diagnostic information when resolution fails. When a reference can't be resolved, you don't know why: Is the grammar incomplete? Is a dependency missing? Is there a scoping bug? You're left staring at graph dumps trying to figure out which edge is wrong or missing.
+
+For Konveyor's migration analysis, knowing that a reference *couldn't* be resolved is important — it might indicate a missing dependency, an incomplete classpath, or a grammar gap. The system needs to distinguish between:
+- **Intentionally unresolved**: reference to a type from an external library that wasn't indexed
+- **Grammar gap**: the grammar doesn't handle this language construct yet
+- **Ambiguous**: multiple definitions match (overloading, shadowing)
+- **Broken**: the grammar produced incorrect graph structure
+
+This connects to the TSG vs Lua question (Open Question 1) — a real programming language would make diagnostic instrumentation much easier. It also connects to the schema question — if the schema defines what every grammar must produce, missing metadata becomes detectable.
+
 ## What Needs to Change in Stack Graphs
 
 The work proposed here requires changes to the stack-graphs library itself. Some of these are straightforward fixes; others depend on the open questions above and need further design discussion.
@@ -418,9 +453,9 @@ What metadata must every grammar produce? What goes in `SourceInfo` vs. graph ed
 
 Every field added to `SourceInfo` is a contract that all grammars must honor.
 
-### Needs design: Source/AST storage
+### Needs design: Source/CST storage
 
-See Open Question 2. If we decide to store source text or the AST in SQLite, the storage layer needs new tables and the indexing pipeline needs to persist additional data.
+See Open Question 2. If we decide to store source text or the CST in SQLite, the storage layer needs new tables and the indexing pipeline needs to persist additional data.
 
 ## Proposed Architecture
 
@@ -445,7 +480,7 @@ See Open Question 2. If we decide to store source text or the AST in SQLite, the
          SQLite Database (persisted)
          - Partial paths (per-file)
          - SourceInfo with all metadata
-         - Source text / AST (TBD, see Open Question 2)
+         - Source text / CST (TBD, see Open Question 2)
                     |
             (post-indexing, full project)
                     |
@@ -476,6 +511,7 @@ pub struct Querier {
 
 impl Querier {
     /// Find definitions whose FQDN matches a regex pattern.
+    /// FQDNs are dot-separated: "NerdDinner.Models.Dinner.Title"
     /// Example: find_definitions(".*\\.Dinner\\..*") returns all members of class Dinner.
     pub fn find_definitions(&self, pattern: &Regex) -> Vec<DefinitionInfo>;
 
@@ -499,12 +535,12 @@ For introspection to work uniformly across languages, all grammars must follow a
 **Required `syntax_type` values:**
 - Container types: `namespace`, `class`, `struct`, `interface`, `enum`, `record`
 - Members: `method`, `constructor`, `field`, `property`, `event`, `enum_member`
-- Other: `parameter`, `local_var`, `function`, `type_parameter`, `delegate`, `import`
+- Other: `parameter`, `local_var`, `function`, `type_parameter`, `delegate`
 
 **Required edge conventions (tentative — see open questions):**
 - FQDN containment: mechanism TBD (currently `debug_fqdn = "parent"`, but this is a hack)
 - `pop(".")` for member access
-- `pop(":")` for type-of relationships (adopting the Java grammar's pattern)
+- `pop(":")` for type-of relationships (leaning toward adopting the Java grammar's pattern — see Open Question 4)
 - `definiens_node` on all definitions that have a body
 
 **Required node attributes:**
@@ -565,7 +601,7 @@ Keep java-analyzer-provider and future language analyzers as independent project
 
 - 2024-08: [Tree-sitter C# enhancement](/enhancements/dotnet-provider-treesitter/README.md) proposed (AST-only, no cross-file resolution)
 - 2025-04: Shawn Hurley begins C# stack-graphs grammar
-- 2025-XX: jmle begins Rust-based Java analyzer with stack-graphs
+- 2026-04-16: jmle begins Rust-based Java analyzer with stack-graphs
 - 2026-04: C# grammar expanded with FQDN reconstruction, definiens tracking, find-node CLI, 40+ resolution tests
 - 2026-04: Serde gap, schema standardization needs, and other core issues discovered and documented
 - 2026-04-14: This enhancement proposal created
