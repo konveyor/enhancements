@@ -50,7 +50,7 @@ Konveyor needs to analyze codebases to support application migration. Today that
 
 ### The language servers don't work well
 
-- **`dotnet-external-provider`** uses `csharp-ls`, which fails to reliably resolve references. Analysis results are incomplete or wrong. An [earlier attempt](https://github.com/konveyor/analyzer-lsp/pull/XXX) used a stack-graphs-based C# grammar, but the grammar itself had correctness issues — the underlying stack-graphs approach is sound, but the grammar needs significant work to produce correct results. The [tree-sitter-only enhancement](/enhancements/dotnet-provider-treesitter/README.md) was proposed in 2024 as a simpler alternative, but explicitly excluded cross-file analysis — making it insufficient for migration rules that track dependencies across files.
+- **`dotnet-external-provider`** uses `csharp-ls`, which fails to reliably resolve references. Analysis results are incomplete or wrong. The [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) uses a stack-graphs-based C# grammar, but the grammar itself has correctness issues — the underlying stack-graphs approach is sound, but the grammar needs significant work to produce correct results. The [tree-sitter-only enhancement](/enhancements/dotnet-provider-treesitter/README.md) was proposed in 2024 as a simpler alternative, but explicitly excluded cross-file analysis — making it insufficient for migration rules that track dependencies across files.
 - **`java-external-provider`** uses JDTLS. This works better, but requires a running JVM, is slow to start, memory-hungry, and creates duplicate processes when used alongside IDE extensions.
 
 These language servers are also *very large*. JDTLS pulls in the entire Eclipse JDT infrastructure. csharp-ls pulls in .NET SDK tooling. Containerizing them means shipping enormous images. And when they break, debugging requires deep knowledge of the language server internals — not the analysis domain.
@@ -77,9 +77,35 @@ Stack graphs extend this with two key innovations:
 
 The practical consequence: the name binding rules for a language are encoded entirely in the graph structure. The resolution algorithm is language-independent — the same algorithm resolves names in Python, Java, C#, or any other language.
 
-### Worked example: name and type resolution
+### Worked example: name resolution
 
-Consider two C# files:
+Push/pop is the mechanism for *all* name resolution in stack graphs — even the simplest intra-file reference.
+
+**Intra-file resolution** — the simplest case:
+
+```csharp
+class Foo {
+    string title;
+    void Bar() {
+        title;  // <-- resolve this
+    }
+}
+```
+
+The TSG grammar rules process this file and create graph nodes:
+- ↑title (pop node — the field *definition*)
+- ↓title (push node — the *reference* inside `Bar`)
+- Scope nodes connected by edges encoding lexical scoping: Bar's scope → Foo's member scope
+
+Resolution:
+1. Start at ↓title. Push `title` onto the stack. Stack: `⟨title⟩`
+2. Walk edges from Bar's scope into Foo's member scope.
+3. Find ↑title. The pop node requires `title` on top of the stack — it matches. Pop it. Stack: `⟨⟩`
+4. Stack is empty, we're at a definition node. **Path is complete.** The reference `title` resolves to the field definition.
+
+That's it. Every name resolution — no matter how complex — reduces to this: push symbols onto the stack, walk edges, pop matching symbols off. When the stack is empty at a definition node, you've found the answer.
+
+**Cross-file resolution** — adding namespaces and imports:
 
 ```csharp
 // Models.cs
@@ -94,33 +120,37 @@ using NerdDinner.Models;
 class App {
     void Run() {
         Dinner d = new Dinner();
-        d.Title;  // <-- resolve this
     }
 }
 ```
 
-**Simple name resolution** — resolving the reference `Dinner` in `App.cs`:
+Each file produces an independent subgraph. `Models.cs` creates pop nodes for its namespace chain: ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner — connected through scope nodes back to a *root node*. `App.cs` creates a push node ↓Dinner for the reference, and the `using` directive creates edges that route through a root node, pushing the namespace path.
 
-The TSG rules for `App.cs` create a push node ↓Dinner (the reference). The rules for `Models.cs` create a pop node ↑Dinner (the definition) inside a scope chain representing `NerdDinner.Models`. The `using NerdDinner.Models` directive creates edges that connect App.cs's local scope to the namespace's scope through root nodes.
+Resolution of `Dinner` in `App.cs`:
+1. Start at ↓Dinner. Stack: `⟨Dinner⟩`
+2. The `using` directive's edges push the namespace: `⟨NerdDinner.Models.Dinner⟩`
+3. Walk to a root node. The algorithm creates a *virtual edge* to root nodes in other files — this is the only way paths cross file boundaries.
+4. Enter `Models.cs`. Pop ↑NerdDinner, ↑`.`, ↑Models, ↑`.`, ↑Dinner. Stack: `⟨⟩`
+5. Path complete. `Dinner` resolves to the class definition in `Models.cs`.
 
-Resolution: the path stitcher starts at ↓Dinner with stack `⟨Dinner⟩`, walks through root nodes into `Models.cs`, finds ↑Dinner, pops it — stack is empty, path is complete. Reference resolved.
+No file needs to know about any other file at index time. The virtual edges between root nodes are created at query time.
 
-**Type-dependent resolution** — resolving `d.Title`:
+**Member access** — resolving `d.Title`:
 
-This is where the stack mechanism shows its power. The expression `d.Title` involves multiple lookups that depend on each other: first resolve `d`, then determine its type, then resolve `Title` within that type's scope.
+```csharp
+Dinner d = new Dinner();
+d.Title;  // <-- resolve this
+```
 
-The graph encodes this as a chain of push nodes. Reading right-to-left: push `Title`, push `.` (member access operator), push `d`. The stack is now `⟨d.Title⟩`.
+The expression `d.Title` involves multiple lookups: resolve `d`, then resolve `Title` within `d`'s type. The graph encodes this as a chain of push nodes (right-to-left): ↓Title, ↓`.`, ↓d.
 
-1. Walk the graph, find ↑d (the local variable). Pop `d`. Stack: `⟨.Title⟩`
-2. The grammar has placed a `":"` edge from `d`'s definition to its type — this edge means "to continue resolving, first resolve the type." The `:` operator on the stack triggers following this edge, which leads to another push/pop sequence resolving `Dinner` to the class definition.
-3. Pop `.` enters the class's member scope. Stack: `⟨Title⟩`
-4. Find ↑Title (the field definition). Pop `Title`. Stack is empty — resolution complete.
+1. Start at ↓d. Stack: `⟨d.Title⟩`
+2. Find ↑d (the local variable definition). Pop `d`. Stack: `⟨.Title⟩`
+3. The grammar has placed edges from `d`'s definition scope *through the type's scope*. The details of how this routing works depend on the grammar's conventions — the Java grammar uses `":"` pop edges to model type-of relationships, while other grammars may wire scope edges directly. Either way, the path enters Dinner's member scope.
+4. Pop `.`. Stack: `⟨Title⟩`
+5. Find ↑Title (the field definition). Pop `Title`. Stack: `⟨⟩`. Done.
 
-The key insight: **the stack handles nested lookups.** While resolving `d`'s type, `Title` stays on the stack, waiting. Once the type is resolved, the stack "resumes" with the remaining lookup. This is why they're called *stack* graphs.
-
-**Cross-file resolution** — how files connect:
-
-Each file's subgraph is independent. `Models.cs` exports its namespace definitions through root nodes; `App.cs`'s `using` directive creates push nodes that reach a root node. At query time, the algorithm creates *virtual edges* between root nodes in different files, allowing paths to cross file boundaries. No file needs to know about any other file at index time.
+The key insight: **the stack handles nested lookups.** While resolving `d`'s type (step 3), `Title` stays on the stack, waiting. Once the type is resolved and we're in the right scope, the stack "resumes" with the remaining lookup. This is why they're called *stack* graphs — the stack of pending symbols is the core data structure that makes type-dependent resolution work without eager cross-file lookups.
 
 ### Partial paths: precomputing work
 
@@ -212,17 +242,17 @@ This connects to the serde fix: fixing `SourceInfo` serialization is necessary b
 
 ### FQDN Computation
 
-When processing `class Dinner` inside `namespace NerdDinner.Models`, we need the fully qualified name `NerdDinner.Models.Dinner`. TSG has no string concatenation, so we initially believed this couldn't be done within TSG rules and resorted to a hack: `debug_fqdn = "parent"` edges between definition nodes, walked at query time to reconstruct the FQDN.
+When processing `class Dinner` inside `namespace NerdDinner.Models`, we need the fully qualified name `NerdDinner.Models.Dinner`. We initially resorted to a hack: `debug_fqdn = "parent"` edges between definition nodes, walked at query time to reconstruct the FQDN.
 
-However, this assumption may be wrong. The FQDN is really a property of the graph structure itself — it's encoded in the chain of pop nodes from the root to the definition. A post-processing step could extract it by walking the graph rather than relying on special edges. There may also be TSG-native approaches we haven't fully explored.
+TSG does support string concatenation, and the [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) attempted to compute FQDNs this way — but the result was fragile and hard to maintain. Alternatively, the FQDN is a property of the graph structure itself: it's encoded in the chain of pop nodes from the root to the definition. A post-processing pass could extract it by walking the graph without any special edges.
 
 **This needs more investigation.** The `debug_fqdn` hack works but is ugly, and we shouldn't bake it into the architecture without exploring cleaner alternatives. See the discussion section below.
 
 ### The Resolution Engine Is Forward-Only
 
-The path stitcher (`ForwardPartialPathStitcher`) resolves references to definitions — ref to def. There is no backward stitcher. "Find all references to class Dinner" requires resolving *every* reference in the graph and checking which ones land on `Dinner`. For a large codebase this is expensive.
+The path stitcher (`ForwardPartialPathStitcher`) resolves references to definitions — ref → def. There is no backward stitcher. "Find all references to class Dinner" requires resolving *every* reference in the graph and checking which ones land on `Dinner`. For a large codebase this is expensive.
 
-**Proposed mitigation:** Build a reverse reference index at index time. After indexing, resolve all references once and persist the ref-to-def mappings in a `resolved_references` SQLite table. "Find all references" becomes a SQL lookup instead of a full graph traversal.
+This is directly related to the incrementality question below. Indexing is per-file, but answering "who references X?" is inherently a full-project question. One approach: after indexing all files, do a single resolution pass that resolves every reference and persists the ref→def mappings in a SQLite table. Then "find all references" is just a SQL query. This resolution pass is full-project but cheap — it's only path stitching over already-indexed partial paths, no re-parsing.
 
 ### Stack Graphs Don't Store the AST
 
@@ -236,7 +266,15 @@ Stack graphs are designed to be *file-incremental*: each file produces an indepe
 
 But introspection queries like "find all references to `The.Namespace.*`" require resolving against the *entire* project graph, not just one file. This creates a tension: indexing is incremental, but the queries we want to answer are not.
 
-How to reconcile this is an open question. One possibility is that indexing stays incremental but a post-indexing "resolution pass" considers the full graph and builds pre-computed indexes (like the reverse reference table). Another possibility is that wildcard queries can be modeled as references through the root scope and resolved using the existing partial path machinery. We haven't fully worked this out yet.
+The simplest approach is a full resolution pass after indexing: resolve every reference, persist the mappings, answer queries from the persisted table. This definitely works but re-resolves everything even if only one file changed.
+
+A more interesting possibility: **exploit partial path pre/postconditions for incremental resolution.** Partial paths already encode what each file can resolve — the preconditions say "I need these symbols on the stack to enter" and postconditions say "these symbols will be on the stack when leaving." When a file changes:
+
+1. Re-index that file (new partial paths — fast, file-incremental)
+2. Invalidate reverse index entries involving the changed file
+3. Use the preconditions/postconditions to identify which partial paths from *other* files could route through the changed file's root nodes, and re-resolve only those
+
+This could avoid the full resolution pass entirely. But there are complications: intra-file references in the changed file all need re-resolution, and references from other files that resolved *through* the changed file also need re-resolution. It's not clear whether the bookkeeping to track "which resolutions are affected" is cheaper than just re-resolving everything. This needs prototyping.
 
 ## Open Questions
 
@@ -244,11 +282,9 @@ These are the questions that need discussion before the design is finalized.
 
 ### 1. TSG vs Lua
 
-The TSG DSL has significant limitations: no string operations, no real conditionals, no debugging, cryptic errors. We've hit all of these building the C# grammar. A Lua-based alternative would let grammar authors use normal programming constructs:
+The TSG DSL has significant limitations: no real conditionals, no debugging, cryptic errors. It's a custom DSL that's harder to work with than a real language. A Lua-based alternative would let grammar authors use normal programming constructs:
 
 ```lua
--- TSG: impossible to compute FQDN inline
--- Lua: trivial
 on_match([[ (class_declaration name: (identifier) @name) @cls ]], function(m)
   local parent_fqdn = m.cls:inherited("parent_fqdn") or ""
   local my_fqdn = parent_fqdn .. "." .. text(m.name)
@@ -292,7 +328,7 @@ There are two approaches, and we're currently leaning toward the first:
 
 - **Re-parse on demand.** The stack graph tells us *where* the definition is (file + span). We re-parse the source file with tree-sitter and read the local syntactic detail (type annotations, modifiers, parameter lists). Simpler per grammar, no graph changes needed, but requires source files on disk and can't answer cross-file type questions (e.g., "what does `var x = GetDinner()` return?").
 
-We likely need both to some degree — type edges for cross-file type relationships, re-parsing for local syntactic detail like modifiers. But the split needs to be defined clearly in the schema.
+The split between what goes in the graph vs. what comes from re-parsing needs to be defined clearly in the schema.
 
 ### 5. How Should FQDN Work?
 
@@ -303,7 +339,7 @@ This works, but `debug_` attributes are a workaround, not a supported mechanism.
 - **Can FQDN be derived from the graph structure directly?** The chain of pop nodes from root to definition *encodes* the fully qualified name. A post-processing pass could walk the graph to extract it without any special edges.
 - **Should `fully_qualified_name` be populated by a post-build pass?** If so, what's the input — `debug_fqdn` edges, or something cleaner?
 - **Should FQDN be a first-class TSG attribute?** Could we add a new attribute type to `tree-sitter-stack-graphs` that tells the builder "this definition's FQDN includes its parent's FQDN"?
-- **Does TSG actually prevent computing FQDN inline?** We initially assumed string concatenation was impossible, but there may be approaches we haven't explored.
+- **Can TSG compute FQDN inline?** TSG has string concatenation, but the [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) tried this approach and found it fragile. Is there a better way to use TSG's capabilities, or is this inherently awkward in the DSL?
 
 The `debug_fqdn` hack should not become the permanent mechanism. This needs design work.
 
@@ -318,14 +354,14 @@ The first approach is faster but may leave architectural inconsistencies. The se
 
 ### 7. Incrementality and Full-Project Queries
 
-How do we reconcile file-incremental indexing with queries that need the full project graph?
+How do we reconcile file-incremental indexing with queries that need the full project graph? (See also the "Incrementality vs. Full-Project Queries" and "The Resolution Engine Is Forward-Only" sections above for context.)
 
-Options include:
-- A post-indexing "resolution pass" that builds pre-computed indexes (reverse references, FQDN index) over the full graph. Indexing stays incremental; the resolution pass is full-project but cheaper than re-indexing.
-- Modeling wildcard queries as references through the root scope, using the existing partial path machinery to resolve them incrementally.
-- Accepting that some queries are inherently full-project and optimizing the resolution pass to be fast enough.
+The approaches under consideration:
+- **Full resolution pass** after indexing: resolve every reference, persist the mappings. Simple and definitely correct, but re-resolves everything even when only one file changed.
+- **Incremental resolution via partial paths**: use pre/postconditions to identify which resolutions are affected by a file change and only re-resolve those. Potentially much faster, but the bookkeeping may be complex — intra-file references, transitive dependencies through root nodes, etc.
+- **Wildcard queries as graph references**: model queries like `The.Namespace.*` as references through the root scope, using the existing partial path machinery to resolve them. This could make some "full-project" queries incremental by construction.
 
-This needs prototyping to understand the performance characteristics.
+This needs prototyping to understand the performance characteristics and whether the incremental approaches are worth the complexity.
 
 ## What Needs to Change in Stack Graphs
 
