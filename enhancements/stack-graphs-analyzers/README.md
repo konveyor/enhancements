@@ -2,12 +2,12 @@
 title: stack-graphs-based-language-analyzers
 authors:
   - "@JonahSussman"
-reviewers: []
-  # - "@shawn-hurley"
-  # - "@djzager"
-  # - "@eemcmullan"
-  # - "@pranavgaikwad"
-  # - "@jmle"
+reviewers:
+  - "@shawn-hurley"
+  - "@djzager"
+  - "@eemcmullan"
+  - "@pranavgaikwad"
+  - "@jmle"
 approvers:
   - TBD
 creation-date: 2026-04-14
@@ -40,7 +40,7 @@ superseded-by: []
 
 ## Summary
 
-We propose building Konveyor's language analysis on top of a maintained fork of [GitHub's stack-graphs](https://github.com/github/stack-graphs) — a Rust library for cross-file name resolution using tree-sitter. The fork would consolidate language-specific grammars (starting with C# and Java) into a single repository, fix gaps in the core library, and extend stack graphs beyond name resolution to support code introspection queries like answering questions like "find all references to `javax.servlet.http.HttpServlet`" or "what depends on namespace `NerdDinner.Models`."
+We propose building Konveyor's language analysis on top of a maintained fork of [GitHub's stack-graphs](https://github.com/github/stack-graphs) — a Rust library for cross-file name resolution using tree-sitter. The fork would consolidate language-specific grammars (starting with C# and Java) into a single repository, fix gaps in the core library, and extend stack graphs beyond name resolution to support introspection queries like "find all references to `javax.servlet.http.HttpServlet`" or "what depends on namespace `NerdDinner.Models`."
 
 This replaces the approach of maintaining separate Go-based language providers that depend on heavyweight language servers (JDTLS for Java, csharp-ls for C#).
 
@@ -53,7 +53,7 @@ Konveyor needs to analyze codebases to support application migration. Today that
 - **`dotnet-external-provider`** uses `csharp-ls`, which fails to reliably resolve references. Analysis results are incomplete or wrong. The [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) uses a stack-graphs-based C# grammar, but the grammar itself has correctness issues — the underlying stack-graphs approach is sound, but the grammar needs significant work to produce correct results. The [tree-sitter-only enhancement](/enhancements/dotnet-provider-treesitter/README.md) was proposed in 2024 as a simpler alternative, but explicitly excluded cross-file analysis — making it insufficient for migration rules that track dependencies across files.
 - **`java-external-provider`** uses JDTLS. This works better, but requires a running JVM, is slow to start, memory-hungry, and creates duplicate processes when used alongside IDE extensions.
 
-These language servers are also *very large*. JDTLS pulls in the entire Eclipse JDT infrastructure. csharp-ls pulls in .NET SDK tooling. Containerizing them means shipping enormous images. And when they break, debugging requires deep knowledge of the language server internals — not the analysis domain.
+These language servers are also *very large*. JDTLS pulls in the entire Eclipse JDT infrastructure. csharp-ls pulls in the .NET SDK tooling. Containerizing them means shipping enormous images. And when they break, debugging requires deep knowledge of the language server internals — not the analysis domain.
 
 ### No shared infrastructure or standardized queries
 
@@ -71,9 +71,9 @@ In scope graphs, name binding information is encoded as a graph. Definitions and
 
 Stack graphs extend this with two key innovations:
 
-> **A note on terminology:** Tree-sitter produces a *Concrete Syntax Tree* (CST) — a parse tree that preserves every token, including punctuation and whitespace. This is distinct from an *Abstract Syntax Tree* (AST), which strips syntactic noise. This document uses "CST" throughout since that's what tree-sitter actually produces.
+> **A note on terminology:** Tree-sitter produces a *Concrete Syntax Tree* (CST) — a parse tree that preserves every token, including punctuation and whitespace. This is distinct from an *Abstract Syntax Tree* (AST), which strips syntactic noise. This document uses "CST" throughout since that's what tree-sitter actually produces. It also uses "stack graphs" (unhyphenated) for the formalism and "stack-graphs" (hyphenated) for the GitHub library and repository.
 
-1. **Push and pop symbol nodes.** Instead of simple definition/reference nodes, stack graphs use *push symbol nodes* (↓x, which prepend a symbol onto a stack) and *pop symbol nodes* (↑x, which require and remove a matching symbol from the stack). A reference `x` becomes a push node ↓x; a definition `x` becomes a pop node ↑x. Name resolution is finding a path where all pushes and pops cancel out, leaving an empty stack. This mechanism also handles *type-dependent* lookups — see the worked example below.
+1. **Push and pop symbol nodes.** Instead of simple definition/reference nodes, stack graphs use *push symbol nodes* (↓x, which prepend a symbol onto a stack) and *pop symbol nodes* (↑x, which require and remove a matching symbol from the stack). A reference `x` becomes a push node ↓x — it *pushes* the name it's looking for onto the stack. A definition `x` becomes a pop node ↑x — it *pops* the name it provides, consuming the request. Name resolution is finding a path where all pushes and pops cancel out, leaving an empty stack. This mechanism also handles *type-dependent* lookups — see the worked example below.
 
 2. **File incrementality via root nodes.** Each source file produces a disjoint subgraph with no edges crossing file boundaries. Files connect to each other only through *root nodes* — special nodes that act as entry/exit points. At query time, the path-finding algorithm creates virtual edges between root nodes in different files, allowing cross-file resolution. This means each file can be analyzed independently: no knowledge of other files is needed at index time.
 
@@ -206,10 +206,10 @@ Shawn Hurley started a C# stack-graphs grammar (`tree-sitter-stack-graph-csharp`
 - Name resolution for namespaces (simple, qualified, file-scoped), classes, structs, interfaces, enums, records, methods, constructors, fields, properties, parameters, local variables, delegates, events, type parameters, and local functions
 - Using directives (simple, qualified, aliased)
 - Inheritance and interface implementation
-- FQDN (fully qualified name) reconstruction — `NerdDinner.Models.Dinner.Title`
+- FQN (fully qualified name) reconstruction — `NerdDinner.Models.Dinner.Title`
 - Definiens tracking — knowing where a definition's body starts and ends
-- A `find-node` CLI for querying definitions by FQDN regex
-- ~40 resolution test files, ~15 FQDN/definiens test files
+- A `find-node` subcommand (of the `tree-sitter-stack-graphs` CLI) for querying definitions by FQN regex
+- ~40 resolution test files, ~15 FQN/definiens test files
 
 ### Java Analyzer (jmle)
 
@@ -240,13 +240,13 @@ Building the C# grammar and introspection tooling revealed gaps in the stack-gra
 | `syntax_type` | Kind of definition (class, method, etc.) | Yes |
 | `containing_line` | Full text of the source line | **No** |
 | `definiens_span` | Span of the definition body | **No** |
-| `fully_qualified_name` | FQDN like `NerdDinner.Models.Dinner` | **No** |
+| `fully_qualified_name` | FQN like `NerdDinner.Models.Dinner` | **No** |
 
 The serialization layer only writes `span` and `syntax_type` to SQLite. The other three fields exist in the data model, are populated at build time by TSG rules, but are silently dropped when the graph is persisted. This is a ~20-line fix in `stack-graphs/src/serde/graph.rs`.
 
-This matters because `SourceInfo` is the primary mechanism for attaching metadata to graph nodes — and it's the metadata we need for introspection. Without fixing this, we can't persist FQDNs, definition body spans, or any other node-level data through the SQLite round-trip.
+This matters because `SourceInfo` is the primary mechanism for attaching metadata to graph nodes — and it's the metadata we need for introspection. Without fixing this, we can't persist FQNs, definition body spans, or any other node-level data through the SQLite round-trip.
 
-We worked around this by storing definiens information as `debug_` attributes (the only escape hatch TSG provides for custom metadata) and reconstructing FQDNs at query time by walking `debug_fqdn = "parent"` edges between definition nodes. Both are hacks.
+We worked around this by storing definiens information as `debug_` attributes (the only escape hatch TSG provides for custom metadata) and reconstructing FQNs at query time by walking `debug_fqdn = "parent"` edges between definition nodes. Both are hacks.
 
 ### The Need for Schema Standardization
 
@@ -259,7 +259,7 @@ Comparing the C# and Java grammars makes this concrete:
 | Static vs instance | Separate `.defs` / `.static_defs` scope chains | Not distinguished |
 | Type-of relationship | `":"` pop edges | Not modeled |
 | `this` / `super` | Explicit pop nodes | Not modeled |
-| FQDN containment | Not modeled | `debug_fqdn = "parent"` edges |
+| FQN containment | Not modeled | `debug_fqdn = "parent"` edges |
 | Definiens tracking | Not modeled | `definiens_node` attribute |
 | Wildcard imports | Partially implemented | N/A |
 
@@ -267,13 +267,13 @@ Both grammars "work" for basic name resolution, but they produce graphs with dif
 
 This connects to the serde fix: fixing `SourceInfo` serialization is necessary but not sufficient. We also need to define what metadata every grammar *must* produce — a schema that the query API can rely on. This includes not just `syntax_type` values but also how type relationships, containment hierarchies, and definition metadata are represented in the graph.
 
-### FQDN Computation
+### FQN Computation
 
-When processing `class Dinner` inside `namespace NerdDinner.Models`, we need the fully qualified name `NerdDinner.Models.Dinner`. We initially resorted to a hack: `debug_fqdn = "parent"` edges between definition nodes, walked at query time to reconstruct the FQDN.
+When processing `class Dinner` inside `namespace NerdDinner.Models`, we need the fully qualified name `NerdDinner.Models.Dinner`. We initially resorted to a hack: `debug_fqdn = "parent"` edges between definition nodes, walked at query time to reconstruct the FQN.
 
-TSG does support string concatenation, and the [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) attempted to compute FQDNs this way — but the result was fragile and hard to maintain. Alternatively, the FQDN is a property of the graph structure itself: it's encoded in the chain of pop nodes from the root to the definition. A post-processing pass could extract it by walking the graph without any special edges.
+TSG does support string concatenation, and the [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) attempted to compute FQNs this way — but the result was fragile and hard to maintain. Alternatively, the FQN is a property of the graph structure itself: it's encoded in the chain of pop nodes from the root to the definition. A post-processing pass could extract it by walking the graph without any special edges.
 
-**This needs more investigation.** The `debug_fqdn` hack works but is ugly, and we shouldn't bake it into the architecture without exploring cleaner alternatives. See the discussion section below.
+**This needs more investigation.** The `debug_fqdn` hack works but is ugly, and we shouldn't bake it into the architecture without exploring cleaner alternatives. See Open Question 5 below.
 
 ### The Resolution Engine Is Forward-Only
 
@@ -359,16 +359,16 @@ There are two approaches, and we're currently leaning toward the first:
 
 The split between what goes in the graph vs. what comes from re-parsing needs to be defined clearly in the schema.
 
-### 5. How Should FQDN Work?
+### 5. How Should FQN Work?
 
-We currently compute FQDNs using `debug_fqdn = "parent"` edges — a hack that uses the `debug_` escape hatch in TSG to create edges between definition nodes, then walks those edges at query time to reconstruct the dotted name.
+We currently compute FQNs using `debug_fqdn = "parent"` edges — a hack that uses the `debug_` escape hatch in TSG to create edges between definition nodes, then walks those edges at query time to reconstruct the dotted name.
 
 This works, but `debug_` attributes are a workaround, not a supported mechanism. Before building more infrastructure on top of this pattern, we need to decide:
 
-- **Can FQDN be derived from the graph structure directly?** The chain of pop nodes from root to definition *encodes* the fully qualified name. A post-processing pass could walk the graph to extract it without any special edges.
+- **Can FQN be derived from the graph structure directly?** The chain of pop nodes from root to definition *encodes* the fully qualified name. A post-processing pass could walk the graph to extract it without any special edges.
 - **Should `fully_qualified_name` be populated by a post-build pass?** If so, what's the input — `debug_fqdn` edges, or something cleaner?
-- **Should FQDN be a first-class TSG attribute?** Could we add a new attribute type to `tree-sitter-stack-graphs` that tells the builder "this definition's FQDN includes its parent's FQDN"?
-- **Can TSG compute FQDN inline?** TSG has string concatenation, but the [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) tried this approach and found it fragile. Is there a better way to use TSG's capabilities, or is this inherently awkward in the DSL?
+- **Should FQN be a first-class TSG attribute?** Could we add a new attribute type to `tree-sitter-stack-graphs` that tells the builder "this definition's FQN includes its parent's FQN"?
+- **Can TSG compute FQN inline?** TSG has string concatenation, but the [`c-sharp-analyzer-provider`](https://github.com/konveyor/c-sharp-analyzer-provider) tried this approach and found it fragile. Is there a better way to use TSG's capabilities, or is this inherently awkward in the DSL?
 
 The `debug_fqdn` hack should not become the permanent mechanism. This needs design work.
 
@@ -376,16 +376,15 @@ The `debug_fqdn` hack should not become the permanent mechanism. This needs desi
 
 jmle's java-analyzer-provider is a working system with its own architecture: gRPC service, TypeResolver, dependency analysis. Absorbing it means either:
 
-- **Adapting it** to use the shared infrastructure (FQDN from SourceInfo, reverse index from SQLite, shared query API) while keeping its Java-specific features (TypeResolver, Maven/Gradle analysis)
+- **Adapting it** to use the shared infrastructure (FQN from SourceInfo, reverse index from SQLite, shared query API) while keeping its Java-specific features (TypeResolver, Maven/Gradle analysis)
 - **Using it as reference** while rewriting the Java grammar to follow the standardized schema
 
 The first approach is faster but may leave architectural inconsistencies. The second is cleaner but risks losing working functionality.
 
 ### 7. Incrementality and Full-Project Queries
 
-How do we reconcile file-incremental indexing with queries that need the full project graph? (See also the "Incrementality vs. Full-Project Queries" and "The Resolution Engine Is Forward-Only" sections above for context.)
+File-incremental indexing vs. full-project queries is a fundamental tension (see context in "Incrementality vs. Full-Project Queries" and "The Resolution Engine Is Forward-Only" above). The approaches under consideration:
 
-The approaches under consideration:
 - **Full resolution pass** after indexing: resolve every reference, persist the mappings. Simple and definitely correct, but re-resolves everything even when only one file changed.
 - **Incremental resolution via partial paths**: use pre/postconditions to identify which resolutions are affected by a file change and only re-resolve those. Potentially much faster, but the bookkeeping may be complex — intra-file references, transitive dependencies through root nodes, etc.
 - **Wildcard queries as graph references**: model queries like `The.Namespace.*` as references through the root scope, using the existing partial path machinery to resolve them. This could make some "full-project" queries incremental by construction.
@@ -438,16 +437,16 @@ Add a `resolved_references` table to SQLite. After indexing all files, resolve e
 
 The table structure, when to rebuild it, and how it interacts with incremental indexing need design work, but the concept is straightforward.
 
-### Needs design: FQDN mechanism
+### Needs design: FQN mechanism
 
-How should fully qualified names be computed and stored? Options discussed in Open Question 5. The current `debug_fqdn` hack works but shouldn't be the long-term answer.
+How should fully qualified names be computed and stored? Options discussed in Open Question 5. The current `debug_fqdn` hack works but shouldn't be the long-term answer. We're leaning toward deriving FQNs from the graph structure via a post-build pass, since the information is already encoded in the pop node chains.
 
 ### Needs design: Schema and metadata model
 
-What metadata must every grammar produce? What goes in `SourceInfo` vs. graph edges vs. external tables? This is the central design question — see the schema standardization discussion above and Open Questions 4 and 5.
+What metadata must every grammar produce? What goes in `SourceInfo` vs. graph edges vs. external tables? This is the central design question — see the schema standardization discussion above and Open Questions 4 and 5. We're leaning toward adopting the Java grammar's `":"` pop edge convention for type-of relationships (see Open Question 4), which would reduce the need for re-parsing.
 
 `SourceInfo` may need additional fields depending on these decisions:
-- **Parent definition handle** — for FQDN computation
+- **Parent definition handle** — for FQN computation
 - **Type reference** — for type-of relationships
 - **Visibility/modifiers** — public, private, static, abstract, etc.
 
@@ -469,7 +468,7 @@ See Open Question 2. If we decide to store source text or the CST in SQLite, the
           TSG rules (per-language)
           Following standardized schema:
           - syntax_type vocabulary
-          - FQDN containment (mechanism TBD)
+          - FQN containment (mechanism TBD)
           - definiens_node
           - type edges (mechanism TBD)
                     |
@@ -491,7 +490,7 @@ See Open Question 2. If we decide to store source text or the CST in SQLite, the
                     |
                     v
         Introspection Query API (Rust)
-        - find_definitions(regex) — FQDN lookup
+        - find_definitions(regex) — FQN lookup
         - references_to(def) — reverse index lookup
         - file_dependencies(file) — outgoing references
         - inspect(def) — re-parse source for CST detail
@@ -505,13 +504,16 @@ See Open Question 2. If we decide to store source text or the CST in SQLite, the
 ### Introspection Query API
 
 ```rust
+// Note: DefinitionInfo, ReferenceInfo, and NodeDetail are sketch types
+// illustrating the API shape. Final types will be defined during implementation.
+
 pub struct Querier {
     db: SQLiteReader,
 }
 
 impl Querier {
-    /// Find definitions whose FQDN matches a regex pattern.
-    /// FQDNs are dot-separated: "NerdDinner.Models.Dinner.Title"
+    /// Find definitions whose FQN matches a regex pattern.
+    /// FQNs are dot-separated: "NerdDinner.Models.Dinner.Title"
     /// Example: find_definitions(".*\\.Dinner\\..*") returns all members of class Dinner.
     pub fn find_definitions(&self, pattern: &Regex) -> Vec<DefinitionInfo>;
 
@@ -538,7 +540,7 @@ For introspection to work uniformly across languages, all grammars must follow a
 - Other: `parameter`, `local_var`, `function`, `type_parameter`, `delegate`
 
 **Required edge conventions (tentative — see open questions):**
-- FQDN containment: mechanism TBD (currently `debug_fqdn = "parent"`, but this is a hack)
+- FQN containment: mechanism TBD (currently `debug_fqdn = "parent"`, but this is a hack)
 - `pop(".")` for member access
 - `pop(":")` for type-of relationships (leaning toward adopting the Java grammar's pattern — see Open Question 4)
 - `definiens_node` on all definitions that have a body
@@ -547,7 +549,7 @@ For introspection to work uniformly across languages, all grammars must follow a
 - `syntax_type` on every definition node
 - `source_node` on every definition and reference node
 
-This is the minimum. The schema will likely grow as we resolve the open questions around type information, FQDN computation, and visibility modifiers. Each addition is a commitment that all grammars must implement — so we should be deliberate about what goes in.
+This is the minimum. The schema will likely grow as we resolve the open questions around type information, FQN computation, and visibility modifiers. Each addition is a commitment that all grammars must implement — so we should be deliberate about what goes in.
 
 ### Provider Integration
 
@@ -570,11 +572,11 @@ The provider:
 ## Test Plan
 
 - **Per-grammar resolution tests**: Annotation-based tests (`// ^ defined: ...`) using the tree-sitter-stack-graphs test harness. C# currently has ~40 test files.
-- **FQDN tests**: Verify FQDN reconstruction for all definition types across both grammars.
+- **FQN tests**: Verify FQN reconstruction for all definition types across both grammars.
 - **Serde round-trip tests**: Build graph, serialize to SQLite, deserialize, verify all `SourceInfo` fields survived.
 - **Query API tests**: Index a known codebase, run each query type, verify results.
 - **Provider integration tests**: Run analyzer-lsp rules against the stack-graphs provider and compare results against the existing Go provider. Pass rate is the graduation metric.
-- **Cross-language schema tests**: Verify that C# and Java grammars produce consistent `syntax_type` values and FQDN formats.
+- **Cross-language schema tests**: Verify that C# and Java grammars produce consistent `syntax_type` values and FQN formats.
 
 ## Risks
 
@@ -591,7 +593,7 @@ Continue with heavyweight language servers. Most accurate, but slow, memory-hung
 
 ### Tree-sitter only (no stack graphs)
 
-AST queries without cross-file resolution — the [dotnet-provider-treesitter](/enhancements/dotnet-provider-treesitter/README.md) approach. Simple and fast, but cannot resolve cross-file references. Insufficient for most migration rules.
+CST queries without cross-file resolution — the [dotnet-provider-treesitter](/enhancements/dotnet-provider-treesitter/README.md) approach. Simple and fast, but cannot resolve cross-file references. Insufficient for most migration rules.
 
 ### Separate analyzers per language
 
@@ -599,12 +601,12 @@ Keep java-analyzer-provider and future language analyzers as independent project
 
 ## Implementation History
 
-- 2024-08: [Tree-sitter C# enhancement](/enhancements/dotnet-provider-treesitter/README.md) proposed (AST-only, no cross-file resolution)
+- 2024-08: [Tree-sitter C# enhancement](/enhancements/dotnet-provider-treesitter/README.md) proposed (CST-only, no cross-file resolution)
 - 2025-04: Shawn Hurley begins C# stack-graphs grammar
-- 2026-04-16: jmle begins Rust-based Java analyzer with stack-graphs
-- 2026-04: C# grammar expanded with FQDN reconstruction, definiens tracking, find-node CLI, 40+ resolution tests
+- 2026-04: C# grammar expanded with FQN reconstruction, definiens tracking, `find-node` subcommand, 40+ resolution tests
 - 2026-04: Serde gap, schema standardization needs, and other core issues discovered and documented
 - 2026-04-14: This enhancement proposal created
+- 2026-04-16: @jmle's Rust-based Java analyzer with stack-graphs brought to the team's attention
 
 ## Infrastructure Needed
 
