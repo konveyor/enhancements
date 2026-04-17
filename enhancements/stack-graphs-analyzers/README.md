@@ -2,12 +2,12 @@
 title: stack-graphs-based-language-analyzers
 authors:
   - "@JonahSussman"
-reviewers:
-  - "@shawn-hurley"
-  - "@djzager"
-  - "@eemcmullan"
-  - "@pranavgaikwad"
-  - "@jmle"
+reviewers: []
+  # - "@shawn-hurley"
+  # - "@djzager"
+  # - "@eemcmullan"
+  # - "@pranavgaikwad"
+  # - "@jmle"
 approvers:
   - TBD
 creation-date: 2026-04-14
@@ -97,13 +97,32 @@ The TSG grammar rules process this file and create graph nodes:
 - ↓title (push node — the *reference* inside `Bar`)
 - Scope nodes connected by edges encoding lexical scoping: Bar's scope → Foo's member scope
 
+The TSG grammar rules create edges that encode the scoping rules. For this example, the edges look like:
+
+```
+  ↑title      ↑Bar           <-- pop nodes (definitions in this scope)
+    ^           ^
+    |           |
+  [Foo's member scope]       <-- "Bar is nested in Foo, so Foo's members are visible"
+    ^
+    |
+  [Bar's scope]              <-- "resolve references in Bar here"
+    ^
+    |
+  ↓title                     <-- push node (reference to title)
+```
+
+The edge from ↓title to Bar's scope says "to resolve references in Bar, look in Bar's scope." The edge from Bar's scope to Foo's member scope says "Bar's scope is nested inside Foo — names from Foo's members are visible here." The edges from Foo's member scope to ↑title and ↑Bar say "title and Bar are defined in this scope."
+
 Resolution:
 1. Start at ↓title. Push `title` onto the stack. Stack: `⟨title⟩`
-2. Walk edges from Bar's scope into Foo's member scope.
-3. Find ↑title. The pop node requires `title` on top of the stack — it matches. Pop it. Stack: `⟨⟩`
+2. Walk edges. The algorithm follows every outgoing edge — it's a breadth-first search, not a targeted lookup. ↓title → Bar's scope → Foo's member scope.
+3. From Foo's member scope, there are two outgoing edges: one to ↑title, one to ↑Bar. The algorithm tries both. Pop nodes act as *gates*: you can only pass through if the symbol matches the top of the stack. ↑Bar requires `Bar` on top — doesn't match `title`, path pruned. ↑title requires `title` — matches, so pop it. Stack: `⟨⟩`
 4. Stack is empty, we're at a definition node. **Path is complete.** The reference `title` resolves to the field definition.
 
-That's it. Every name resolution — no matter how complex — reduces to this: push symbols onto the stack, walk edges, pop matching symbols off. When the stack is empty at a definition node, you've found the answer.
+(If there were also a ↑other node in the same scope, the algorithm would try that edge too — but ↑other requires `other` on top of the stack, `title` doesn't match, so that path is pruned.)
+
+Every name resolution — no matter how complex — reduces to this: push symbols onto the stack, walk edges, pop matching symbols off. When the stack is empty at a definition node, you've found the answer.
 
 **Cross-file resolution** — adding namespaces and imports:
 
