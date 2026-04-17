@@ -23,6 +23,12 @@ superseded-by:
 
 Add a standalone Model Context Protocol (MCP) server that wraps the kai-analyzer-rpc engine to expose Konveyor's analysis capabilities to AI agents, IDEs, and automation tools.
 
+**Implementation PRs:**
+- [konveyor/kai#926](https://github.com/konveyor/kai/pull/926) - Export Analyzer accessors (merged)
+- [konveyor-ecosystem/analyzer-mcp#1](https://github.com/konveyor-ecosystem/analyzer-mcp/pull/1) - MCP server implementation
+- [konveyor/koncur#63](https://github.com/konveyor/koncur/pull/63) - MCP and RPC target integration for e2e testing
+- [konveyor/ci#207](https://github.com/konveyor/ci/pull/207) - CI action and image build matrix
+
 ## Release Signoff Checklist
 
 - [x] Enhancement is `implementable`
@@ -32,8 +38,7 @@ Add a standalone Model Context Protocol (MCP) server that wraps the kai-analyzer
 
 ## Open Questions [optional]
 
-1. Should we support additional transports beyond stdio and HTTP (e.g., WebSocket)?
-2. What is the long-term strategy for versioning the MCP tools as the analyzer API evolves?
+1. What is the long-term strategy for versioning the MCP tools as the analyzer API evolves?
 
 ## Summary
 
@@ -42,15 +47,15 @@ This enhancement adds a standalone MCP server (`analyzer-mcp`) in a dedicated re
 The server exposes 9 tools through MCP, supports stdio and HTTP transports with bearer token authentication, and integrates with [koncur](https://github.com/konveyor/koncur) for end-to-end testing.
 
 Key capabilities exposed through MCP:
-- **analyze**: Execute full analysis with configurable rules, label selectors, and scoping
-- **get_analysis_results**: Retrieve cached results from the last analysis run
-- **analyze_incidents**: Query and filter incidents by file, rule, or category
-- **list_rules**: Enumerate available rules with metadata and labels
-- **validate_rules**: Validate rule syntax and structure
-- **list_providers**: List available analysis providers and their capabilities
-- **get_dependencies**: Extract dependency trees from analyzed projects
-- **get_migration_context**: Infer migration sources and targets from rules
-- **notify_file_changes**: Notify providers of file changes for incremental analysis
+- `analyze`: Execute full analysis with configurable rules, label selectors, and scoping
+- `get_analysis_results`: Retrieve cached results from the last analysis run
+- `analyze_incidents`: Query and filter incidents by file, rule, or category
+- `list_rules`: Enumerate available rules with metadata and labels
+- `validate_rules`: Validate rule syntax and structure
+- `list_providers`: List available analysis providers and their capabilities
+- `get_dependencies`: Extract dependency trees from analyzed projects
+- `get_migration_context`: Infer migration sources and targets from rules
+- `notify_file_changes`: Notify providers of file changes for incremental analysis
 
 ## Motivation
 
@@ -222,7 +227,7 @@ analyzer-mcp/
 - 2026-04-07: Team meeting decided to move to separate repo wrapping kai-analyzer-rpc
 - 2026-04-07: Closed analyzer-lsp PR, created [konveyor-ecosystem/analyzer-mcp](https://github.com/konveyor-ecosystem/analyzer-mcp) repo
 - 2026-04-16: Upstream kai-analyzer exports merged ([konveyor/kai#926](https://github.com/konveyor/kai/pull/926))
-- 2026-04-16: Initial implementation PR ([konveyor-ecosystem/analyzer-mcp#1](https://github.com/konveyor-ecosystem/analyzer-mcp/pull/1)) — 9 tools, 59 tests, stdio + HTTP transport
+- 2026-04-16: Initial implementation PR ([konveyor-ecosystem/analyzer-mcp#1](https://github.com/konveyor-ecosystem/analyzer-mcp/pull/1)) - 9 tools, 59 tests, stdio + HTTP transport
 - 2026-04-16: Koncur MCP/RPC target integration ([konveyor/koncur#63](https://github.com/konveyor/koncur/pull/63))
 - 2026-04-16: CI e2e infrastructure ([konveyor/ci#207](https://github.com/konveyor/ci/pull/207))
 
@@ -245,7 +250,7 @@ Only implement stdio transport, skip HTTP server.
 **Pros:** Simpler, no authentication concerns, smaller security surface.
 **Cons:** No remote access for CI/CD, can't deploy as a service.
 
-## Infrastructure Needed [optional]
+## Infrastructure Needed
 
 - [x] New repository: [konveyor-ecosystem/analyzer-mcp](https://github.com/konveyor-ecosystem/analyzer-mcp)
 - [ ] Container image: `quay.io/konveyor/analyzer-mcp`
