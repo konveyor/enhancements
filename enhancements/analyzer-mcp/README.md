@@ -1,5 +1,5 @@
 ---
-title: mcp-server-integration
+title: analyzer-mcp-server
 authors:
   - "@JonahSussman"
 reviewers:
@@ -7,20 +7,21 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-01-23
-last-updated: 2026-01-23
+last-updated: 2026-04-16
 status: implementable
 see-also:
   - "https://modelcontextprotocol.io/"
   - "https://github.com/modelcontextprotocol/specification"
+  - "https://github.com/konveyor/kai/tree/main/kai_analyzer_rpc"
 replaces:
   - N/A
 superseded-by:
   - N/A
 ---
 
-# MCP Server Integration
+# Analyzer MCP Server
 
-Add a Model Context Protocol (MCP) server to analyzer-lsp to expose analysis capabilities to AI assistants and other MCP clients, enabling programmatic access to rule analysis, dependency extraction, and code inspection features.
+Add a standalone Model Context Protocol (MCP) server that wraps the kai-analyzer-rpc engine to expose Konveyor's analysis capabilities to AI agents, IDEs, and automation tools.
 
 ## Release Signoff Checklist
 
@@ -32,283 +33,220 @@ Add a Model Context Protocol (MCP) server to analyzer-lsp to expose analysis cap
 ## Open Questions [optional]
 
 1. Should we support additional transports beyond stdio and HTTP (e.g., WebSocket)?
-2. What is the long-term strategy for versioning the MCP tools as the analyzer-lsp API evolves?
-3. Should we implement caching for frequently-run analyses to improve performance?
+2. What is the long-term strategy for versioning the MCP tools as the analyzer API evolves?
 
 ## Summary
 
-This enhancement adds a Model Context Protocol (MCP) server implementation to analyzer-lsp, exposing six core analysis tools through a standardized protocol. The MCP server enables AI assistants (like Claude Desktop), IDEs, and other automation tools to programmatically analyze codebases, validate rules, extract dependencies, and query analysis results.
+This enhancement adds a standalone MCP server (`analyzer-mcp`) in a dedicated repository ([konveyor-ecosystem/analyzer-mcp](https://github.com/konveyor-ecosystem/analyzer-mcp)) that wraps the [kai-analyzer-rpc](https://github.com/konveyor/kai/tree/main/kai_analyzer_rpc) engine. By living in a separate repo, the server can import both `analyzer-lsp` and `kai-analyzer` without circular dependency issues, and it gets kai-analyzer's caching, incremental analysis, and provider lifecycle management for free.
 
-The implementation supports both stdio transport (for local CLI usage and IDE integration) and HTTP transport (for remote access and CI/CD integration), with OAuth 2.1 authentication for the HTTP endpoint. This unlocks new use cases including AI-assisted code migration, automated rule development, and integrated analysis workflows.
+The server exposes 9 tools through MCP, supports stdio and HTTP transports with bearer token authentication, and integrates with [koncur](https://github.com/konveyor/koncur) for end-to-end testing.
 
 Key capabilities exposed through MCP:
-- **analyze_run**: Execute full analysis on codebases with configurable rules and filters
-- **rules_list**: Enumerate available rules with metadata
-- **rules_validate**: Validate rule syntax and structure
-- **dependencies_get**: Extract dependency trees from projects
-- **providers_list**: List available analysis providers and their capabilities
-- **analyze_incidents**: Query and filter incidents from analysis results
+- **analyze**: Execute full analysis with configurable rules, label selectors, and scoping
+- **get_analysis_results**: Retrieve cached results from the last analysis run
+- **analyze_incidents**: Query and filter incidents by file, rule, or category
+- **list_rules**: Enumerate available rules with metadata and labels
+- **validate_rules**: Validate rule syntax and structure
+- **list_providers**: List available analysis providers and their capabilities
+- **get_dependencies**: Extract dependency trees from analyzed projects
+- **get_migration_context**: Infer migration sources and targets from rules
+- **notify_file_changes**: Notify providers of file changes for incremental analysis
 
 ## Motivation
 
-Current analyzer-lsp usage requires direct CLI invocation or LSP server integration, limiting automation and AI-assisted workflows. Users who want to integrate analysis into custom tooling, CI/CD pipelines, or AI agents must parse command-line output or interact with the LSP protocol, which is designed for IDEs rather than programmatic access.
+Current analyzer-lsp usage requires direct CLI invocation (via kantra) or LSP server integration, limiting automation and AI-assisted workflows. Users who want to integrate analysis into AI agents, CI/CD pipelines, or custom tooling must parse command-line output or interact with the LSP protocol, which is designed for IDEs rather than programmatic access.
 
 The Model Context Protocol provides a standardized way for AI assistants and automation tools to interact with external services. By implementing an MCP server, we enable:
 
-1. **AI-Assisted Migration**: AI assistants can run analyses, interpret results, and suggest code fixes
-2. **Custom Workflows**: Developers can build automation tools that leverage analyzer-lsp capabilities
+1. **AI-Assisted Migration**: AI assistants can run analyses, interpret results, and suggest code fixes in a conversational workflow
+2. **Custom Workflows**: Developers can build automation tools that leverage analysis capabilities
 3. **CI/CD Integration**: Remote HTTP access enables analysis in containerized and distributed environments
 4. **Interactive Exploration**: Users can query rules, validate syntax, and explore dependencies conversationally
-5. **Cross-Platform Access**: Standard protocol works across different tools and platforms
 
 ### Goals
 
-- Expose core analyzer-lsp functionality through MCP protocol
+- Expose core analysis functionality through the MCP protocol
+- Leverage kai-analyzer-rpc's caching, incremental analysis, and provider management
 - Support both local (stdio) and remote (HTTP) access patterns
-- Maintain security through OAuth 2.1 authentication for HTTP
-- Provide clear documentation for integration with Claude Desktop and other MCP clients
-- Maintain API compatibility with existing analyzer-lsp commands
-- Enable seamless integration with AI assistants and automation tools
+- Maintain security through bearer token authentication for HTTP
+- Integrate with koncur for e2e test coverage
+- Provide a single binary with no external runtime dependencies
 
 ### Non-Goals
 
-- Replace the existing CLI interface (MCP is complementary)
+- Replace the existing kantra CLI interface (MCP is complementary)
 - Replace the LSP server for IDE integration
-- Implement real-time streaming of analysis progress
-- Support WebSocket or other transports in initial implementation
-- Provide a web UI for the MCP server
-- Cache or persist analysis results (stateless operation)
-- Modify core analyzer-lsp analysis engine behavior
+- Modify core analyzer-lsp engine behavior
+- Provide a web UI
 
 ## Proposal
 
-Implement an MCP server as a new command (`cmd/analyzer/mcp/`) that wraps existing analyzer-lsp functionality and exposes it through the Model Context Protocol. The server will support two transports: stdio for local usage and HTTP for remote access.
+Implement an MCP server as a standalone binary in a new repository ([konveyor-ecosystem/analyzer-mcp](https://github.com/konveyor-ecosystem/analyzer-mcp)). The server imports `kai-analyzer-rpc` in-process (passing `nil` for `*rpc.Client`) and delegates all analysis operations to `service.Analyzer`. This gives us caching, incremental analysis, provider lifecycle management, and progress reporting without reimplementation.
 
 ### User Stories [optional]
 
 #### Story 1: AI-Assisted Code Migration
 
-As a developer migrating a Java EE application to Quarkus, I want to use Claude Desktop to analyze my codebase, explain migration issues, and suggest fixes.
+As a developer migrating a Java EE application to Quarkus, I want to use an AI assistant to analyze my codebase, explain migration issues, and suggest fixes.
 
-1. Configure Claude Desktop with the analyzer-lsp MCP server
-2. Ask Claude: "Analyze my project for Java EE to Quarkus migration issues"
-3. Claude uses `rules_list` to find relevant rules, then `analyze_run` to execute analysis
-4. Claude explains the incidents found and suggests code changes
-5. I can ask follow-up questions like "Show me all logging framework issues"
-6. Claude uses `analyze_incidents` to filter and explain specific issues
+1. Configure the AI assistant with the analyzer-mcp server (stdio transport)
+2. Ask: "Analyze my project for Java EE to Quarkus migration issues"
+3. The assistant calls `analyze` with the appropriate label selector
+4. The assistant explains the incidents found and suggests code changes
+5. Follow-up questions use `analyze_incidents` to filter by file or rule
 
-#### Story 2: Custom Rule Development Workflow
+#### Story 2: Custom Rule Development
 
 As a rule author, I want to validate my custom rules interactively before committing them.
 
 1. Write a new rule in my editor
-2. Use an MCP client to call `rules_validate` on my rule file
+2. Use an MCP client to call `validate_rules` on my rule file
 3. Get immediate feedback on syntax errors or missing fields
-4. Use `analyze_run` with `incident_limit=10` to test the rule on a sample project
-5. Iterate on the rule based on results without leaving my workflow
+4. Use `analyze` to test the rule on a sample project
+5. Iterate based on results without leaving my workflow
 
 #### Story 3: CI/CD Integration
 
-As a DevOps engineer, I want to run analysis on pull requests in our CI pipeline.
+As a DevOps engineer, I want to run analysis on pull requests.
 
-1. Deploy MCP server with HTTP transport in our Kubernetes cluster
-2. Configure OAuth 2.1 authentication with our identity provider
-3. CI job calls HTTP endpoint with `analyze_run` on the PR branch
-4. Parse JSON results and post comments on PRs with migration issues
-5. Block merges if critical issues are found
-
-#### Story 4: Dependency Analysis Automation
-
-As a security engineer, I want to track open-source dependencies across multiple projects.
-
-1. Script calls MCP server with `dependencies_get` for each project
-2. Aggregate dependency data into a central database
-3. Cross-reference with vulnerability databases
-4. Generate reports on dependency usage and risk
+1. Deploy MCP server with HTTP transport
+2. Configure bearer token authentication
+3. CI job calls `analyze` on the PR branch
+4. Parse results and post comments on PRs with migration issues
 
 ### Implementation Details/Notes/Constraints [optional]
 
 **Architecture:**
 ```
-cmd/analyzer/mcp/
-├── main.go              # CLI entry point with transport selection
-├── server.go            # MCP server wrapper and tool registration
-├── analyze.go           # analyze_run tool implementation
-├── rules.go             # rules_list and rules_validate implementations
-├── dependencies.go      # dependencies_get implementation
-├── providers.go         # providers_list implementation
-├── incidents.go         # analyze_incidents implementation
-└── transport_http.go    # HTTP server with OAuth 2.1
+                MCP Client (Claude Code, VS Code, CI/CD)
+                         |
+                         | MCP Protocol (stdio or HTTP)
+                         |
+                  analyzer-mcp binary
+                  (MCP tool handlers)
+                         |
+                         | In-process Go import
+                         |
+                  kai-analyzer-rpc
+                  service.Analyzer
+                  (caching, providers, progress)
+                         |
+                         | Uses internally
+                         |
+                  analyzer-lsp
+                  (engine, providers, parser, output types)
 ```
 
-**Key Design Decisions:**
+**Repository layout:**
+```
+analyzer-mcp/
+├── go.mod
+├── go.sum
+├── Makefile
+├── Dockerfile
+└── cmd/
+    └── analyzer-mcp/
+        ├── main.go               # CLI entry: cobra flags, transport selection
+        ├── server.go             # NewMCPServer(), Run(), bearerAuthMiddleware()
+        ├── service.go            # AnalyzerService interface + types
+        ├── analyzer_service.go   # kaiAnalyzerService: wraps kai-analyzer
+        ├── tools.go              # 9 MCP tool handler registrations
+        ├── helpers.go            # Shared utilities
+        ├── main_test.go          # CLI flag tests
+        ├── tools_test.go         # Unit tests with mockAnalyzerService
+        ├── helpers_test.go       # Helper function tests
+        ├── service_test.go       # kaiAnalyzerService unit tests
+        └── integration_test.go   # Full workflow + HTTP + auth tests
+```
 
-1. **Reuse Existing Code**: All tools delegate to existing analyzer-lsp libraries (`parser`, `engine`, `provider`, etc.) rather than reimplementing logic
-2. **Stateless Operation**: Each tool invocation is independent; no session state is maintained
-3. **Error Mapping**: analyzer-lsp errors are mapped to appropriate MCP error codes (-32602 for invalid params, -32603 for internal errors)
-4. **Logging**: All logs go to stderr to keep stdout clean for MCP protocol (stdio transport)
-5. **Provider Lifecycle**: Providers are initialized per-request and cleaned up immediately to avoid resource leaks
+**Key design decisions:**
 
-**Tool Parameter Design:**
+1. **Separate repo**: Avoids circular Go module dependencies between analyzer-lsp and kai-analyzer. The MCP server imports both freely.
+2. **In-process kai-analyzer**: `service.NewPipeAnalyzer()` is called with `nil` for `*rpc.Client`. Single binary, no IPC.
+3. **Delegation over reimplementation**: Caching, incremental analysis, provider lifecycle, and progress reporting all come from kai-analyzer.
+4. **Interface-based testing**: An `AnalyzerService` interface allows mocking the entire analysis backend for unit tests.
 
-All tools accept JSON parameters validated against schemas. Common patterns:
-- Path parameters are validated for existence before processing
-- Optional parameters have sensible defaults (e.g., `incident_limit: 1500`)
-- Label selectors use analyzer-lsp expression syntax
-- Output formats are limited to `json` and `yaml`
+**What kai-analyzer provides (used directly):**
+- Full analysis with `Analyze()`
+- Caching via internal `IncidentsCache`
+- Incremental analysis via `IncludedPaths`
+- File change notification via `NotifyFileChanges()`
+- Provider lifecycle via `NewPipeAnalyzer()` and `Stop()`
+- Progress reporting via `ProgressReporter` interface
+- Label selectors, path scoping, cache reset
 
-**HTTP Transport Security:**
-
-- OAuth 2.1 token validation on all MCP endpoints
-- CORS headers configurable (default: allow all origins for development)
-- Health endpoint (`/health`) is unauthenticated for load balancers
-- TLS termination expected at reverse proxy layer
+**Upstream changes required (merged):**
+- [konveyor/kai#926](https://github.com/konveyor/kai/pull/926): Export 4 accessor methods on the `Analyzer` interface (`Providers()`, `RuleSets()`, `Cache()`, `CachedRuleSets()`) so the MCP server can query live provider state, rule metadata, and cached results.
 
 ### Security, Risks, and Mitigations
 
-**Security Considerations:**
+1. **Path Traversal**: Paths are validated by the underlying analyzer-lsp engine. The MCP server passes paths through without additional processing.
 
-1. **Path Traversal Risk**
-   - Risk: Malicious clients could provide paths like `../../../etc/passwd`
-   - Mitigation: Validate all paths exist and reject suspicious patterns
+2. **Resource Exhaustion**: Large codebases could consume excessive resources. Mitigated by kai-analyzer's existing limits and HTTP request timeouts.
 
-2. **Resource Exhaustion**
-   - Risk: Large codebases or complex rules could consume excessive memory/CPU
-   - Mitigation: Respect existing analyzer-lsp limits (`incident_limit`), HTTP request timeouts
+3. **Authentication**: HTTP transport uses bearer token authentication. Stdio transport relies on process-level access control.
 
-3. **Authentication Bypass**
-   - Risk: HTTP transport could be accessed without valid tokens
-   - Mitigation: OAuth 2.1 token validation on all protected endpoints
-
-4. **Information Disclosure**
-   - Risk: Error messages could leak sensitive file paths or code content
-   - Mitigation: Generic error messages, detailed errors only in debug mode
-
-5. **Dependency Vulnerabilities**
-   - Risk: MCP SDK or OAuth libraries could have vulnerabilities
-   - Mitigation: Regular dependency updates, security scanning in CI
-
-**Deployment Risks:**
-
-1. **Performance Impact**: MCP server adds overhead to each analysis
-   - Mitigation: Minimal wrapper code, direct delegation to existing functions
-
-2. **API Stability**: MCP protocol or analyzer-lsp internals could change
-   - Mitigation: Pin MCP SDK version, maintain compatibility layer
-   - Versioning strategy documented in tool descriptions
-
-3. **Multi-Tenancy**: HTTP deployment requires isolation between requests
-   - Mitigation: Stateless design, provider cleanup after each request
-   - Each request gets fresh provider instances
+4. **Information Disclosure**: Error messages are mapped to MCP error codes. Detailed errors only in debug mode.
 
 ## Design Details
 
 ### Test Plan
 
-**Unit Tests:**
-- Tool parameter validation (all required/optional fields)
-- Error handling for invalid inputs (non-existent paths, invalid formats)
-- Output format validation (JSON and YAML)
-- Helper function coverage (label parsing, category extraction)
-- Provider lifecycle management
+**Unit tests (59 tests, 96% coverage):**
+- All 9 tool handlers tested with `mockAnalyzerService`
+- Parameter validation, error handling, output format verification
+- Helper functions (`filterByIncidentSelector`, `incidentVariables`, etc.)
+- `kaiAnalyzerService` delegation tests
 
-**Integration Tests:**
-- Full HTTP server lifecycle (startup, request handling, graceful shutdown)
-- OAuth authentication flow (valid tokens, invalid tokens, missing tokens)
-- CORS header validation
-- All 6 tools end-to-end with real fixtures
-- Concurrent request handling
-- Context cancellation and timeout behavior
+**Integration tests:**
+- Full MCP session lifecycle via in-memory transport
+- HTTP server with bearer token authentication
+- Multi-tool workflows (analyze then query results)
+- Error propagation through the MCP protocol
 
-**Test Fixtures:**
-- Sample rules (`testdata/rules/test_rules.yaml`)
-- Invalid rules for error testing
-- Sample Java/Go projects for analysis
-- Provider configuration files
-- Analysis result files for incident querying
-
-**Load Testing (Future):**
-- Concurrent requests to HTTP endpoint
-- Large codebase analysis
-- Memory and CPU profiling under load
+**E2E tests (via koncur):**
+- [konveyor/ci#207](https://github.com/konveyor/ci/pull/207): CI action that builds images, starts providers, extracts the binary, and runs koncur tests against the MCP target
+- [konveyor/koncur#63](https://github.com/konveyor/koncur/pull/63): MCPTarget implementation that connects to the server via stdio or HTTP and runs the standard koncur test suite
 
 ### Upgrade / Downgrade Strategy
 
-**Initial Release:**
-- MCP server is a new optional component, no upgrade concerns
-- Can be deployed alongside existing analyzer-lsp installations
+- MCP server is a new standalone component, no upgrade concerns for existing installations
+- Can be deployed alongside existing kantra/analyzer-lsp installations
 - No changes to existing CLI or LSP functionality
-
-**Future Version Compatibility:**
-- Tool input schemas will be versioned in descriptions
-- Breaking changes will result in new tool names (e.g., `analyze_run_v2`)
-- Deprecated tools will remain available for 2+ releases
-- HTTP API will use URL versioning if needed (`/v2/mcp`)
-
-**Configuration Migration:**
-- MCP server reads existing `provider_settings.json`
-- No new configuration files required
-- OAuth settings provided via environment variables or flags
+- Tool input schemas will be versioned in descriptions; breaking changes result in new tool names
 
 ## Implementation History
 
 - 2026-01-23: Enhancement proposal created
-- 2026-01-23: Initial implementation
-- 2026-01-23: Initial tests suite created
+- 2026-03-20: Initial prototype in analyzer-lsp ([konveyor/analyzer-lsp#1146](https://github.com/konveyor/analyzer-lsp/pull/1146))
+- 2026-04-07: Team meeting decided to move to separate repo wrapping kai-analyzer-rpc
+- 2026-04-07: Closed analyzer-lsp PR, created [konveyor-ecosystem/analyzer-mcp](https://github.com/konveyor-ecosystem/analyzer-mcp) repo
+- 2026-04-16: Upstream kai-analyzer exports merged ([konveyor/kai#926](https://github.com/konveyor/kai/pull/926))
+- 2026-04-16: Initial implementation PR ([konveyor-ecosystem/analyzer-mcp#1](https://github.com/konveyor-ecosystem/analyzer-mcp/pull/1)) — 9 tools, 59 tests, stdio + HTTP transport
+- 2026-04-16: Koncur MCP/RPC target integration ([konveyor/koncur#63](https://github.com/konveyor/koncur/pull/63))
+- 2026-04-16: CI e2e infrastructure ([konveyor/ci#207](https://github.com/konveyor/ci/pull/207))
 
 ## Drawbacks
 
-1. **Maintenance Burden**: Additional API surface to maintain alongside CLI and LSP
-   - Counterpoint: Minimal code due to delegation to existing libraries
-   - Mitigation: Comprehensive test coverage catches regressions
+1. **Maintenance Burden**: Additional component to maintain alongside kantra and IDE extensions. Mitigated by delegation to kai-analyzer (minimal wrapper code) and comprehensive test coverage.
 
-2. **Security Surface**: HTTP transport introduces authentication and network security concerns
-   - Counterpoint: OAuth 2.1 is industry standard, well-understood
-   - Mitigation: Security review before HTTP deployment, TLS required in production
-
-3. **Performance Overhead**: MCP protocol adds JSON serialization/deserialization
-   - Counterpoint: Overhead is minimal (<5%) and acceptable for automation use cases
-   - Mitigation: Direct CLI/LSP remains available for performance-critical usage
-
-4. **Dependency on External Protocol**: Tied to MCP specification evolution
-   - Counterpoint: MCP is backed by Anthropic and growing ecosystem
-   - Mitigation: MCP SDK is stable, minimal breaking changes expected
+2. **Dependency on External Protocol**: Tied to MCP specification evolution. Mitigated by MCP's growing ecosystem and stable SDK.
 
 ## Alternatives
 
-### Alternative 1: Stdio-Only (No HTTP)
+### Alternative 1: MCP server inside analyzer-lsp
+
+The initial approach ([analyzer-lsp#1146](https://github.com/konveyor/analyzer-lsp/pull/1146)). Rejected because circular Go module dependencies between analyzer-lsp and kai-analyzer forced reimplementation of caching and analysis orchestration.
+
+### Alternative 2: Stdio-Only (No HTTP)
 
 Only implement stdio transport, skip HTTP server.
 
-**Pros:**
-- Simpler implementation
-- No authentication concerns
-- Smaller security surface
-
-**Cons:**
-- No remote access for CI/CD
-- Can't deploy as a service
-- Limited to local usage only
+**Pros:** Simpler, no authentication concerns, smaller security surface.
+**Cons:** No remote access for CI/CD, can't deploy as a service.
 
 ## Infrastructure Needed [optional]
 
-**Development:**
-- No new infrastructure required
-- Existing analyzer-lsp repository and CI pipeline sufficient
-
-**Testing:**
-- Integration with Claude Desktop requires desktop environment (manual testing)
-- HTTP integration tests run on existing CI infrastructure
-
-**Production Deployment (for users):**
-- Users deploying HTTP transport need:
-  - Container orchestration (Kubernetes, Docker, etc.) - user-provided
-  - OAuth 2.1 identity provider - user-provided
-  - TLS termination (reverse proxy) - user-provided
-  - Monitoring/observability - user-provided
-
-**Documentation:**
-- Usage examples in main README
-- Detailed MCP server documentation in `cmd/analyzer/mcp/README.md`
-- Claude Desktop integration guide
-- HTTP deployment guide with security best practices
+- [x] New repository: [konveyor-ecosystem/analyzer-mcp](https://github.com/konveyor-ecosystem/analyzer-mcp)
+- [ ] Container image: `quay.io/konveyor/analyzer-mcp`
+- [ ] CI integration: Added to [konveyor/ci](https://github.com/konveyor/ci) image build matrix and koncur e2e tests
