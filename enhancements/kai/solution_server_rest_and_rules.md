@@ -13,7 +13,7 @@ approvers:
   - "@shawn-hurley"
   - "@jortel"
 creation-date: 2026-04-08
-last-updated: 2026-04-13
+last-updated: 2026-04-20
 status: provisional
 see-also:
   - "/enhancements/kai/solution_server.md"
@@ -21,7 +21,7 @@ replaces: []
 superseded-by: []
 ---
 
-# Kai Solution Server: REST Frontend and Rule/Ruleset Serving
+# Kai Solution Server: REST Frontend and Rule Candidate Staging
 
 ## Release Signoff Checklist
 
@@ -33,7 +33,7 @@ superseded-by: []
 ## Open Questions
 
 1. Per-archetype RBAC for rule approval needs a concrete design before GA. Do reviewers approve rules *for* an archetype, or is rule visibility scoped *by* archetype, or both? The initial implementation ships without per-role enforcement (matching the existing solution-server posture), but this must be resolved before the feature is GA-ready.
-2. What is the long-term home for approved rules? Do they live in the solution server indefinitely, do we want a more direct way for getting them into a repository/the hub than the APIs described below?
+2. The expected end state for accepted rules is promotion into the Hub's existing systems (analysis profiles, custom migration targets) or a versioned git repository. The specific promotion mechanism (manual export via `/archive`, automated sync to a git repo, direct Hub API integration) needs design. How much of this should be automated vs. manual?
 
 ## Summary
 
@@ -41,9 +41,9 @@ The original Kai Solution Server enhancement ([solution_server.md](./solution_se
 
 The first is that MCP is sufficient as the only interface. MCP is the right shape for live LLM tool calls, but anything that wants to ingest batches, browse, paginate, filter, or have a UI built on top of it is better served by a normal HTTP API.
 
-The second is that hints attached to existing rules are the only artifact worth mining from a migration. Hints make sense for incidents - every incident is by definition tied to an existing rule, so an incident is a natural anchor for advice on top of that rule. But rules themselves are also worth mining: any time a successful migration touches code the analyzer didn't catch, that's a candidate for a new rule. Rules are just another type of data we can extract from the migration work humans are already doing, and the server should be able to store and serve them on equal footing with hints.
+The second is that hints attached to existing rules are the only artifact worth mining from a migration. Hints make sense for incidents - every incident is by definition tied to an existing rule, so an incident is a natural anchor for advice on top of that rule. But rules themselves are also worth mining: any time a successful migration touches code the analyzer didn't catch, that's a candidate for a new rule. Rules are just another type of data we can extract from the migration work humans are already doing, and the server should be able to stage and triage them alongside hints.
 
-This enhancement adds a REST frontend at `/api/v1/`, mounted alongside the existing MCP server and backed by the same database, and extends the data model so that rule candidates and rulesets are stored and served directly alongside hints. It also introduces a `collections` primitive for grouping related data - an import batch, a review session, a set of related contributions from a single tool run. The MCP surface is unchanged; everything here is additive.
+This enhancement adds a REST frontend at `/api/v1/`, mounted alongside the existing MCP server and backed by the same database, and extends the data model so that the server can act as a staging and triage layer for rule candidates alongside hints. Rule candidates from any producer land in the solution server, go through a curation workflow (validation, filtering, accept/reject), and once accepted are promoted into the Hub's existing rule management systems or a versioned git repository. It also introduces a `collections` primitive for grouping related data - an import batch, a review session, a set of related contributions from a single tool run. The MCP surface is unchanged; everything here is additive.
 
 ## Motivation
 
@@ -66,10 +66,18 @@ same ingestion, curation, and serving surface.
 
 **Hints are an under-ambitious output.** The solution server already has
 incidents, violation groupings, before/after files, and reasoning. With a
-small extension to the data model it can also store rule candidates -
-analyzer-lsp rules contributed by any producer - and serve them back as
-rulesets. Rulesets get better over time as more producers contribute, instead of
-being a static artifact maintained by hand in a separate repo.
+small extension to the data model it can also stage rule candidates -
+analyzer-lsp rules contributed by any producer - and triage them for
+promotion into the Hub's existing rule management or a versioned git
+repository. Multiple automated producers (commit miners, AI-assisted
+authoring tools, semver-based generators) may all be generating rule
+candidates, and those candidates need a place to land before they've
+been reviewed. A database-backed staging layer can offer structured
+filtering by validation state, provenance, and quality metadata,
+which makes triage more tractable than reviewing candidates one at a
+time. The accepted set that comes out the other end is what gets
+promoted into centralized rulesets. (See Alternatives for discussion
+of git-based triage as another option.)
 
 ### Goals
 
@@ -86,8 +94,13 @@ being a static artifact maintained by hand in a separate repo.
 - Extend the data model and API so that rule candidates are first-class
   objects with producer-supplied provenance metadata, validation state,
   and a curation lifecycle.
-- Provide endpoints to assemble and serve rulesets built from accepted
-  rule candidates, scoped by collection / source-target labels / Hub.
+- Provide a structured triage workflow for rule candidates that scales
+  to the volume expected from multiple automated producers, with
+  filtering by validation state, provenance, and quality metadata.
+- Provide endpoints to assemble rulesets from accepted rule candidates
+  and export them for promotion into the Hub's existing rule management
+  systems (analysis profiles, custom migration targets) or a versioned
+  git repository.
 
 ### Non-Goals
 
@@ -101,6 +114,11 @@ being a static artifact maintained by hand in a separate repo.
 - Replacing or forking `konveyor/rulesets`. This proposal complements that
   repo and treats it as one possible upstream source of "stock" rules; it
   does not propose to move the canonical rulesets into the solution server.
+- Permanently replacing the Hub's rule management or the `konveyor/rulesets`
+  repository as the home for curated rules. The solution server stages and
+  triages candidates; their permanent home is the Hub's existing systems
+  (analysis profiles, custom migration targets) or a versioned git
+  repository.
 - Designing or specifying any particular rule producer. Commit miners,
   importers from external rulesets, hand-authoring tools, and AI-assisted
   authoring tools are all valid producers and are all out of scope for
@@ -127,16 +145,22 @@ The solution server gains two things:
 1. A REST frontend at `/api/v1/`, mounted alongside the existing MCP
    surface and backed by the same data. The REST surface is purely
    additive; MCP behavior is unchanged.
-2. A rules-and-rulesets data model that lets any producer contribute
-   rule candidates, lets reviewers curate them, and lets analyzers fetch
-   the result back as analyzer-lsp YAML from a stable URL.
+2. A rules-and-rulesets data model that provides the APIs needed to
+   build a curation flow for rule candidates. Any producer can submit
+   candidates; the server stores them with provenance and validation
+   metadata and exposes filtering, accept/reject state transitions,
+   and export endpoints. The actual review process is built on top of
+   these APIs. Accepted rules are exported for promotion into the
+   Hub's existing rule management systems or a versioned git
+   repository.
 
 Auth and tenancy are unchanged from the original solution server
 enhancement: all access is mediated by the Konveyor Hub proxy, and each
 solution server instance is scoped to a single Hub. Several efforts in
 the Konveyor community are exploring automated rule generation from
 migration history and other sources; this API is intended to be the
-production destination for that work.
+staging destination for that work, providing triage and curation before
+accepted rules are promoted into the Hub or a git repository.
 
 ### REST API surface
 
@@ -217,11 +241,12 @@ Endpoints:
 Collections are not a substitute for tenancy or RBAC. They are an
 organizational handle within the existing Hub-scoped tenant boundary.
 
-### Rule and ruleset serving
+### Rule candidate staging and curation
 
 This is the major data-model addition in this enhancement. Today the server
-stores incidents → solutions → hints. After this enhancement it also stores
-rule candidates and assembled rulesets.
+stores incidents → solutions → hints. After this enhancement it also stages
+rule candidates and provides a triage workflow for curating them before
+promotion into the Hub's existing rule management or a git repository.
 
 #### Data model additions
 
@@ -248,10 +273,13 @@ rule candidates and assembled rulesets.
 
 - Ruleset - a named grouping of accepted rule candidates, with
   labels so it can be filtered the same way the
-  existing konveyor rulesets are. A ruleset is a live view: its
-  served YAML always reflects the current set of accepted member
-  rules. If a constituent rule is later rejected or deleted, it
-  drops out of the served output automatically.
+  existing konveyor rulesets are. A ruleset is primarily an
+  assembly and export mechanism: it groups accepted candidates so
+  they can be exported as analyzer-lsp YAML (for validation or
+  preview) or as an archive (for promotion into a git repo or
+  import into the Hub). Its contents reflect the current set of
+  accepted member rules; if a constituent rule is later rejected
+  or deleted, it drops out automatically.
 
 #### REST endpoints
 
@@ -275,18 +303,26 @@ rule candidates and assembled rulesets.
   with target=quarkus").
 - `GET /api/v1/rulesets/` - list.
 - `GET /api/v1/rulesets/{ruleset_id}` - metadata + member rule IDs.
-- `GET /api/v1/rulesets/{ruleset_id}/yaml` - render the ruleset as the
-  analyzer-lsp YAML format that `kantra` and the analyzer can consume
-  directly. This always reflects the current accepted members. A Hub
-  user (or a CI job, or the IDE plugin) can `GET` this URL and feed
-  the body straight into an analysis run.
+- `GET /api/v1/rulesets/{ruleset_id}/yaml` - render the ruleset as
+  analyzer-lsp YAML. This is primarily useful for validation and
+  preview (confirming that the assembled rules parse correctly and
+  fire as expected). It always reflects the current accepted members.
+  Direct consumption by kantra is possible but the primary promotion
+  path is through the Hub or a git repository.
 - `GET /api/v1/rulesets/{ruleset_id}/archive` - download the ruleset as
   a zip/tar archive suitable for committing into a git repo or
-  distributing outside the cluster. This is the snapshotting mechanism:
-  consumers who need a pinned version export the archive and version it
-  in git rather than relying on the live URL.
+  importing into the Hub. This is the primary export mechanism for
+  promotion: a reviewer (or an automated job) exports the accepted
+  ruleset and pushes it into the permanent home. Promotion to git
+  could be automated as a post-acceptance hook.
 
 #### Rule lifecycle
+
+The solution server provides the APIs required to build a curation flow,
+not a curation flow itself. The endpoints below support the full
+lifecycle from ingestion through promotion, but the actual review
+process - who reviews, what criteria they apply, whether it's manual or
+automated - is built on top of these APIs, not prescribed by them.
 
 ```
    any producer
@@ -301,13 +337,14 @@ rule candidates and assembled rulesets.
    reviewer accepts              (curation_state = accepted)
         │
         ▼
-   POST /api/v1/rulesets         (membership in a served ruleset)
+   POST /api/v1/rulesets         (assembly into an export group)
         │
         ▼
-   GET /api/v1/rulesets/{id}/yaml
+   GET /api/v1/rulesets/{id}/archive
         │
         ▼
-   kantra / analyzer consumes the served YAML
+   promotion into Hub (analysis profiles, custom migration
+   targets) or a versioned git repository
 ```
 
 Validation is not a gate. A reviewer can accept a rule that has never
@@ -339,11 +376,13 @@ provides the filterable list endpoints, curation state transitions,
 and OpenAPI spec I need to generate a typed client and build this
 without inventing a new backend.
 
-#### Story 3: Serving derived rulesets to analyzers
+#### Story 3: Promoting curated rules into existing systems
 
-As the IDE plugin (or a CI job), I want to fetch the current accepted
-ruleset for a given source/target pair as analyzer-lsp YAML from a
-stable URL and use it directly without extra tooling.
+As a reviewer (or an automated job), I want to export the accepted
+ruleset as an archive, push it into a git repository or import it
+into the Hub's analysis profiles, and have kantra consume it through
+the channels it already understands — without kantra needing to know
+about the solution server.
 
 #### Story 4: Building observability and debugging tools
 
@@ -399,7 +438,7 @@ Risks specific to this enhancement:
 
 - Unit and integration coverage for the new REST endpoints, including
   the rule and ruleset lifecycle (contribute → validate → curate →
-  assemble → serve).
+  assemble → export).
 - An end-to-end test that contributes rule candidates, accepts a subset,
   assembles a ruleset, and confirms the served YAML is consumable without errors.
 - Equivalence checks ensuring that any operation exposed by both MCP and
@@ -417,9 +456,14 @@ functionality without affecting existing MCP-mediated data.
 - Two transports to maintain: Maintaining both MCP and REST means
   two surfaces to keep documented and consistent.
 - Rules-as-data adds curation surface area: Storing rule candidates
-  is easy; reviewing them is work. This enhancement does not solve the
-  reviewer-bandwidth problem; it only ensures the data is in a shape
-  that reviewers (and eventually a UI) can act on.
+  is easy; reviewing them is work. This enhancement provides the APIs
+  for building a curation flow but does not solve the
+  reviewer-bandwidth problem itself.
+- The staging area needs a clear promotion path into existing systems
+  (Hub analysis profiles, custom migration targets, or git repos).
+  This enhancement provides the export endpoints (`/archive`, `/yaml`)
+  but the specific promotion mechanism is not fully specified yet
+  (see Open Questions).
 
 ## Alternatives
 
@@ -434,6 +478,22 @@ functionality without affecting existing MCP-mediated data.
   CI jobs should not need to speak MCP; OpenAPI gives client generation
   for free). Both surfaces will continue to coexist - MCP for the
   live-agent use case, REST for everything else.
+
+- Use git-based workflows for rule candidate triage: Producers submit
+  rule candidates as PRs to a git repository, and the PR review process
+  serves as the curation mechanism. This has real advantages - git is
+  well-understood, PRs already have review/approve/reject semantics,
+  CI can validate rules, and the merge is the promotion step. The
+  tradeoff is that git doesn't provide structured filtering by
+  validation state, provenance, or other metadata out of the box, and
+  at higher volumes (multiple automated producers generating many
+  candidates) someone has to own each PR individually. A database-backed
+  staging layer can make triage more tractable at volume through
+  queryable metadata and bulk operations. That said, git-based triage
+  may be sufficient depending on the actual volume and number of
+  producers, and the two approaches are not mutually exclusive - the
+  solution server's `/archive` export could feed into a git-based
+  review process rather than replacing it.
 
 ## Infrastructure Needed
 
