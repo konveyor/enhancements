@@ -1,12 +1,17 @@
 ---
-
-## title: ai-assisted-rules-generation
+title: ai-assisted-rules-generation
 authors:
   - "@savitharaghunathan"
 reviewers:
-  - TBD
+  - "@djzager"
+  - "@shawn-hurley"
+  - "@fabianvf"
+  - "@JonahSussman"
 approvers:
-  - TBD
+  - "@djzager"
+  - "@shawn-hurley"
+  - "@fabianvf"
+  - "@JonahSussman"
 creation-date: 2026-04-03
 last-updated: 2026-04-21
 status: implementable
@@ -15,12 +20,14 @@ replaces:
 superseded-by:
   - N/A
 see-also:
-  - [https://github.com/konveyor/enhancements/pull/259](https://github.com/konveyor/enhancements/pull/259)
-  - [https://github.com/konveyor/enhancements/pull/274](https://github.com/konveyor/enhancements/pull/274)
+  - https://github.com/konveyor/enhancements/pull/259
+  - https://github.com/konveyor/enhancements/pull/274
+  - https://github.com/konveyor/enhancements/pull/279
+---
 
 # AI-Assisted Rules Generation
 
-Extract migration patterns from documentation and generate structurally valid Konveyor rules using a skill-first architecture: Generate rules skill orchestrate the full pipeline while deterministic Go helper functions handle ingestion, rule construction, validation, and test scaffolding.
+Extract migration patterns from documentation and generate structurally valid Konveyor rules using skills. 
 
 ## Release Signoff Checklist
 
@@ -65,13 +72,16 @@ Generated rules carry verification labels (`konveyor.io/generated-by`, `konveyor
 - **Expand language/framework coverage**: Enable rule generation for any language or framework where migration
 documentation exists
 - **Verify AI-generated rules**: Validate rules structurally (syntax) and functionally (kantra)
-- **Integrate with the Konveyor ecosystem**: Work with kantra, Kai, existing rulesets, and developer tooling
+- **Integrate with the Konveyor ecosystem**: Generated rules work with kantra, Kai, and compatible with existing rulesets
 
 ### Non-Goals
 
 - **Replace human rule authors**: AI generates draft rules; humans review and decide whether to commit
 - **Guarantee rule correctness**: AI-generated rules are proposals, not verified facts
 - **Build a new rule engine**: Rules use existing Konveyor YAML format, validated by existing kantra infrastructure
+- **Define Hub or enterprise rule distribution**: How generated rules are attached to analysis profiles, custom migration targets, or rolled out inside an organization is out of scope. This enhancement outputs standard Konveyor YAML; consumption after publication uses existing platform paths.
+
+The **intended upstream path** for community rules is **human review and a pull request to [konveyor/rulesets](https://github.com/konveyor/rulesets)**, as in the user stories below. Staging layers (for example rule-candidate flows in the Kai solution server), Hub-specific packaging, or org-wide distribution workflows are **not specified here**; they may be addressed by other enhancements or existing Konveyor features.
 
 ## Proposal
 
@@ -350,21 +360,11 @@ This approach keeps the core architecture unchanged -- language-specific skills 
 
 #### Existing Work
 
-- Project: [konveyor/rulesets](https://github.com/konveyor/rulesets)
-Description: Existing rulesets repository
-Relevance: Target for generated rules
-- Enhancement: [analyzer-lsp MCP](https://github.com/konveyor/enhancements/pull/259)
-Description: MCP server for analyzer-lsp (analysis engine)
-Relevance: Complementary: exposes `analyze_run`, `rules_validate`, `dependencies_get` etc.
-- Project: [analyzer-rule-generator](https://github.com/konveyor-ecosystem/analyzer-rule-generator)
-Description: Python-based AI rules generator
-Relevance: migration guides, Claude skill, E2E pipeline
-- Project: [scribe](https://github.com/sshaaf/scribe)
-Description: Java-based MCP server for rules
-Relevance: MCP tool approach
-- Project: [semver-analyzer](https://github.com/shawn-hurley/semver-analyzer)
-Description: Rust-based deterministic API diff
-Relevance: Future integration as complementary engine
+- **[konveyor/rulesets](https://github.com/konveyor/rulesets)** — this repo contains curated rules. We do not change layout or governance here; we aim to lower the cost of producing reviewable candidates that still go through normal review and PR.
+- **[analyzer-lsp MCP](https://github.com/konveyor/enhancements/pull/259)** (analyzer engine via MCP) — this pr emphasizes **running analysis** (`analyze_run`, `rules_validate`, `dependencies_get`, etc.). Current enhancement focusses on **authoring** rules. generated rules should still validate and run through the same analyzer stack.
+- **[analyzer-rule-generator](https://github.com/konveyor-ecosystem/analyzer-rule-generator)** — Closest prior art (Python, migration guides, Claude-oriented flows). We overlap on “guide in, rules out” but diverge on stack: AgentSkills.io + Go `cmd/` helpers, with **`patterns.json` as the stable contract** so deterministic steps stay testable without standardizing on one Python deployment.
+- **[scribe](https://github.com/sshaaf/scribe)** (Java MCP server for rules) — Overlap in “MCP + rules,” but we are not trying to own a general rule CRUD server in this enhancement; MCP remains optional alongside batch and agent workflows.
+- **[semver-analyzer](https://github.com/shawn-hurley/semver-analyzer)** — deterministic API diff in Rust. We can treat it as a **possible future signal** (semver/API changes feeding extraction) rather than something this proposal implements.
 
 ### Security, Risks, and Mitigations
 
@@ -397,7 +397,7 @@ Skills are LLM-driven and non-deterministic, so they require evaluation-based te
 - **Cross-model evals**: Run the same eval suite across different agent runtimes and models (Claude Sonnet, Claude Opus, GPT-4o, Gemini) to identify model-specific regressions and establish minimum quality baselines.
 - **Regression evals**: On each skill change, re-run the eval suite to catch quality regressions. Track metrics over time to measure improvement.
 
-**Eval infrastructure**: Evals run as CI jobs that invoke the skills headlessly (via agent runtime in non-interactive mode), collect outputs, and score them against baselines. Results are tracked in a dashboard for trend analysis.
+**Eval infrastructure**: Evals are intended to run as CI jobs that invoke the skills headlessly (via an agent runtime in non-interactive mode), collect outputs, and score them against baselines. 
 
 ### Upgrade / Downgrade Strategy
 
