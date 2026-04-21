@@ -14,8 +14,8 @@ see-also:
   - "https://github.com/konveyor/editor-extensions/issues/1334"
   - "/enhancements/kai/solution_server.md"
   - "/enhancements/distributed-language-extensions/README.md"
-  - "/enhancements/kai/migration-intelligence/README.md"
   - "https://github.com/konveyor/enhancements/pull/259"
+  - "https://agentskills.io"
 replaces: []
 superseded-by: []
 ---
@@ -26,7 +26,10 @@ Evolve the Konveyor editor extension's AI solution pipeline from a single-shot
 LLM workflow to a pluggable agent architecture where autonomous AI agents
 (Goose, OpenCode, or others) can explore the codebase, execute tools, iterate on
 fixes, and produce multi-file migration solutions — all under user-controlled
-permission policies.
+permission policies. Migration intelligence (skills, prompts, and agent
+instructions) is extracted from the extension into a standalone, portable
+package that any agent can consume — in the IDE, from the CLI, or in
+containers.
 
 ## Release Signoff Checklist
 
@@ -37,38 +40,48 @@ permission policies.
 
 ## Open Questions
 
-1. **Credential refresh for Hub LLM proxy**: Agent subprocesses receive Hub
-   bearer tokens at spawn time. These tokens have a ~5 minute TTL. Once expired,
-   the agent cannot make LLM requests and there is no mechanism to deliver
-   refreshed tokens to the running subprocess. This blocks Hub LLM proxy
-   integration with agent mode. See
-   [editor-extensions#1334](https://github.com/konveyor/editor-extensions/issues/1334).
-   Options under consideration:
-   - Agent-side credential refresh (requires upstream Goose changes to OpenAI provider)
-   - Long-lived API keys from Hub
-   - Credential file sidecar pattern (extension writes refreshed tokens to disk,
-     agent re-reads on auth failure)
+1. ~~**Credential refresh for Hub LLM proxy**~~: **Resolved** — addressed by
+   the [credential file sidecar](https://github.com/konveyor/enhancements/pull/265)
+   enhancement. The extension writes refreshed tokens to disk; the agent
+   re-reads on auth failure.
 
-2. ~~**AI artifact distribution**~~: **Resolved** — addressed by the
-   [Migration Intelligence](/enhancements/kai/migration-intelligence/README.md)
-   enhancement. Skills follow the [Agent Skills](https://agentskills.io) format
-   and are distributed via hub profile bundles alongside rulesets.
-
-3. **Backend consolidation**: The POC supports Goose and OpenCode as agent
+2. **Backend consolidation**: The POC supports Goose and OpenCode as agent
    backends. Should the project commit to supporting multiple backends long-term,
    or converge on one? The pluggable architecture allows deferring this decision,
    but supporting multiple backends has ongoing maintenance cost.
 
+3. **Session management**: When does the orchestrator start a new agent session
+   vs. reuse an existing one? What context carries into a session? If session A
+   made file changes, does session B know not to revert them? Is there tracking
+   of context window usage? Can the user stop a running agent and redirect it
+   mid-task?
+
 ## Summary
 
-The Konveyor editor extension currently generates migration solutions by sending
-a single prompt to an LLM and receiving file modifications back. This works for
-straightforward changes but falls short for complex migrations that require the
-AI to explore the codebase, understand dependency relationships, iterate on
-failed attempts, and coordinate changes across multiple files.
+The Konveyor editor extension currently generates migration solutions through
+its `KaiInteractiveWorkflow`, a LangGraph pipeline orchestrated by
+`SolutionWorkflowOrchestrator`. The workflow has two modes controlled by the
+`genai.agentMode` setting:
 
-This enhancement introduces a pluggable agent architecture that replaces the
-single-shot LLM call with autonomous AI agents capable of:
+- **Without agent mode** (`genai.agentMode: false`): The workflow runs Phase 1
+  only — processing incidents per-file using LLM generation without tool access.
+  This is effectively single-shot-per-file: the LLM receives file contents and
+  violation details, generates a fix, and returns. No tool use, no knock-on fix
+  detection, no follow-up phase.
+
+- **With agent mode** (`genai.agentMode: true`): Phase 1 additionally captures
+  knock-on fix information. If identified, the user is prompted to continue.
+  Phase 2 then runs follow-up agents with full tool access (file read/write/search,
+  Maven dependency lookup) and a diagnostics loop for handling cascading changes.
+
+Even with agent mode enabled, the workflow operates on a pre-defined set of
+incidents, has no tool access during initial fix generation (Phase 1), and
+cannot re-analyze after making changes to detect new issues. The underlying
+agent is the `KaiInteractiveWorkflow` — there is no pluggable agent backend
+and no integration with external agent tools like Goose or OpenCode.
+
+This enhancement introduces a pluggable agent architecture that expands
+beyond this workflow to autonomous AI agents capable of:
 
 - **Codebase exploration**: Reading files, searching for patterns, understanding
   project structure before making changes
@@ -78,8 +91,8 @@ single-shot LLM call with autonomous AI agents capable of:
   refining the approach
 - **Multi-file coordination**: Making related changes across many files in a
   single session
-- **User-controlled autonomy**: Granular permission policies that let users
-  decide which agent actions require approval
+- **User-controlled autonomy**: Agent backends manage their own permission
+  models; the IDE surfaces configuration for them
 
 The architecture is backend-agnostic: a common `AgentClient` interface allows
 different agent implementations (Goose via ACP protocol, OpenCode via SDK, or
@@ -94,22 +107,28 @@ environments where autonomous agents are unavailable or undesirable.
 
 ### Current State Problems
 
-**Single-shot LLM limitations**: The current `KaiInteractiveWorkflow` sends one
-prompt with violation details and file contents, then receives one response with
-proposed changes. The LLM cannot:
-- Read additional files to understand context
-- Try a fix and check if it compiles
-- Discover that fixing one file requires changes in another
-- Use external tools (Maven, npm, build systems)
-
-**No iteration capability**: When a migration fix introduces new issues (e.g.,
-updating an import requires updating a dependency in pom.xml), the current
-pipeline has no way to detect or address cascading changes.
+**Workflow limitations**: The current `KaiInteractiveWorkflow` has two modes.
+Without agent mode, it is single-shot-per-file with no tool access. With agent
+mode enabled, Phase 2 provides follow-up agents with file read/write/search
+tools and Maven dependency lookup for knock-on fixes. Key limitations even
+with agent mode:
+- Phase 1 has no tool access — the LLM generates fixes without being able to
+  read related files or verify its changes
+- The workflow operates on a pre-defined set of incidents and cannot
+  autonomously discover new issues
+- The workflow cannot re-analyze after making changes to detect cascading
+  issues introduced by the fixes themselves
+- The two-phase structure constrains the fix→verify→iterate loop — the agent
+  cannot freely interleave tool use with reasoning across phases
+- There is no pluggable agent backend — the workflow is tightly coupled to the
+  LangGraph-based `KaiInteractiveWorkflow`
 
 **Minimal migration context**: The prompt contains only the profile name (e.g.,
 "JavaEE to Quarkus"), violation messages, and file contents. There is no broader
 migration guidance, no language-specific knowledge, and no access to external
-tools that could improve solution quality.
+tools that could improve solution quality. This intelligence is currently
+hardcoded in the extension's prompt builder — it should live in portable skill
+and prompt files that any agent can read.
 
 **Tight coupling to one approach**: The solution pipeline is hardcoded to the
 LangChain/LangGraph-based workflow. Evaluating alternative approaches or letting
@@ -126,23 +145,40 @@ users choose their preferred AI tool requires significant refactoring.
    understand project structure before proposing changes, leading to
    higher-quality migration solutions.
 
-3. **Tool integration via MCP**: Expose Konveyor's analysis capabilities
-   (run analysis, get incidents, apply changes) as MCP tools that agents can
-   invoke. Enable agents to use additional MCP servers for language-specific
-   tasks (Maven search, npm audit, etc.).
+3. **Tool integration via MCP**: Agents access Konveyor's analysis capabilities
+   (run analysis, get incidents, apply changes) via MCP tools. This enhancement
+   depends on the
+   [Analyzer MCP proposal](https://github.com/konveyor/enhancements/pull/259)
+   for the standalone analysis server; the extension provides an interim MCP
+   bridge until that lands. Enable agents to use additional MCP servers for
+   language-specific tasks (Maven search, npm audit, etc.).
 
-4. **Granular permission control**: Users control what the agent can do
-   autonomously vs. what requires approval. Three autonomy levels (auto, smart,
-   ask) with per-category overrides for file editing, command execution, web
-   access, and MCP tools.
+4. **Permission control**: Each agent backend has its own native permission
+   model (e.g., Goose uses `GOOSE_MODE`, OpenCode uses permission blocks,
+   Claude Code uses `--allowedTools`). The extension delegates permission
+   management to the backend rather than implementing a unified permission
+   layer. The IDE provides affordances (settings UI, links to backend
+   configuration) so users can configure their agent's permissions without
+   leaving the extension.
 
 5. **File change review**: All agent-produced file modifications are presented
    for user review via diff UI before being applied. Support both inline review
    (per-change as it happens) and batch review (queue changes, review all at
-   once).
+   once). Agents like Goose use built-in tools (e.g., Developer: Text Editor)
+   that write directly to disk, bypassing MCP. The `AgentFileTracker` detects
+   these changes by caching file contents before the agent runs and comparing
+   against disk after tool calls complete — enabling diff rendering regardless
+   of which tool the agent used.
 
-6. **Backward compatibility**: The existing direct LLM workflow remains available
-   as a configuration option (`agentMode: false`). Users who don't want
+6. **Portable migration intelligence**: Extract migration-specific knowledge
+   (skills, prompts, agent instructions) from the extension into a standalone
+   package that any agent can consume. A developer running Goose from the CLI
+   with this package gets the same migration intelligence as a developer using
+   the VS Code extension. Skills follow the
+   [Agent Skills](https://agentskills.io) format.
+
+7. **Backward compatibility**: The existing direct LLM workflow remains available
+   as a configuration option (`genai.agentMode: false`). Users who don't want
    autonomous agents can use the familiar single-shot behavior.
 
 ### Non-Goals
@@ -155,16 +191,20 @@ users choose their preferred AI tool requires significant refactoring.
    side.
 
 3. **Automated migration without human review**: All agent-produced changes go
-   through user review. The goal is to assist developers, not to run unattended.
+   through user review. Changes proposed via MCP tools are staged for review
+   before being written to disk. Changes written directly by the agent (via its
+   built-in file tools) are detected by the `AgentFileTracker` and can be
+   reverted; the user reviews these changes before they are finalized. The goal
+   is to assist developers, not to run unattended.
 
 4. **Multi-user or server-side agent hosting**: Agents run locally as
    subprocesses of the VS Code extension. Server-side agent hosting is out of
    scope.
 
-5. **AI artifact distribution**: The mechanism for distributing migration-specific
-   skills and prompts is addressed by the
-   [Migration Intelligence](/enhancements/kai/migration-intelligence/README.md)
-   enhancement.
+5. **Skill distribution via hub**: The mechanism for distributing
+   architect-authored skills and prompts through hub profile bundles is out of
+   scope. This enhancement defines the package format; hub integration is
+   separate work.
 
 ## Proposal
 
@@ -178,8 +218,6 @@ users choose their preferred AI tool requires significant refactoring.
 │  │ Agent Feature Module                                          │  │
 │  │                                                               │  │
 │  │  AgentOrchestrator ──┬── AgentClient (Goose/OpenCode/Direct)  │  │
-│  │       │              │         │                               │  │
-│  │       │              │    ToolPermissionHandler                │  │
 │  │       │              │         │                               │  │
 │  │       │              └── AgentFileTracker                     │  │
 │  │       │                                                       │  │
@@ -199,18 +237,78 @@ users choose their preferred AI tool requires significant refactoring.
 │  │  • Chat interface with streaming responses                    │  │
 │  │  • Permission review (allow/reject with diff preview)         │  │
 │  │  • Batch file review carousel                                 │  │
-│  │  • Agent settings (provider, model, autonomy, permissions)    │  │
+│  │  • Agent settings (provider, model, backend configuration)    │  │
 │  └───────────────────────────────────────────────────────────────┘  │
 │                              ↕                                      │
 │  ┌───────────────────────────────────────────────────────────────┐  │
 │  │ Agent Subprocess (Goose / OpenCode)                           │  │
-│  │  • Receives migration prompt                                  │  │
+│  │  • Reads skills/prompts from intelligence package             │  │
 │  │  • Explores codebase, executes tools                          │  │
 │  │  • Streams text, tool calls, permission requests              │  │
 │  │  • Connects to Konveyor MCP Server for analysis data          │  │
 │  └───────────────────────────────────────────────────────────────┘  │
+│                              ↕                                      │
+│  ┌───────────────────────────────────────────────────────────────┐  │
+│  │ Migration Intelligence Package (standalone, own package.json) │  │
+│  │  • AGENTS.md / SKILL.md — agent instructions                  │  │
+│  │  • skills/ — migration workflow skills (Agent Skills format)  │  │
+│  │  • prompts/ — workflow prompt templates                       │  │
+│  │  • Consumed by extension, CLI agents, or containers alike     │  │
+│  └───────────────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────────────┘
 ```
+
+### Migration Intelligence Package
+
+The extension currently hardcodes migration intelligence in its prompt
+builder — constructing prompts with inline logic that understands what
+context to include, how to frame violations, and what guidance to give
+the agent. This is not portable: a developer using Goose from the CLI,
+or running an agent in a container, gets none of this intelligence.
+
+This enhancement extracts that intelligence into a standalone package
+in the editor-extensions repo with its own `package.json`:
+
+```text
+intelligence/
+├── package.json
+├── AGENTS.md                    # Agent instructions (Claude Code, Cursor)
+├── SKILL.md                     # Agent Skills standard (Goose, OpenCode)
+├── skills/
+│   ├── create-migration-guide/
+│   │   └── SKILL.md             # Interview user, explore code, create guide
+│   ├── generate-migration-plan/
+│   │   └── SKILL.md             # Guide + violations → phased plan
+│   └── execute-migration-phase/
+│       └── SKILL.md             # Execute one phase, re-analyze, prompt user
+└── prompts/
+    └── ...                      # Workflow prompt templates
+```
+
+Skills follow the [Agent Skills](https://agentskills.io) format. Each
+skill is a directory containing a `SKILL.md` file with YAML frontmatter
+(`name`, `description`) and Markdown instructions, plus optional
+`scripts/`, `references/`, and `assets/` subdirectories. The format
+provides progressive disclosure — agents load only the `name` and
+`description` at discovery time, reading full instructions only when
+activated.
+
+The skills in this package define migration workflows. They are not MCP
+tools — they are instructions that any agent reads and follows. The
+agent uses its built-in file tools to read/write files and the
+[Analyzer MCP](https://github.com/konveyor/enhancements/pull/259) for
+analysis capabilities (`run_analysis`, `get_analysis_results`).
+
+**Key principle**: A developer running any MCP-compatible agent on a
+project with this package gets the same migration intelligence as a
+developer using the VS Code extension. The extension adds UI affordances
+(clickable options, guided flows, chat panel rendering) — it does not
+add different intelligence.
+
+The extension bundles this package and reads from it at runtime, but the
+package has no dependency on the extension. The same files work when
+consumed by Goose, Claude Code, OpenCode, or any agent that can read
+skill files from disk.
 
 ### User Stories
 
@@ -232,22 +330,20 @@ preview. The developer reviews each change, approving most and rejecting one
 that touches a file they want to handle manually. The agent continues working
 with the remaining changes.
 
-#### Story 2: Developer configures agent autonomy level
+#### Story 2: Developer configures agent permissions
 
 A developer working on a sensitive codebase wants the agent to help but doesn't
-trust it to execute arbitrary commands. They open Agent Settings and configure:
-- Autonomy level: "smart" (default)
-- File editing: "ask" (require approval for every file change)
-- Command execution: "deny" (never allow shell commands)
-- Web access: "auto" (allow without asking)
-
-The agent can now read files and search the web freely, but every file
-modification requires explicit approval and shell commands are blocked entirely.
+trust it to execute arbitrary commands. They open Agent Settings in the
+extension, which surfaces the backend's native permission configuration. For
+example, with Goose the developer sets `GOOSE_MODE=approve` so every tool call
+requires approval; with Claude Code they configure `--allowedTools` to restrict
+which tools the agent can use. The extension provides quick access to these
+backend-specific settings without requiring the developer to leave the IDE.
 
 #### Story 3: Developer uses workflow mode for simple fixes
 
 A developer prefers the focused, predictable behavior of single-shot LLM fixes.
-They set `agentMode: false` in settings. When they click "Get Solution," the
+They set `genai.agentMode: false` in settings. When they click "Get Solution," the
 extension sends one prompt to the configured LLM and presents the response as a
 set of file diffs for per-file accept/reject — the same behavior as before the
 agent architecture was introduced.
@@ -297,6 +393,12 @@ Each backend translates its native protocol to these events:
 - **DirectLLMClient**: Wraps existing KaiInteractiveWorkflow, emits synthetic
   permissionRequest events for file writes
 
+The `AgentClient` interface is an internal abstraction — new backends are added
+by implementing the interface in the extension codebase. Third-party registration
+of agent backends (e.g., via a plugin API) is out of scope, but the interface
+makes it straightforward to add new implementations as the agent ecosystem
+evolves.
+
 #### Agent Orchestrator
 
 The `AgentOrchestrator` is the central coordinator for solution requests:
@@ -304,58 +406,52 @@ The `AgentOrchestrator` is the central coordinator for solution requests:
 ```
 User clicks "Get Solution"
   → AgentOrchestrator.run(incidents, scope)
-    → Check agentMode configuration
-    → If agentMode=true AND agent backend available:
+    → Check genai.agentMode configuration
+    → If genai.agentMode=true AND agent backend available:
         Agent Path:
         1. Get/create AgentClient from feature registry
         2. Create new session
         3. Pre-cache incident files (for diff detection)
-        4. Build migration prompt from incidents
+        4. Build migration prompt from incidents + intelligence package
         5. Send prompt to agent
         6. Handle streaming events:
            - Text chunks → accumulate into chat messages
            - Tool calls → display in chat with status
-           - Permission requests → route through ToolPermissionHandler
+           - Permission requests → handled by agent backend natively
            - File changes → route through FileChangeRouter
         7. On completion: scan for any missed file changes
-    → If agentMode=false:
+    → If genai.agentMode=false:
         Workflow Path:
         1. Create DirectLLMClient (wraps KaiInteractiveWorkflow)
         2. Send prompt, receive structured file modifications
         3. Present per-file accept/reject via existing UI
 ```
 
-#### Tool Permission System
+#### Permission Management
 
-Permissions are evaluated through a layered policy:
+Permission management is delegated to each agent backend's native model.
+Each backend has its own mechanism for controlling what the agent can do
+autonomously:
 
-```
-ToolPermissionPolicy:
-  autonomyLevel: "auto" | "smart" | "ask"    (global default)
-  overrides:                                   (per-category)
-    fileEditing: "auto" | "ask" | "deny"
-    commandExecution: "auto" | "ask" | "deny"
-    webAccess: "auto" | "ask" | "deny"
-    mcpTools: "auto" | "ask" | "deny"
-    other: "auto" | "ask" | "deny"
-```
+- **Goose**: `GOOSE_MODE` environment variable (`auto`, `approve`, etc.)
+- **OpenCode**: Permission block configuration
+- **Claude Code**: `--allowedTools` flag and permission settings
 
-The **"smart"** default auto-approves read-only operations and web access, but
-requires approval for file writes and command execution. This balances agent
-productivity with user control.
+The extension does not implement a unified permission layer or attempt to
+translate between these models. Instead, the IDE provides affordances for
+configuring each backend's permissions:
 
-A `ToolClassifier` maps tool names to categories. For example, Goose reports
-tools as `"Developer: Text Editor"` which maps to `text_editor` → `fileEditing`.
-Read-only operations (viewing files, undoing edits) are detected and never
-permission-gated.
-
-The policy is translated to backend-native formats:
-- Goose: `GOOSE_MODE` environment variable
-- OpenCode: Permission block configuration
+- Settings UI surfaces backend-specific permission options
+- Links to backend documentation for advanced configuration
+- Sensible defaults when launching agent subprocesses
 
 #### MCP Bridge Architecture (Interim)
 
-The extension exposes Konveyor's analysis capabilities to agents via MCP:
+This bridge is a temporary stand-in for the
+[Analyzer MCP](https://github.com/konveyor/enhancements/pull/259), which is a
+dependency of this enhancement. Once the Analyzer MCP is available, the bridge
+is replaced entirely. The extension exposes Konveyor's analysis capabilities to
+agents via MCP in the interim:
 
 ```
 Agent subprocess
@@ -367,24 +463,41 @@ MCP Bridge Server (runs in extension process)
 Konveyor analyzer / extension state
 ```
 
-The bridge server runs on a random localhost port, passed to the MCP server via
-environment variable. The MCP server exposes four tools:
+The extension starts the MCP bridge server in `initializeAgent` with workspace
+context from the extension store (workspace root, profiles, rulesets, analyzer
+client). The bridge port is passed to the MCP server via `KONVEYOR_BRIDGE_PORT`
+environment variable when the agent configures its MCP servers. In CLI/container
+contexts, the equivalent startup would be handled by kantra or a similar CLI
+tool, passing workspace path and configuration at startup.
+
+**Note**: Some users report being unable to open ports in their environments.
+The current bridge uses HTTP on localhost, but the MCP specification also
+supports stdio transport. If port restrictions are a blocker, the bridge (or
+the Analyzer MCP that replaces it) should support MCP over stdio as an
+alternative transport.
+
+The MCP server exposes four tools:
 
 - `run_analysis` — Trigger the analyzer on the workspace
 - `get_analysis_results` — Fetch current incidents and rulesets
 - `incidents_by_file` — Query incidents for a specific file path
-- `apply_file_changes` — Apply file modifications (goes through permission system)
+- `apply_file_changes` — Propose file modifications through the extension's
+  review pipeline. Agents can also write files directly using their built-in
+  tools (e.g., Goose's `Developer: Text Editor`); the `AgentFileTracker`
+  detects those changes after the fact. This tool provides an explicit,
+  permission-gated channel so that changes are routed through batch review
+  or inline approval rather than written to disk first
 
 This two-hop architecture (agent → MCP server → bridge → extension) exists
 because the agent communicates with MCP servers via stdio, but the analysis state
 lives in the extension process. The bridge server is the boundary between them.
 
-**Note**: This MCP bridge is an interim solution. The
-[Analyzer MCP proposal](https://github.com/konveyor/enhancements/pull/259)
-proposes a standalone MCP server for analyzer-lsp that would provide these
-analysis tools directly. When the Analyzer MCP lands, the bridge's analysis
-tools (`run_analysis`, `get_analysis_results`, `incidents_by_file`) will be
-replaced by the Analyzer MCP, and the bridge will be simplified or removed.
+When the Analyzer MCP is available, the bridge is removed. The Analyzer MCP
+replaces the bridge's analysis tools (`run_analysis`, `get_analysis_results`,
+`incidents_by_file`) with a standalone server that communicates via stdio and
+manages analysis lifecycle internally (e.g., triggering re-analysis on file
+changes rather than exposing `run_analysis` as a separate tool). This also
+eliminates the localhost HTTP hop and the port-availability concern.
 
 #### File Change Tracking
 
@@ -394,9 +507,12 @@ The `AgentFileTracker` detects file modifications made by the agent:
    referenced in the incidents being fixed
 2. **Permission-time caching**: When a permission request arrives for a file
    write tool, cache the file's current state before the write executes
-3. **Post-completion scanning**: After the agent finishes, scan all cached files
-   for modifications that may have been missed (e.g., if the agent modified a
-   file without going through the permission system)
+3. **Post-completion scanning**: Agents can modify files through paths the
+   extension doesn't directly observe — bash commands (`sed -i`, `echo >`),
+   auto-approved tool calls, or tools the classifier didn't recognize as
+   file-editing. After the agent finishes, scan all cached files against current
+   disk state to detect any changes that weren't caught during the session. This
+   ensures the batch review UI shows ALL modifications for user approval
 
 Detected changes are routed through the `FileChangeRouter`:
 - **Batch review mode**: Changes queue to `pendingBatchReview` for carousel-style
@@ -422,32 +538,38 @@ A settings panel allows configuration of:
 - **LLM provider and model**: Supports OpenAI, Anthropic, Azure, Ollama, Bedrock,
   and custom endpoints
 - **Agent backend**: Goose or OpenCode (future: additional backends)
-- **Autonomy level**: Global setting with per-category overrides
+- **Backend permissions**: Surface backend-native permission configuration
 - **Credentials**: Stored in VS Code SecretStorage (encrypted per platform)
 - **Agent extensions**: Enable/disable Goose extensions and MCP servers
 
 ### Security, Risks, and Mitigations
 
 **Risk: Agent executes harmful commands**
-- *Mitigation*: Tool permission system with configurable autonomy levels. Default
-  "smart" mode requires user approval for file writes and command execution.
-  "deny" option completely blocks specific categories.
+- *Mitigation*: Each agent backend provides its own permission model for
+  controlling tool access. The extension surfaces these settings in the IDE
+  and launches backends with sensible defaults. Users can restrict agent
+  autonomy through backend-native configuration.
 
 **Risk: Agent modifies files outside the workspace**
-- *Mitigation*: File change tracking detects all modifications. All changes go
-  through user review before being applied to the workspace. Agents operate in
-  the workspace directory.
+- *Mitigation*: File change tracking detects all modifications. Changes proposed
+  via MCP tools are staged for review before disk write. Changes written directly
+  by agent file tools are detected by `AgentFileTracker`, which pre-caches
+  original content so they can be reverted. In both paths, the user reviews
+  changes before they are finalized. Agents operate in the workspace directory.
 
 **Risk: Credential exposure to agent subprocess**
 - *Mitigation*: Credentials are passed via environment variables (not command
-  line arguments). VS Code SecretStorage provides encrypted storage. However,
-  the credential refresh problem (issue #1334) means Hub tokens currently expire
-  in the subprocess.
+  line arguments). VS Code SecretStorage provides encrypted storage. Hub token
+  refresh is handled by the
+  [credential file sidecar](https://github.com/konveyor/enhancements/pull/265)
+  pattern — the extension writes refreshed tokens to disk, and the agent
+  re-reads on auth failure.
 
 **Risk: MCP bridge server accessible to other processes**
-- *Mitigation*: The bridge server binds to a random localhost port. It is only
-  accessible from the same machine. In the future, authentication tokens could
-  be added for additional security.
+- *Mitigation*: The bridge is an interim stand-in that will be replaced by the
+  Analyzer MCP (which communicates via stdio, eliminating the network surface
+  entirely). While the bridge is in use, it binds to a random localhost port
+  and is only accessible from the same machine.
 
 **Risk: Agent produces incorrect migration code**
 - *Mitigation*: All changes require user review. The diff UI shows exactly what
@@ -463,8 +585,6 @@ New VS Code settings:
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `genai.agentMode` | boolean | `true` | Enable autonomous agent mode |
-| `genai.autonomyLevel` | enum | `"smart"` | Global tool permission level |
-| `genai.permissionOverrides` | object | `{}` | Per-category permission overrides |
 | `experimentalChat.agentBackend` | enum | `"goose"` | Agent backend selection |
 | `experimentalChat.gooseBinaryPath` | string | `""` | Path to Goose binary |
 | `experimentalChat.opencodeBinaryPath` | string | `""` | Path to OpenCode binary |
@@ -473,22 +593,17 @@ New VS Code settings:
 ### State Management
 
 The extension uses a Zustand store with Immer middleware for state management.
-Agent state (chat messages, pending permissions, batch review queue, agent
-configuration) is stored centrally and synchronized to webviews via sync bridges.
+Agent state (chat messages, batch review queue, agent configuration) is stored
+centrally and synchronized to webviews via sync bridges.
 
 Key state slices:
 - `agentState`: Current lifecycle state (stopped/starting/running/error)
 - `agentChatMessages`: Conversation history with tool calls and content blocks
-- `pendingPermissions`: Permission requests awaiting user response
 - `pendingBatchReview`: File changes queued for batch review
-- `toolPermissionPolicy`: Current permission configuration
 
 ### Test Plan
 
 **Unit tests**:
-- ToolClassifier: Verify tool name → category mapping for all known tool patterns
-- ToolPermissionHandler: Verify policy evaluation for all autonomy level ×
-  category combinations
 - FileChangeRouter: Verify routing to batch queue vs. chat messages
 
 **Integration tests**:
@@ -501,19 +616,19 @@ Key state slices:
 **E2E tests**:
 - Full solution workflow: select violations → get solution → review changes →
   accept/reject
-- Agent settings: configure provider, model, autonomy level
+- Agent settings: configure provider, model, backend permissions
 - Batch review: queue multiple files → navigate carousel → accept/reject each
-- Workflow mode fallback: agentMode=false produces same behavior as before
+- Workflow mode fallback: `genai.agentMode=false` produces same behavior as before
 
 ### Upgrade / Downgrade Strategy
 
-**Upgrade from pre-agent extension**: The `agentMode` setting defaults to `true`,
+**Upgrade from pre-agent extension**: `genai.agentMode` defaults to `true`,
 but the extension gracefully falls back to workflow mode if no agent binary is
 available. Users who upgrade without installing Goose/OpenCode will see no change
 in behavior. A notification suggests installing an agent backend for enhanced
 capabilities.
 
-**Downgrade**: Setting `agentMode: false` restores the previous single-shot LLM
+**Downgrade**: Setting `genai.agentMode: false` restores the previous single-shot LLM
 behavior. No data migration is needed — agent chat history is session-scoped and
 not persisted between extension activations.
 
@@ -526,7 +641,7 @@ at any time. Each backend starts fresh with a new session. Configuration
 - **2026-02**: POC implementation on `feature/goose` branch
   ([editor-extensions#1243](https://github.com/konveyor/editor-extensions/issues/1243))
   - Pluggable AgentClient interface with Goose, OpenCode, and DirectLLM backends
-  - Tool permission system with autonomy levels and per-category overrides
+  - Permission management delegated to agent backends
   - MCP bridge server exposing Konveyor analysis tools
   - Chat UI with streaming, tool calls, and permission review
   - Batch file review carousel
@@ -536,6 +651,7 @@ at any time. Each backend starts fresh with a new session. Configuration
 
 - **2026-03**: Credential refresh blocker identified
   ([editor-extensions#1334](https://github.com/konveyor/editor-extensions/issues/1334))
+  — resolved via [credential file sidecar](https://github.com/konveyor/enhancements/pull/265)
 
 ## Drawbacks
 
@@ -555,10 +671,11 @@ at any time. Each backend starts fresh with a new session. Configuration
    Goose in particular spawns its own subprocess tree. This may be problematic on
    resource-constrained machines.
 
-5. **Credential management**: The credential refresh problem
-   ([#1334](https://github.com/konveyor/editor-extensions/issues/1334)) blocks
-   Hub LLM proxy integration with agent mode, limiting deployment options for
-   enterprise users.
+5. ~~**Credential management**~~: The credential refresh problem
+   ([#1334](https://github.com/konveyor/editor-extensions/issues/1334)) is
+   resolved by the
+   [credential file sidecar](https://github.com/konveyor/enhancements/pull/265)
+   enhancement.
 
 ## Alternatives
 
@@ -613,6 +730,11 @@ Use VS Code's built-in Copilot Chat API to provide agent capabilities.
 
 ## Infrastructure Needed
 
+- **Migration intelligence package**: Standalone package in the editor-extensions
+  repo with its own `package.json` containing built-in skills, prompts, and
+  agent instructions (`AGENTS.md` / `SKILL.md`). The extension bundles this
+  package; CLI and container agents consume it directly from disk.
+
 - **CI changes**: Build and test matrix should verify that the extension works
   correctly in both agent mode and workflow mode. Agent-dependent tests may need
   mock backends.
@@ -621,7 +743,6 @@ Use VS Code's built-in Copilot Chat API to provide agent capabilities.
   configuring providers, understanding permission levels) and migration from the
   previous LLM-only workflow.
 
-- **Upstream coordination**: The credential refresh problem requires changes in
-  Goose's OpenAI provider implementation
-  ([block/goose#7812](https://github.com/block/goose/pull/7812)). Coordination
-  with the Goose project team is needed.
+- **Upstream coordination**: Coordination with the Goose project team may be
+  needed for agent-side integration of the credential file sidecar pattern
+  ([enhancements#265](https://github.com/konveyor/enhancements/pull/265)).
