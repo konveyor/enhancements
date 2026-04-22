@@ -7,21 +7,20 @@ This document contains the detailed design specifications for the builtin Auth e
 The Hub will function as an OIDC provider with the following components:
 - User and role-based access control (RBAC) managed in the Hub inventory
 - Support for local authentication or delegation to external providers (OIDC, LDAP/Active Directory)
-- API key-based authentication for programmatic access
+- Personal Access Token (PAT) based authentication for programmatic access
 - Token issuance, validation, and revocation
 
 ## Routes and Endpoints
 
 ### Resource Management Endpoints
 
-| Method        | Path                 | Purpose                        |
-|---------------|----------------------|--------------------------------|
-| ANY           | /auth/users          | User collection                |
-| ANY           | /auth/roles          | Roles collection               |
-| GET           | /auth/permissions    | Permission collection          |
-| GET \| DELETE | /auth/tokens         | Issued tokens                  |
-| ANY           | /auth/apikeys        | API-Key collection             |
-| GET           | /auth/idp/identities | Remote IDP identity collection |
+| Method                | Path                 | Purpose                        |
+|-----------------------|----------------------|--------------------------------|
+| ANY                   | /auth/users          | User collection                |
+| ANY                   | /auth/roles          | Roles collection               |
+| GET                   | /auth/permissions    | Permission collection          |
+| POST \| GET \| DELETE | /auth/tokens         | Issued tokens                  |
+| GET                   | /auth/idp/identities | Remote IDP identity collection |
 
 
 ### Standard OIDC Endpoints
@@ -46,7 +45,7 @@ The Hub will function as an OIDC provider with the following components:
 - **Permission** - Named permissions mapped to scopes
 - **IdpIdentity** - Identities authenticated by remote IdP provider. Contains the refresh token.
 - **Token** - Issued (valid) tokens
-- **APIKey** - Issued (valid) API-Keys
+- **PAT** - Issued (valid) Personal Access Tokens
 
 ### Entity Relationship Diagram
 
@@ -54,8 +53,8 @@ The Hub will function as an OIDC provider with the following components:
 erDiagram
     USER }o--o{ ROLE : "granted"
     ROLE }o--o{ PERMISSION : "has"
-    USER ||--o{ API_KEY : "owns"
-    TASK ||--o{ API_KEY : "owns"
+    USER ||--o{ PAT : "owns"
+    TASK ||--o{ PAT : "owns"
     IDP_IDENTITY ||--|| USER : "EXTERNAL identity"
     IDP_IDENTITY ||--|| TOKEN : "delegated authentication"
 
@@ -77,24 +76,18 @@ erDiagram
         string scope "scope"
     }
 
-    API_KEY {
-        uint id PK
-        uint user_id FK
-        uint task_id FK
-        string digest "unique, hashed-secret"
-        datetime expiration
-    }
-
     IDP_IDENTITY {
         uint id PK
-        uint user_id FK
+        uint userid FK
         string provider "Ex: google"
         string subject
-        string refresh_token "(encrypted)"
+        string refresh_token "(digest)"
         datetime expiration
         datetime last_authenticated
         datetime last_refreshed
     }
+    
+    
     
     TOKEN {
         uint id PK
@@ -113,7 +106,7 @@ erDiagram
 
 - The Token table contains hub-issued tokens only
 - The Token._expiration_ column is mainly used for reaping expired tokens
-- API-Keys are stored in the DB but cached in memory for performance and to mitigate DB pressure
+- PATs are stored in the DB but cached in memory for performance and to mitigate DB pressure
 
 ## Authentication Flows
 
@@ -322,7 +315,7 @@ sequenceDiagram
     participant Hub as Hub Provider<br>(OIDC Provider)
     participant DB as API Key Database / Store
 
-    Note over UI,ProtectedAPI: Bearer Token Validation Flow<br>(JWT RSA + JWT HMAC deprecated + API Keys)
+    Note over UI,ProtectedAPI: Bearer Token Validation Flow<br>(JWT RSA + JWT HMAC deprecated + PATs)
 
     UI->>ProtectedAPI: GET /api/projects<br>Authorization: Bearer <token>
     activate ProtectedAPI
@@ -346,15 +339,15 @@ sequenceDiagram
         ProtectedAPI->>ProtectedAPI: 4. Validate Standard JWT Claims (iss, aud, exp, etc.)
         ProtectedAPI->>ProtectedAPI: 5. Extract Claims (sub, scope, roles...)
 
-    else Token is NOT a valid JWT → Treat as API Key
-        ProtectedAPI->>DB: 2b. Lookup API Key in DB
+    else Token is NOT a valid JWT → Treat as PAT
+        ProtectedAPI->>DB: 2b. Lookup PAT in DB
         activate DB
-        DB-->>ProtectedAPI: Key record (active?, scopes/permissions)
+        DB-->>ProtectedAPI: PAT record (active?, scopes/permissions)
         deactivate DB
 
-        alt API Key invalid or revoked
+        alt PAT invalid or revoked
             ProtectedAPI-->>UI: 401 Unauthorized
-        else API Key valid
+        else PAT valid
             ProtectedAPI->>ProtectedAPI: 3c. Map DB permissions to scopes
         end
     end
@@ -372,7 +365,7 @@ sequenceDiagram
 
     deactivate ProtectedAPI
 
-    Note over ProtectedAPI: Key Notes<br/>RSA via JWKS is strongly preferred.<br/>HMAC is deprecated but honored for backwards compatibility.<br/>API Keys are mapped to the same scope model as JWTs.<br/>Always reject alg="none" and unknown algorithms.<br/>Consider logging HMAC usage for migration tracking.
+    Note over ProtectedAPI: Key Notes<br/>RSA via JWKS is strongly preferred.<br/>HMAC is deprecated but honored for backwards compatibility.<br/>PATs are mapped to the same scope model as JWTs.<br/>Always reject alg="none" and unknown algorithms.<br/>Consider logging HMAC usage for migration tracking.
 ```
 
 ### External IdP Token Validation
@@ -414,16 +407,17 @@ sequenceDiagram
     deactivate ProtectedAPI
 ```
 
-## API Key Authentication
+## Personal Access Token (PAT) Authentication
 
 ### Generation
 
-API keys are generated via POST to `/auth/apikey` and inherit permissions from the creating user's roles.
+PATs are generated via POST to `/auth/tokens` and inherit permissions from the creating user's roles.
 
 **Request:**
+POST /auth/tokens
 ```yaml
-POST /auth/apikey
-
+kind:       # (PAT|JWT)
+lifespan:   # OPTIONAL (hours)
 expiration: # OPTIONAL (datetime)
 ```
 
@@ -431,33 +425,33 @@ expiration: # OPTIONAL (datetime)
 ```yaml
 id: 18
 expiration: # OPTIONAL
-key: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY
+token: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY
 ```
 
 **Implementation details:**
-- Keys are 256-bit base64URL-encoded strings
-- The key is stored as a hashed digest in the database
-- Permissions (scopes) are inherited from the user's role assignments at creation time
-- Keys can have optional expiration dates
+- PATs are 256-bit HEX strings.
+- The PAT is stored as a hashed digest in the database.
+- Permissions (scopes) are inherited from the user's role assignments.
+- PATs can have optional expiration dates.
 
 ### Authentication
 
-API keys are presented as Bearer tokens:
+PATs are presented as Bearer tokens:
 ```
-Authorization: Bearer <key>
+Authorization: Bearer <token>
 ```
 
 **Validation process:**
-1. Extract the key from the Authorization header
-2. Hash and lookup the stored key in the database
-3. Verify the key is not expired or revoked
+1. Extract the token from the Authorization header
+2. Hash and lookup the stored token in the database
+3. Verify the token is not expired or revoked
 4. Retrieve associated permissions (scopes)
 5. Authorize endpoint access based on scopes
 
 ### Addon Tokens
 
-The task manager and addon API authorization will be refactored to use API keys instead of custom JWT token generation:
-- New tasks will be configured with API keys for authentication
+The task manager and addon API authorization will be refactored to use PATs instead of custom JWT token generation:
+- New tasks will be configured with PATs for authentication
 - Legacy support: Tokens with `SigningMethod=HMAC` will still be honored for backwards compatibility with in-flight tasks
 - This provides a unified authentication mechanism across all programmatic access
 
@@ -465,7 +459,8 @@ The task manager and addon API authorization will be refactored to use API keys 
 
 ### Policy Schema
 
-The group-to-role mapping policy is expressed in YAML and can be managed through the UI. The policy defines how LDAP/AD group memberships map to internal roles.
+The group-to-role mapping policy is expressed in YAML and can be managed through the UI. The policy defines how LDAP/AD 
+group memberships map to internal roles.
 
 **Structure:**
 - Each mapping rule contains a conditional expression (`any` or `and`) and a list of `roles` to assign
@@ -531,10 +526,10 @@ groups:
 
 ## Token Revocation
 
-Tokens and API keys can be explicitly revoked:
+Tokens and PATs can be explicitly revoked:
 
-- **DELETE /auth/tokens/:id** - Revokes a specific token (effective on next refresh)
-- **DELETE /auth/apikeys/:id** - Revokes a specific API key (effective immediately)
+- **DELETE /auth/grants/:id** - Revokes a specific OIDC grant (effective on next refresh)
+- **DELETE /auth/tokens/:id** - Revokes a specific PAT (effective immediately)
 
 Revocation is tracked in the database to ensure revoked credentials are not accepted.
 
@@ -553,4 +548,4 @@ The login page UI fragment is read from a ConfigMap managed by the operator. Thi
 
 ### Security
 
-All sensitive information is stored securely in the database: passwords as bcrypt hashes, refresh tokens encrypted. API keys are stored as cryptographic hashes (digests) only, never in plain text.
+All sensitive information is stored securely in the database: passwords as bcrypt hashes, refresh tokens encrypted. PATs are stored as cryptographic hashes (digests) only, never in plain text.

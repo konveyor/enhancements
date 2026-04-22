@@ -48,9 +48,8 @@ Eliminate dependence on Keycloak.
 - To delegate AuthN, AuthZ to an _external_ OIDC provider. (option)
 - To delegate AuthN, AuthZ to an _external_ LDAP, Active Directory with group mapping. (option)
 - To provide RBAC (users, roles, permissions) management in the inventory.
-- To provide for API-Key authentication.  An API-Key is a generated secret used
-  for application integration.
-- To support explicit revocation of both access tokens and API keys for
+- To provide for PAT authentication.  A Personal Access Token (PAT) is a long-lived, opaque token (256 bit hex).
+- To support explicit revocation of both access tokens and PATs for
   immediate credential invalidation.
 
 ### Non-Goals
@@ -71,7 +70,7 @@ organization's existing identity provider (OIDC, LDAP, or Active Directory), so
 that I can enforce centralized authentication policies and maintain a single
 source of truth for user identities.
 
-**As a developer**, I want to use API keys for programmatic access to Konveyor
+**As a developer**, I want to use Personal Access Tokens (PATs) for programmatic access to Konveyor
 APIs, so that I can build automated integrations without managing user
 credentials.
 
@@ -101,7 +100,7 @@ authorization code flow with PKCE. This provider can operate in several modes:
    rules.
 
 The Hub inventory will be extended with new entities for users, roles,
-permissions, tokens, API keys, and external identity mappings. Users are
+permissions, tokens, PATs, and external identity mappings. Users are
 assigned to roles, and roles are associated with permissions (represented as
 OAuth scopes).
 
@@ -160,34 +159,34 @@ Permissions can be scoped broadly (all operations on a resource) or narrowly
 (specific operations on specific sub-resources), supporting both simple and
 complex authorization requirements.
 
-#### API Key Authentication
+#### Personal Access Token (PAT) Authentication
 
-API keys provide a secure mechanism for programmatic access, addressing
+PATs provide a secure mechanism for programmatic access, addressing
 [RFE-266](https://github.com/konveyor/enhancements/issues/266). Users can
-generate API keys through the Hub API, which inherit the user's permissions at
-the time of creation. Keys are presented as Bearer tokens and validated using
+generate PATs through the Hub API, which inherit the user's permissions at
+the time of creation. PATs are presented as Bearer tokens and validated using
 the same scope-based authorization model as JWT tokens.
 
-The task manager and addon API will be refactored to use API keys instead of
+The task manager and addon API will be refactored to use PATs instead of
 custom HMAC-signed JWTs. For backwards compatibility, existing HMAC tokens will
 continue to be honored for in-flight tasks.
 
-API keys support optional expiration dates and can be explicitly revoked through
-the Hub API. The keys themselves are not stored in the database—only
+PATs support optional expiration dates and can be explicitly revoked through
+the Hub API. The tokens themselves are not stored in the database—only
 cryptographic digests—ensuring that compromise of the database does not directly
-expose API keys.
+expose PATs.
 
 #### Tools Integration
 
 Client tools such as **Kantra** and **KAI** should authenticate by getting an
-API-Key.  This is almost exactly like the current process of getting a (JWT)
-token (POST `/auth/login`), the client will POST to a new endpoint that instead
-returns an API-Key. The returned key is specified in future requests using
-authentication header: `Authorization Bearer <key>`.
+PAT.  This is almost exactly like the current process of getting a (JWT)
+token (POST `/auth/token`), the client will POST to a new endpoint that instead
+returns a PAT. The returned token is specified in future requests using
+authentication header: `Authorization Bearer <token>`.
 
 #### Task-Scoped Authentication
 
-API keys can be associated with either users or individual tasks. This enables
+PATs can be associated with either users or individual tasks. This enables
 task-specific authentication where a running task (such as an analysis addon)
 has exactly the permissions it needs for its operation, independent of the user
 who initiated it. This separation improves security by limiting the blast radius
@@ -196,20 +195,20 @@ operations.
 
 #### Credential Lifecycle and Revocation
 
-Both access tokens and API keys support explicit revocation to enable immediate
+Both access tokens and PATs support explicit revocation to enable immediate
 response to security incidents or access changes:
 
-- **API Key Revocation**: API keys can be revoked immediately through the Hub
-  API (`DELETE /auth/apikeys/:id`). Revoked keys are rejected instantly on the
-  next authentication attempt, ensuring compromised keys cannot be used.
+- **Personal Access Token (PAT) Revocation**: PATs can be revoked immediately through the Hub
+  API (`DELETE /auth/tokens/:id`). Revoked tokens are rejected instantly on the
+  next authentication attempt, ensuring compromised tokens cannot be used.
 
 - **Token Revocation**: Access tokens issued via OIDC flows can be revoked
-  through the Hub API (`DELETE /auth/tokens/:id`). Token revocation takes effect
+  through the Hub API (`DELETE /auth/grants/:id`). Token revocation takes effect
   on the next token refresh or when the current access token expires, following
   standard OIDC patterns. Refresh tokens can also be revoked to prevent
   re-authentication.
 
-- **Automatic Expiration**: Both tokens and API keys support configurable
+- **Automatic Expiration**: Both tokens and PATs support configurable
   expiration dates. Expired credentials are automatically rejected without
   requiring explicit revocation.
 
@@ -221,10 +220,10 @@ while maintaining compatibility with OIDC client expectations.
 
 - All sensitive data will be stored securely: passwords as bcrypt hashes,
   refresh tokens encrypted
-- API keys are stored as hashed digests, never in plain text
-- Token validation supports both RSA-signed JWTs (via JWKS) and API keys
+- PATs are stored as hashed digests, never in plain text
+- Token validation supports both RSA-signed JWTs (via JWKS) and PATs
 - HMAC-signed tokens are deprecated but maintained for backwards compatibility
-- Tokens and API keys can be explicitly revoked with immediate (API keys) or
+- Tokens and PATs can be explicitly revoked with immediate (PATs) or
   deferred (tokens on next refresh) effect
 - OIDC clients are configured via operator-managed Secrets rather than stored in
   the database
@@ -255,6 +254,45 @@ The system is designed to adapt to different organizational requirements without
 architectural changes. Deployments can start simple with local authentication
 and evolve to integrate with enterprise identity providers as needs change,
 without requiring migration or re-architecture.
+
+### Operator Changes
+
+The operator will require significant changes to support the Hub's built-in OIDC provider:
+
+#### Hub Configuration
+
+- **Replace Keycloak configuration**: The operator will remove Keycloak-specific configuration from the Hub deployment and replace it with OIDC provider configuration settings
+- **OIDC key signing secret**: The operator must create and manage a Kubernetes Secret containing the RSA private key used by the Hub to sign JWT tokens. This secret will be:
+  - Generated automatically during initial deployment
+  - Mounted into the Hub pod
+  - Rotatable through operator-managed updates
+  - Name: `hub-oidc-signing-key` (or similar)
+  - Format: PEM-encoded RSA private key (minimum 2048-bit)
+
+#### UI Configuration
+
+The UI deployment will be configured to authenticate against the Hub's OIDC provider instead of Keycloak:
+
+- **OIDC client registration**: The operator will configure the UI with OIDC client credentials via ConfigMap or environment variables:
+  - `OIDC_ISSUER`: Points to the Hub's OIDC endpoint (e.g., `https://hub.konveyor.io`)
+  - `OIDC_CLIENT_ID`: Unique identifier for the UI client (e.g., `konveyor-ui`)
+  - `OIDC_CLIENT_SECRET`: Client secret for confidential client authentication (stored in a Secret)
+  - `OIDC_REDIRECT_URI`: Callback URL for the authorization code flow (e.g., `https://ui.konveyor.io/auth/callback`)
+  - `OIDC_SCOPES`: Requested scopes (e.g., `openid profile email`)
+
+#### Client Registration
+
+- The operator will seed the Hub with OIDC client configurations via ConfigMap, including:
+  - UI client definition (client_id, allowed redirect URIs, allowed scopes)
+  - Any additional clients for tools or integrations
+  - This ConfigMap will be mounted into the Hub and read at startup
+
+#### Migration Support
+
+For existing deployments currently using Keycloak:
+- The operator will support a migration mode where Keycloak can be configured as an external OIDC provider
+- A configuration flag or CR annotation will control whether to deploy Keycloak or use the built-in provider
+- Documentation will be provided for migrating users from Keycloak to local Hub authentication
 
 ### Security, Risks, and Mitigations
 
@@ -296,4 +334,10 @@ illustration not approval) including:
 - External provider integration scenarios
 
 ### Upgrade / Downgrade Strategy
+
+Users currently using Keycloak will be converted to the OIDC federated architecture. The keycloak
+will be configured as an _upstream_ IdP.  Users choosing to remove keycloak from the deployment will
+need to import _remote_ users into the hub as _local_ users.  Rather than an upgrade mechanism,
+perhaps a tackle CR flag would enable an option for the UI to prompt the user at the next login
+to create a local user.
 
