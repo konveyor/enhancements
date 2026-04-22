@@ -184,6 +184,9 @@ token (POST `/auth/token`), the client will POST to a new endpoint that instead
 returns a PAT. The returned token is specified in future requests using
 authentication header: `Authorization Bearer <token>`.
 
+The **LLM Proxy** will no longer perform token authentication. Instead, the LLM Proxy servers
+will be proxied behind the hub /services endpoint and delegate auth to the hub.
+
 #### Task-Scoped Authentication
 
 PATs can be associated with either users or individual tasks. This enables
