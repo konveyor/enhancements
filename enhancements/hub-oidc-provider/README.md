@@ -283,48 +283,9 @@ The UI deployment will be configured to authenticate against the Hub's OIDC prov
 #### OIDC Configuration Secret
 
 - The operator will seed the Hub with all OIDC-related configuration via a single Secret (`hub-oidc`):
-  - **Client registrations** (`clients:` section): UI client, tool clients, etc.
-  - **External IdP configurations** (`idp:` section): Keycloak, Google, LDAP, etc.
-  - This Secret will be mounted into the Hub at `/etc/hub/` and read at startup (file: `/etc/hub/oidc.yaml`)
-  
-Example structure:
-```yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: hub-oidc
-  namespace: konveyor-tackle
-type: Opaque
-stringData:
-  oidc.yaml: |
-    clients:
-      - clientId: konveyor-ui
-        clientSecret: <ui-client-secret>
-        redirectURIs:
-          - https://ui.konveyor.io/auth/callback
-        scopes:
-          - openid
-          - profile
-          - email
-      - clientId: kantra-cli
-        clientSecret: <kantra-client-secret>
-        redirectURIs:
-          - http://localhost:*
-        scopes:
-          - openid
-          - profile
-    
-    idp:
-      - kind: oidc
-        name: keycloak
-        issuer: "https://keycloak.example.com/realms/konveyor"
-        clientId: "tackle-hub"
-        clientSecret: "<keycloak-client-secret>"
-        scopes:
-          - openid
-          - profile
-          - email
-```
+  - **Client registrations**: UI client, CLI tool clients, etc. with their credentials and allowed scopes
+  - **External IdP configurations**: Keycloak, Google, LDAP, etc. with connection details and credentials
+  - This Secret will be mounted into the Hub at `/etc/hub/` and read at startup
 
 #### Migration Support
 
@@ -349,25 +310,13 @@ enabled (`AUTH_REQUIRED=true`), it will:
 
 1. **Extract Keycloak configuration** from the current Hub deployment environment variables and Secrets
 
-2. **Update the OIDC configuration Secret** (`hub-oidc`) to include Keycloak as an external IdP in the `idp:` section:
-   ```yaml
-   idp:
-     - kind: oidc
-       name: keycloak
-       issuer: "https://keycloak.example.com/realms/konveyor"
-       clientId: "tackle-hub"
-       clientSecret: "<keycloak-client-secret>"
-       scopes:
-         - openid
-         - profile
-         - email
-   ```
-   
-   See the "OIDC Configuration Secret" section above for the complete Secret structure.
+2. **Create or update the OIDC configuration Secret** (`hub-oidc`) to include:
+   - Client registrations (UI, tools, etc.)
+   - Keycloak as an external IdP with its issuer URL, client credentials, and scopes
 
 3. **Update Hub deployment** to:
    - Remove Keycloak-specific environment variables
-   - Ensure the `hub-oidc` Secret is mounted at `/etc/hub/`
+   - Mount the `hub-oidc` Secret at `/etc/hub/`
 
 5. **Preserve Keycloak deployment** (optional):
    - If `spec.keycloak.enabled=true` in the Tackle CR, the operator continues to deploy and manage Keycloak
