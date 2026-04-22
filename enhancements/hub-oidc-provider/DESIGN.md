@@ -44,69 +44,140 @@ The Hub will function as an OIDC provider with the following components:
 - **Role** - Named groups of permissions (scopes)
 - **Permission** - Named permissions mapped to scopes
 - **IdpIdentity** - Identities authenticated by remote IdP provider. Contains the refresh token.
-- **Token** - Issued (valid) tokens
-- **PAT** - Issued (valid) Personal Access Tokens
+- **Client** - OIDC client registrations
+- **Grant** - OIDC authorization grants (authorization codes and refresh tokens)
+- **Token** - Issued tokens (JWTs, PATs, and other token types differentiated by Kind field)
+- **RsaKey** - RSA signing keys for JWT tokens
 
 ### Entity Relationship Diagram
 
 ```mermaid
 erDiagram
-    USER }o--o{ ROLE : "granted"
-    ROLE }o--o{ PERMISSION : "has"
-    USER ||--o{ PAT : "owns"
-    TASK ||--o{ PAT : "owns"
-    IDP_IDENTITY ||--|| USER : "EXTERNAL identity"
-    IDP_IDENTITY ||--|| TOKEN : "delegated authentication"
+    USER }o--o{ ROLE : "assigned via UserRole"
+    ROLE }o--o{ PERMISSION : "has via RolePermission"
+    USER ||--o{ TOKEN : "owns"
+    TASK ||--o{ TOKEN : "owns"
+    CLIENT ||--o{ GRANT : "has"
+    GRANT ||--o{ TOKEN : "exchanges for"
+    TOKEN }o--o| GRANT : "references"
+    TOKEN }o--o| IDP_IDENTITY : "authenticated via"
 
     USER {
         uint id PK
-        string userid "unique"
-        string password "bcrypt hash"
-        string email "unique"
+        time create_time
+        string create_user
+        string update_user
+        string subject "indexed, not null"
+        string userid "unique, not null"
+        string password "bcrypt hash, not null"
+        string email "indexed, not null"
     }
 
     ROLE {
         uint id PK
-        string name "unique"
+        time create_time
+        string create_user
+        string update_user
+        string name "indexed, not null"
     }
 
     PERMISSION {
         uint id PK
-        string name "human readable name"
-        string scope "scope"
+        time create_time
+        string create_user
+        string update_user
+        string name "not null"
+        string scope "unique, not null"
     }
 
     IDP_IDENTITY {
         uint id PK
-        uint userid FK
-        string provider "Ex: google"
-        string subject
-        string refresh_token "(digest)"
-        datetime expiration
-        datetime last_authenticated
-        datetime last_refreshed
+        time create_time
+        string create_user
+        string update_user
+        string issuer "not null"
+        string subject "unique, not null"
+        string refresh_token "encrypted, not null"
+        time expiration "indexed"
+        time last_authenticated
+        time last_refreshed
+        string scopes
+        string roles
+        string userid
+        string email
     }
     
+    CLIENT {
+        uint id PK
+        time create_time
+        string create_user
+        string update_user
+        string auth_id "unique, not null"
+        string secret "not null"
+        string grant_kind
+        string scopes
+        int token_lifespan "not null"
+    }
     
+    RSA_KEY {
+        uint id PK
+        time create_time
+        string create_user
+        string update_user
+        string pem "not null, secret"
+    }
+    
+    GRANT {
+        uint id PK
+        time create_time
+        string create_user
+        string update_user
+        string kind "not null"
+        string auth_id "unique, not null"
+        string subject "indexed"
+        string refresh_token "unique, digest"
+        string auth_code "indexed"
+        string scopes
+        time issued
+        time expiration
+        uint client_id FK
+    }
     
     TOKEN {
         uint id PK
-        uint user_id FK
-        uint idp_identity_id FK "0 = none"
-        string jti "jwt id"
-        datetime expiration
+        time create_time
+        string create_user
+        string update_user
+        string kind "not null (JWT, PAT, etc)"
+        string auth_id "unique, not null"
+        string subject "indexed"
+        string digest "indexed"
+        string scopes "not null"
+        time issued "not null"
+        time expiration
+        time revoked
+        uint grant_id FK "nullable"
+        uint user_id FK "nullable"
+        uint idp_identity_id FK "nullable"
+        uint task_id FK "nullable"
     }
     
     TASK {
-    uint id PK
+        uint id PK
+        time create_time
+        string create_user
+        string update_user
     }
 ```
 
 ### Implementation Notes
 
-- The Token table contains hub-issued tokens only
-- The Token._expiration_ column is mainly used for reaping expired tokens
-- PATs are stored in the DB but cached in memory for performance and to mitigate DB pressure
+- The Token table is unified and contains all token types (JWTs, PATs, etc.) differentiated by the `kind` field
+- The Token.expiration column is mainly used for reaping expired tokens
+- The Token.digest column stores hashed tokens for lookup (PATs and refresh tokens)
+- The Grant table stores OIDC authorization grants, including authorization codes and refresh token metadata
+- Client registrations are stored in the Client table
+- RSA signing keys are stored in the RsaKey table
 
 ## Authentication Flows
 
@@ -430,8 +501,8 @@ token: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY
 
 **Implementation details:**
 - PATs are 256-bit HEX strings.
-- The PAT is stored as a hashed digest in the database.
-- Permissions (scopes) are inherited from the user's role assignments.
+- PATs are stored in the Token table with `kind = "PAT"` as a hashed digest in the `digest` field.
+- Permissions (scopes) are inherited from the user's role assignments and stored in the `scopes` field.
 - PATs can have optional expiration dates.
 
 ### Authentication
@@ -443,9 +514,9 @@ Authorization: Bearer <token>
 
 **Validation process:**
 1. Extract the token from the Authorization header
-2. Hash and lookup the stored token in the database
-3. Verify the token is not expired or revoked
-4. Retrieve associated permissions (scopes)
+2. Hash and lookup the token in the Token table by digest
+3. Verify the token is not expired (check `expiration` field) or revoked (check `revoked` timestamp)
+4. Retrieve associated permissions from the `scopes` field
 5. Authorize endpoint access based on scopes
 
 ### Addon Tokens
@@ -526,12 +597,12 @@ groups:
 
 ## Token Revocation
 
-Tokens and PATs can be explicitly revoked:
+Tokens and grants can be explicitly revoked:
 
 - **DELETE /auth/grants/:id** - Revokes a specific OIDC grant (effective on next refresh)
-- **DELETE /auth/tokens/:id** - Revokes a specific PAT (effective immediately)
+- **DELETE /auth/tokens/:id** - Revokes a specific token (JWT, PAT, etc., effective immediately)
 
-Revocation is tracked in the database to ensure revoked credentials are not accepted.
+Revocation is tracked in the database via the Token.revoked timestamp field to ensure revoked credentials are not accepted.
 
 ## Configuration Management
 
