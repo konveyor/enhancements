@@ -225,8 +225,8 @@ while maintaining compatibility with OIDC client expectations.
 - HMAC-signed tokens are deprecated but maintained for backwards compatibility
 - Tokens and PATs can be explicitly revoked with immediate (PATs) or
   deferred (tokens on next refresh) effect
-- OIDC clients are configured via operator-managed Secrets rather than stored in
-  the database
+- OIDC clients and external IdP configurations are managed via operator-controlled
+  Secret (`hub-oidc`) rather than stored in the database
 
 #### External Provider Integration
 
@@ -280,19 +280,115 @@ The UI deployment will be configured to authenticate against the Hub's OIDC prov
   - `OIDC_REDIRECT_URI`: Callback URL for the authorization code flow (e.g., `https://ui.konveyor.io/auth/callback`)
   - `OIDC_SCOPES`: Requested scopes (e.g., `openid profile email`)
 
-#### Client Registration
+#### OIDC Configuration Secret
 
-- The operator will seed the Hub with OIDC client configurations via ConfigMap, including:
-  - UI client definition (client_id, allowed redirect URIs, allowed scopes)
-  - Any additional clients for tools or integrations
-  - This ConfigMap will be mounted into the Hub and read at startup
+- The operator will seed the Hub with all OIDC-related configuration via a single Secret (`hub-oidc`):
+  - **Client registrations** (`clients:` section): UI client, tool clients, etc.
+  - **External IdP configurations** (`idp:` section): Keycloak, Google, LDAP, etc.
+  - This Secret will be mounted into the Hub at `/etc/hub/` and read at startup (file: `/etc/hub/oidc.yaml`)
+  
+Example structure:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hub-oidc
+  namespace: konveyor-tackle
+type: Opaque
+stringData:
+  oidc.yaml: |
+    clients:
+      - clientId: konveyor-ui
+        clientSecret: <ui-client-secret>
+        redirectURIs:
+          - https://ui.konveyor.io/auth/callback
+        scopes:
+          - openid
+          - profile
+          - email
+      - clientId: kantra-cli
+        clientSecret: <kantra-client-secret>
+        redirectURIs:
+          - http://localhost:*
+        scopes:
+          - openid
+          - profile
+    
+    idp:
+      - kind: oidc
+        name: keycloak
+        issuer: "https://keycloak.example.com/realms/konveyor"
+        clientId: "tackle-hub"
+        clientSecret: "<keycloak-client-secret>"
+        scopes:
+          - openid
+          - profile
+          - email
+```
 
 #### Migration Support
 
-For existing deployments currently using Keycloak:
-- The operator will support a migration mode where Keycloak can be configured as an external OIDC provider
-- A configuration flag or CR annotation will control whether to deploy Keycloak or use the built-in provider
-- Documentation will be provided for migrating users from Keycloak to local Hub authentication
+For existing deployments currently using Keycloak, the operator will automatically migrate the 
+authentication architecture to use the Hub's built-in OIDC provider with Keycloak configured as an 
+external (federated) IdP.
+
+##### Current Keycloak Configuration (Pre-Migration)
+
+Currently, Keycloak integration is configured via environment variables in the Hub deployment:
+- `AUTH_REQUIRED` - Enable/disable authentication (e.g., `true`)
+- `KEYCLOAK_HOST` - Keycloak server URL (e.g., `https://keycloak.example.com`)
+- `KEYCLOAK_REALM` - Realm name (e.g., `konveyor`)
+- `KEYCLOAK_CLIENT_ID` - Client identifier for the Hub (e.g., `tackle-hub`)
+- `KEYCLOAK_CLIENT_SECRET` - Client secret (stored in Secret)
+- Additional realm-specific settings
+
+##### Migration Process
+
+When the operator detects an existing deployment with Keycloak authentication 
+enabled (`AUTH_REQUIRED=true`), it will:
+
+1. **Extract Keycloak configuration** from the current Hub deployment environment variables and Secrets
+
+2. **Update the OIDC configuration Secret** (`hub-oidc`) to include Keycloak as an external IdP in the `idp:` section:
+   ```yaml
+   apiVersion: v1
+   kind: Secret
+   metadata:
+     name: hub-oidc
+     namespace: konveyor-tackle
+   type: Opaque
+   stringData:
+     oidc.yaml: |
+       clients:
+         - clientId: konveyor-ui
+           clientSecret: <ui-client-secret>
+           redirectURIs:
+             - https://ui.konveyor.io/auth/callback
+           scopes:
+             - openid
+             - profile
+             - email
+       
+       idp:
+         - kind: oidc
+           name: keycloak
+           issuer: "https://keycloak.example.com/realms/konveyor"
+           clientId: "tackle-hub"
+           clientSecret: "<keycloak-client-secret>"
+           scopes:
+             - openid
+             - profile
+             - email
+   ```
+
+3. **Update Hub deployment** to:
+   - Remove Keycloak-specific environment variables
+   - Ensure the `hub-oidc` Secret is mounted at `/etc/hub/`
+
+5. **Preserve Keycloak deployment** (optional):
+   - If `spec.keycloak.enabled=true` in the Tackle CR, the operator continues to deploy and manage Keycloak
+   - If `spec.keycloak.enabled=false`, the operator stops managing Keycloak but retains the external IdP configuration
+   - This allows administrators to choose whether to keep or remove Keycloak from the deployment
 
 ### Security, Risks, and Mitigations
 

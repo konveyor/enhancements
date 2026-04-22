@@ -606,9 +606,38 @@ Revocation is tracked in the database via the Token.revoked timestamp field to e
 
 ## Configuration Management
 
-### Client Configuration
+### OIDC Configuration
 
-OIDC clients are loaded from a ConfigMap seeded by the operator. This allows the operator to manage client registrations without requiring database access.
+All OIDC-related configuration is loaded from a single Secret (`hub-oidc`) seeded by the operator. This Secret contains:
+
+- **Client registrations** (`clients:` section): Registered OIDC clients (UI, CLI tools, etc.) with their credentials, redirect URIs, and allowed scopes
+- **External IdP configurations** (`idp:` section): External identity provider configurations (Keycloak, Google, LDAP, etc.) with connection details and credentials
+
+This unified approach allows the operator to manage all OIDC configuration atomically without requiring database access. The Secret is mounted into the Hub at `/etc/hub/` and read at startup (file: `/etc/hub/oidc.yaml`).
+
+Example structure:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: hub-oidc
+type: Opaque
+stringData:
+  oidc.yaml: |
+    clients:
+      - clientId: konveyor-ui
+        clientSecret: <secret>
+        redirectURIs: [...]
+        scopes: [...]
+
+    idp:
+      - kind: oidc
+        name: keycloak
+        issuer: "https://keycloak.example.com/realms/konveyor"
+        clientId: "tackle-hub"
+        clientSecret: "<secret>"
+        scopes: [...]
+```
 
 ### Login UI
 
