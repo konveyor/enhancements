@@ -351,35 +351,19 @@ enabled (`AUTH_REQUIRED=true`), it will:
 
 2. **Update the OIDC configuration Secret** (`hub-oidc`) to include Keycloak as an external IdP in the `idp:` section:
    ```yaml
-   apiVersion: v1
-   kind: Secret
-   metadata:
-     name: hub-oidc
-     namespace: konveyor-tackle
-   type: Opaque
-   stringData:
-     oidc.yaml: |
-       clients:
-         - clientId: konveyor-ui
-           clientSecret: <ui-client-secret>
-           redirectURIs:
-             - https://ui.konveyor.io/auth/callback
-           scopes:
-             - openid
-             - profile
-             - email
-       
-       idp:
-         - kind: oidc
-           name: keycloak
-           issuer: "https://keycloak.example.com/realms/konveyor"
-           clientId: "tackle-hub"
-           clientSecret: "<keycloak-client-secret>"
-           scopes:
-             - openid
-             - profile
-             - email
+   idp:
+     - kind: oidc
+       name: keycloak
+       issuer: "https://keycloak.example.com/realms/konveyor"
+       clientId: "tackle-hub"
+       clientSecret: "<keycloak-client-secret>"
+       scopes:
+         - openid
+         - profile
+         - email
    ```
+   
+   See the "OIDC Configuration Secret" section above for the complete Secret structure.
 
 3. **Update Hub deployment** to:
    - Remove Keycloak-specific environment variables
