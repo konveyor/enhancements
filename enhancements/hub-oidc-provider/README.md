@@ -162,8 +162,8 @@ complex authorization requirements.
 #### Personal Access Token (PAT) Authentication
 
 PATs provide a secure mechanism for programmatic access, addressing
-[RFE-266](https://github.com/konveyor/enhancements/issues/266). Users can
-generate PATs through the Hub API, which inherit the user's permissions at
+[RFE-266](https://github.com/konveyor/enhancements/issues/266). Authenticated users can
+generate PATs through the Hub API (`POST /auth/tokens`), which inherit the user's permissions at
 the time of creation. PATs are presented as Bearer tokens and validated using
 the same scope-based authorization model as JWT tokens.
 
@@ -178,11 +178,45 @@ expose PATs.
 
 #### Tools Integration
 
-Client tools such as **Kantra** and **KAI** should authenticate by getting an
-PAT.  This is almost exactly like the current process of getting a (JWT)
-token (POST `/auth/token`), the client will POST to a new endpoint that instead
-returns a PAT. The returned token is specified in future requests using
-authentication header: `Authorization Bearer <token>`.
+##### CLI Tools (Kantra)
+
+**Kantra**, as a command-line tool, cannot display web pages for interactive OIDC login flows.
+Authentication options include:
+
+1. **Manual PAT configuration**: Users obtain a PAT through the Hub UI and provide it to Kantra
+   via command line option (e.g., `--token`) or environment variable (e.g., `TOKEN`)
+2. **Device code flow**: Kantra initiates an OIDC device authorization flow, displays a code and
+   URL for the user to visit in a browser, completes authentication, then optionally requests a
+   PAT for long-lived access
+
+The previous method of POSTing username/password directly to obtain a token is no longer
+supported. This approach relied on the OAuth 2.0 Resource Owner Password Credentials (Direct
+Access) grant type, which was deprecated in OAuth 2.1 due to security concerns. The Direct
+Access grant exposes user credentials to client applications and bypasses modern security
+measures like multi-factor authentication and federated identity providers.
+
+##### IDE Plugin (KAI)
+
+**KAI**, as a VS Code extension, has more flexibility since it can display web content within
+the IDE. It supports two authentication modes:
+
+1. **Manual PAT configuration**: Users obtain a PAT through the Hub UI and configure KAI with it
+   in the extension settings. This is the simplest approach for users who prefer manual
+   credential management.
+
+2. **Interactive OIDC flow**: KAI can display the Hub login page in a VS Code webview, allowing
+   users to complete the OIDC authentication flow directly within the IDE:
+   - KAI initiates the OIDC authorization code flow
+   - Displays the Hub login page in a webview
+   - User authenticates (local credentials or external IdP)
+   - KAI receives the access token via redirect
+   - KAI can then request a PAT via `POST /auth/tokens` for use by AI agents
+
+The ability to obtain a PAT after OIDC login is particularly useful for KAI's AI agents, which
+run in the background and need long-lived credentials. PATs allow these agents to continue
+working without requiring interactive re-authentication.
+
+##### LLM Proxy
 
 The **LLM Proxy** will no longer perform token authentication. Instead, the LLM Proxy servers
 will be proxied behind the hub /services endpoint and delegate auth to the hub.
@@ -264,8 +298,10 @@ The operator will require significant changes to support the Hub's built-in OIDC
 
 #### Hub Configuration
 
-- **Replace Keycloak configuration**: The operator will remove Keycloak-specific configuration from the Hub deployment and replace it with OIDC provider configuration settings
-- **OIDC key signing secret**: The operator must create and manage a Kubernetes Secret containing the RSA private key used by the Hub to sign JWT tokens. This secret will be:
+- **Replace Keycloak configuration**: The operator will remove Keycloak-specific configuration
+  from the Hub deployment and replace it with OIDC provider configuration settings
+- **OIDC key signing secret**: The operator must create and manage a Kubernetes Secret containing
+  the RSA private key used by the Hub to sign JWT tokens. This secret will be:
   - Generated automatically during initial deployment
   - Mounted into the Hub pod
   - Rotatable through operator-managed updates
@@ -274,9 +310,11 @@ The operator will require significant changes to support the Hub's built-in OIDC
 
 #### UI Configuration
 
-The UI deployment will be configured to authenticate against the Hub's OIDC provider instead of Keycloak:
+The UI deployment will be configured to authenticate against the Hub's OIDC provider instead of
+Keycloak:
 
-- **OIDC client registration**: The operator will configure the UI with OIDC client credentials via ConfigMap or environment variables:
+- **OIDC client registration**: The operator will configure the UI with OIDC client credentials
+  via ConfigMap or environment variables:
   - `OIDC_ISSUER`: Points to the Hub's OIDC endpoint (e.g., `https://hub.konveyor.io`)
   - `OIDC_CLIENT_ID`: Unique identifier for the UI client (e.g., `konveyor-ui`)
   - `OIDC_CLIENT_SECRET`: Client secret for confidential client authentication (stored in a Secret)
@@ -285,9 +323,12 @@ The UI deployment will be configured to authenticate against the Hub's OIDC prov
 
 #### OIDC Configuration Secret
 
-- The operator will seed the Hub with all OIDC-related configuration via a single Secret (`hub-oidc`):
-  - **Client registrations**: UI client, CLI tool clients, etc. with their credentials and allowed scopes
-  - **External IdP configurations**: Keycloak, Google, LDAP, etc. with connection details and credentials
+- The operator will seed the Hub with all OIDC-related configuration via a single Secret
+  (`hub-oidc`):
+  - **Client registrations**: UI client, CLI tool clients, etc. with their credentials and
+    allowed scopes
+  - **External IdP configurations**: Keycloak, Google, LDAP, etc. with connection details and
+    credentials
   - This Secret will be mounted into the Hub at `/etc/hub/` and read at startup
 
 #### Migration Support

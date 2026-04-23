@@ -14,13 +14,13 @@ The Hub will function as an OIDC provider with the following components:
 
 ### Resource Management Endpoints
 
-| Method                | Path                 | Purpose                        |
-|-----------------------|----------------------|--------------------------------|
-| ANY                   | /auth/users          | User collection                |
-| ANY                   | /auth/roles          | Roles collection               |
-| GET                   | /auth/permissions    | Permission collection          |
-| POST \| GET \| DELETE | /auth/tokens         | Issued tokens                  |
-| GET                   | /auth/idp/identities | Remote IDP identity collection |
+| Method                | Path                 | Purpose                                                  |
+|-----------------------|----------------------|----------------------------------------------------------|
+| ANY                   | /auth/users          | User collection                                          |
+| ANY                   | /auth/roles          | Roles collection                                         |
+| GET                   | /auth/permissions    | Permission collection                                    |
+| POST \| GET \| DELETE | /auth/tokens         | PAT management (requires authentication)                 |
+| GET                   | /auth/idp/identities | Remote IDP identity collection                           |
 
 
 ### Standard OIDC Endpoints
@@ -482,28 +482,37 @@ sequenceDiagram
 
 ### Generation
 
-PATs are generated via POST to `/auth/tokens` and inherit permissions from the creating user's roles.
+PATs are generated via authenticated POST to `/auth/tokens`. The user must already be
+authenticated and present a valid access token (e.g., from OIDC login). The PAT inherits
+permissions from the authenticated user's roles.
 
 **Request:**
+```http
 POST /auth/tokens
-```yaml
-kind:       # (PAT|JWT)
-lifespan:   # OPTIONAL (hours)
-expiration: # OPTIONAL (datetime)
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "lifespan": 720,     // OPTIONAL (hours)
+  "expiration": "..."  // OPTIONAL (datetime)
+}
 ```
 
 **Response:**
-```yaml
-id: 18
-expiration: # OPTIONAL
-token: cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY
+```json
+{
+  "id": 18,
+  "token": "cvP1sjff7_X2dCEIzUPf8f0IzKSbwiSDf1dZChZuRxY",
+  "expiration": "..."  // OPTIONAL
+}
 ```
 
 **Implementation details:**
-- PATs are 256-bit HEX strings.
-- PATs are stored in the Token table with `kind = "PAT"` as a hashed digest in the `digest` field.
-- Permissions (scopes) are inherited from the user's role assignments and stored in the `scopes` field.
-- PATs can have optional expiration dates.
+- Requires valid authentication - user must present an access token
+- PATs are 256-bit HEX strings
+- PATs are stored in the Token table with `kind = "PAT"` as a hashed digest in the `digest` field
+- Permissions (scopes) are inherited from the authenticated user's role assignments and stored in the `scopes` field
+- PATs can have optional expiration dates
 
 ### Authentication
 
@@ -521,9 +530,11 @@ Authorization: Bearer <token>
 
 ### Addon Tokens
 
-The task manager and addon API authorization will be refactored to use PATs instead of custom JWT token generation:
+The task manager and addon API authorization will be refactored to use PATs instead of custom JWT
+token generation:
 - New tasks will be configured with PATs for authentication
-- Legacy support: Tokens with `SigningMethod=HMAC` will still be honored for backwards compatibility with in-flight tasks
+- Legacy support: Tokens with `SigningMethod=HMAC` will still be honored for backwards
+  compatibility with in-flight tasks
 - This provides a unified authentication mechanism across all programmatic access
 
 ## LDAP/Active Directory Group Mapping
@@ -602,18 +613,24 @@ Tokens and grants can be explicitly revoked:
 - **DELETE /auth/grants/:id** - Revokes a specific OIDC grant (effective on next refresh)
 - **DELETE /auth/tokens/:id** - Revokes a specific token (JWT, PAT, etc., effective immediately)
 
-Revocation is tracked in the database via the Token.revoked timestamp field to ensure revoked credentials are not accepted.
+Revocation is tracked in the database via the Token.revoked timestamp field to ensure revoked
+credentials are not accepted.
 
 ## Configuration Management
 
 ### OIDC Configuration
 
-All OIDC-related configuration is loaded from a single Secret (`hub-oidc`) seeded by the operator. This Secret contains:
+All OIDC-related configuration is loaded from a single Secret (`hub-oidc`) seeded by the operator.
+This Secret contains:
 
-- **Client registrations** (`clients:` section): Registered OIDC clients (UI, CLI tools, etc.) with their credentials, redirect URIs, and allowed scopes
-- **External IdP configurations** (`idp:` section): External identity provider configurations (Keycloak, Google, LDAP, etc.) with connection details and credentials
+- **Client registrations** (`clients:` section): Registered OIDC clients (UI, CLI tools, etc.)
+  with their credentials, redirect URIs, and allowed scopes
+- **External IdP configurations** (`idp:` section): External identity provider configurations
+  (Keycloak, Google, LDAP, etc.) with connection details and credentials
 
-This unified approach allows the operator to manage all OIDC configuration atomically without requiring database access. The Secret is mounted into the Hub at `/etc/hub/` and read at startup (file: `/etc/hub/oidc.yaml`).
+This unified approach allows the operator to manage all OIDC configuration atomically without
+requiring database access. The Secret is mounted into the Hub at `/etc/hub/` and read at startup
+(file: `/etc/hub/oidc.yaml`).
 
 Example structure:
 ```yaml
@@ -648,4 +665,5 @@ The login page UI fragment is read from a ConfigMap managed by the operator. Thi
 
 ### Security
 
-All sensitive information is stored securely in the database: passwords as bcrypt hashes, refresh tokens encrypted. PATs are stored as cryptographic hashes (digests) only, never in plain text.
+All sensitive information is stored securely in the database: passwords as bcrypt hashes, refresh
+tokens encrypted. PATs are stored as cryptographic hashes (digests) only, never in plain text.
