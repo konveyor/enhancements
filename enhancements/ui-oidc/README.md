@@ -151,11 +151,6 @@ Tracking issue: [konveyor/enhancements#268](https://github.com/konveyor/enhancem
 - Contributors must adopt the new hooks-only pattern (short internal doc or comment in auth module helps).
 
 
-## Alternatives
-
-- **Minimal change** — Keep `keycloak-js` only, remove `@react-keycloak/web`, and implement a small custom React context around the Keycloak instance. Fewer new dependencies, but less alignment with generic OIDC and more bespoke refresh/error handling.
-
-
 ## Upstream contribution
 
 When opening the pull request in [konveyor/enhancements](https://github.com/konveyor/enhancements), this file is already at the expected path relative to that repository:
