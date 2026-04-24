@@ -32,18 +32,17 @@ superseded-by:
 ## Open Questions
 
 - Exact sequencing versus other v0.10.0 UI initiatives (for example [modern OIDC](https://github.com/konveyor/enhancements/issues/268)) to avoid conflicting large refactors on the same release branch.
-- Whether visual regression baselines (Percy or equivalent) should be expanded before or during the PF6 cutover.
 - Secondary alignment with OpenShift console look-and-feel may be owned largely by [enhancements#269](https://github.com/konveyor/enhancements/issues/269); this document treats that as related but not blocking PF6 adoption.
 
 
 ## Summary
 
-This enhancement implements [RFE issue #270](https://github.com/konveyor/enhancements/issues/270): move the Konveyor UI from PatternFly 5 to **PatternFly 6**, replace use of deprecated components, and clear related front-end technical debt so follow-on work (dashboards, [PatternFly quick starts](https://www.patternfly.org/patterns/quick-starts/), guided tours) can build on a current design system. Execution and day-to-day tracking live in [konveyor/tackle2-ui](https://github.com/konveyor/tackle2-ui), starting with epic [tackle2-ui#2172](https://github.com/konveyor/tackle2-ui/issues/2172).
+This enhancement describe [RFE issue #270](https://github.com/konveyor/enhancements/issues/270): move the Konveyor UI from PatternFly 5 to **PatternFly 6**, replace use of deprecated components, and clear related front-end technical debt so follow-on work (dashboards, [PatternFly quick starts](https://www.patternfly.org/patterns/quick-starts/), guided tours) can build on a current design system. Execution and day-to-day tracking live in [konveyor/tackle2-ui](https://github.com/konveyor/tackle2-ui), starting with epic [tackle2-ui#2172](https://github.com/konveyor/tackle2-ui/issues/2172).
 
 
 ## Related work in tackle2-ui
 
-The table below links GitHub issues that are **in progress or directly support** the PF6 migration (as of the enhancement draft). Update this section as issues close or split.
+The table below links GitHub issues that are **already in progress or directly support** the PF6 migration (as of the enhancement draft). Update this section as issues close or split.
 
 | Issue | Role |
 | ----- | ---- |
@@ -54,7 +53,7 @@ The table below links GitHub issues that are **in progress or directly support**
 | [tackle2-ui#3148](https://github.com/konveyor/tackle2-ui/issues/3148) | **Tests** — stabilize Cypress/selectors (e.g. `ouiaId`) for components affected by PatternFly upgrades. |
 | [tackle2-ui#1932](https://github.com/konveyor/tackle2-ui/issues/1932) | **Follow-on UX** — PF quick starts (enabled more easily once on PF6; not a prerequisite for the version bump itself). |
 
-Additional PRs and issues will appear under the v0.10.0 milestone or dependabot “patternfly” groups; link them in **Implementation History** as they merge.
+Additional PRs and issues will be added to the v0.10.0 milestone as needed.
 
 
 ## Motivation
@@ -95,7 +94,7 @@ The UI currently depends on PatternFly 5 (`@patternfly/patternfly`, `@patternfly
 2. **Pre-migration cleanup** — Resolve PF5 deprecation warnings where they block or complicate PF6 (tracked under [tackle2-ui#3042](https://github.com/konveyor/tackle2-ui/issues/3042) and related PRs).
 3. **Dependency upgrade** — Move `@patternfly/patternfly`, `@patternfly/react-core`, `@patternfly/react-table`, `@patternfly/react-tokens`, `@patternfly/react-charts`, `@patternfly/react-code-editor`, and aligned versions in one or more coordinated PRs ([tackle2-ui#3150](https://github.com/konveyor/tackle2-ui/issues/3150) and successors).
 4. **Application fixes** — Update imports, props, CSS variables/tokens, layout wrappers, and custom styling that depended on PF5 internals.
-5. **Verification** — Jest/RTL, Cypress E2E ([tackle2-ui#3148](https://github.com/konveyor/tackle2-ui/issues/3148) and suite updates), and optional visual regression; fix lint caps if PF6 surfaces new warnings.
+5. **Verification** — Jest/ReactTestLibrary, Cypress E2E ([tackle2-ui#3148](https://github.com/konveyor/tackle2-ui/issues/3148) and suite updates), and optional visual regression; fix lint caps if PF6 surfaces new warnings.
 
 ### User-visible outcome
 
@@ -118,7 +117,7 @@ The UI currently depends on PatternFly 5 (`@patternfly/patternfly`, `@patternfly
 ### Test plan
 
 - **Unit / component** — Existing RTL tests updated for changed props/DOM; add tests where PF6 changes behavior (menus, modals, pagination).
-- **E2E** — Full Cypress suite green; prioritize flows touching tables, wizards, and forms ([tackle2-ui#3148](https://github.com/konveyor/tackle2-ui/issues/3148)).
+- **E2E** — Full Cypress suite green; prioritize flows touching tables, wizards, and forms ([tackle2-ui#3148](https://github.com/konveyor/tackle2-ui/issues/3148)). Migration to the [PF OUIA](https://www.patternfly.org/developer-resources/open-ui-automation/) approach encourage for more consistent and stable tests.
 - **Visual** — Manual pass on primary pages; use project visual regression tooling if present; document known intentional visual deltas.
 - **Accessibility** — Spot-check with keyboard and screen reader on representative pages after the upgrade.
 
@@ -131,17 +130,14 @@ The UI currently depends on PatternFly 5 (`@patternfly/patternfly`, `@patternfly
 
 ## Implementation History
 
-| Date | PR / issue |
-| ---- | ---------- |
-| TBD | Link merged tackle2-ui PRs here (for example work under [tackle2-ui#3150](https://github.com/konveyor/tackle2-ui/issues/3150)). |
+Primary tracking issue on tackle2-ui repo: [tackle2-ui#2172](https://github.com/konveyor/tackle2-ui/issues/2172).
 
-Umbrella: [tackle2-ui#2172](https://github.com/konveyor/tackle2-ui/issues/2172). Product RFE: [enhancements#270](https://github.com/konveyor/enhancements/issues/270).
+Project tracking RFE: [enhancements#270](https://github.com/konveyor/enhancements/issues/270).
 
 
 ## Drawbacks
 
 - Significant review load and churn across the client tree.
-- Designers and contributors must relearn moved or renamed APIs versus PF5 habits.
 
 
 ## Alternatives
