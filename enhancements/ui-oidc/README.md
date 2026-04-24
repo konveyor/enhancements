@@ -48,13 +48,14 @@ Authorization checks are inconsistent: many modules read `keycloak.tokenParsed` 
 ### Goals
 
 - Replace `@react-keycloak/web` with a supported OIDC client integration suitable for a browser SPA.
-- Provide a **single** UI-facing API for auth state and authorization (for example context plus hooks such as `useAuth`, `useHasRealmRoles`, `useHasScopes`), backed by parsed token claims; migrate `RBAC`, route guards, and ad-hoc checks to use it only.
+- Provide a **single** set of React hooks and components for auth state and authorization (for example context plus hooks such as `useAuth`, `useHasRealmRoles`, `useHasScopes`), backed by parsed token claims
+- Migrate existing `RBAC`, route guards, and ad-hoc checks to use the new auth scheme only.
 - Document and implement **one** behavior for expired or invalid access tokens: attach Bearer tokens on API requests, refresh when needed, retry failed requests after refresh, and redirect to login when refresh is not possible.
 - When `AUTH_REQUIRED` is false, support optional **masquerade** of realm roles and scopes so developers can exercise RBAC without a full auth-enabled deployment.
 
 ### Non-Goals
 
-- Redesigning the Hub API authorization model (realm roles and scopes remain as today unless a technical blocker appears).
+- Redesigning the Hub API authorization model (realm roles and scopes remain as today unless a technical blocker appears). See https://github.com/konveyor/enhancements/pull/265 for proposed HUB auth changes.
 - Changing Keycloak realm or client configuration in the operator/Helm charts unless required for redirect URIs or client settings implied by the chosen OIDC flow.
 - Rewriting all Cypress Keycloak automation in the first change set (list as follow-up if URLs or storage keys change).
 
@@ -65,7 +66,7 @@ The following choices are locked for the implementation sketch so the proposal c
 
 | Topic | Decision |
 | ----- | -------- |
-| Client stack | Use **[oidc-client-ts](https://github.com/authts/oidc-client-ts)** with **[react-oidc-context](https://github.com/authts/react-oidc-context)** as the primary integration: standards-based OIDC, active maintenance, and a React provider model that replaces `ReactKeycloakProvider`. |
+| Client stack | Use standards-based OIDC library and React provider packages that are actively maintained.  For example, **[oidc-client-ts](https://github.com/authts/oidc-client-ts)** with **[react-oidc-context](https://github.com/authts/react-oidc-context)** is a possibility.  Consider other libraries given up to date assessement at the time of implementation. |
 | Flow | **Authorization Code with PKCE** (library default for SPA), aligned with Keycloak public client usage. |
 | Token storage | Rely on library-managed persistence appropriate for SPA + PKCE (typically **sessionStorage** for user session artifacts). Document threat model briefly in operator/user docs (XSS remains a concern for any browser-stored tokens). |
 | Keycloak-specific URLs | Derive authority and metadata from existing UI configuration (`/auth`, realm, client id) so deployments behind the ingress proxy continue to work. |
@@ -153,7 +154,6 @@ Tracking issue: [konveyor/enhancements#268](https://github.com/konveyor/enhancem
 ## Alternatives
 
 - **Minimal change** — Keep `keycloak-js` only, remove `@react-keycloak/web`, and implement a small custom React context around the Keycloak instance. Fewer new dependencies, but less alignment with generic OIDC and more bespoke refresh/error handling.
-- **Other OIDC libraries** — Possible but rejected for this proposal in favor of the widely used `oidc-client-ts` + `react-oidc-context` pair.
 
 
 ## Upstream contribution
