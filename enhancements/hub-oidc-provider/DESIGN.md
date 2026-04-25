@@ -611,7 +611,7 @@ groups:
 Tokens and grants can be explicitly revoked:
 
 - **DELETE /auth/grants/:id** - Revokes a specific OIDC grant (effective on next refresh)
-- **DELETE /auth/tokens/:id** - Revokes a specific token (JWT, PAT, etc., effective immediately)
+- **DELETE /auth/tokens/:id** - Revokes a specific (PAT) token (effective immediately)
 
 Revocation is tracked in the database via the Token.revoked timestamp field to ensure revoked
 credentials are not accepted.
@@ -632,6 +632,8 @@ This unified approach allows the operator to manage all OIDC configuration atomi
 requiring database access. The Secret is mounted into the Hub at `/etc/hub/` and read at startup
 (file: `/etc/hub/oidc.yaml`).
 
+#### Hub
+
 Example structure:
 ```yaml
 apiVersion: v1
@@ -642,9 +644,30 @@ type: Opaque
 stringData:
   oidc.yaml: |
     clients:
-      - clientId: konveyor-ui
+      - clientId: web-ui
         clientSecret: <secret>
-        redirectURIs: [...]
+        grants:
+        - authorization_code
+        - refresh_token
+        redirectURIs:
+        - localhost:8080                               # web-app
+        - https://keycloak.example.com/realms/konveyor # (optional) federated oidc
+        scopes: [...]
+      - clientId: kai-ide
+        grants:
+        - authorization_code
+        - refresh_token
+        redirectURIs:
+        - vscode://publisher.extension/auth
+        - https://keycloak.example.com/realms/konveyor # (optional) federated oidc
+        scopes: [...]
+      - clientId: cli
+        grants:
+        - urn:ietf:params:oauth:grant-type:device_code
+        - authorization_code
+        - refresh_token
+        redirectURIs:
+        - http://localhost:*  # unused for DAC (device access grant)
         scopes: [...]
 
     idp:
@@ -655,6 +678,37 @@ stringData:
         clientSecret: "<secret>"
         scopes: [...]
 ```
+
+#### Clients
+
+**WEB-UI:**
+
+| setting       | value                               |
+|---------------|-------------------------------------|
+| issuer        | hub-service-address/oidc            |
+| client_id     | web-ui                              |
+| client_secret | ABCDE                               |
+| redirect_uris | http://localhost:*                  |
+| scope         | openid profile email offline_access |
+
+**IDE:**
+
+| setting       | value                               |
+|---------------|-------------------------------------|
+| issuer        | https://konveyor-ingress/hub/oidc   |
+| client_id     | web-ui                              |
+| redirect_uris | vscode://publisher.extension/auth   |
+| scope         | openid profile email offline_access |
+| response_type | code                                |
+| usePKCE       | true                                |
+
+**CLI (binding):**
+
+| setting   | value                    |
+|-----------|--------------------------|
+| issuerURL | hub-service-address/oidc |
+| clientID  | cli                      |
+
 
 ### Login UI
 
