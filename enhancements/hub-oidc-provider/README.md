@@ -52,6 +52,11 @@ Eliminate dependence on Keycloak.
 - To support explicit revocation of both access tokens and PATs for
   immediate credential invalidation.
 
+**Note**: Both Personal Access Tokens (PAT) and API-Key are opaque tokens. Typically, the difference is a PAT
+is tied to user and an API-Key is tied to an Service Account (SA).  In konveyor, a token tied to a task would more 
+technically be tied to an API-Key.  In konveyor, we don't plan to support service accounts so the terms will likely 
+be used interchangeably.
+
 ### Non-Goals
 
 ## Proposal
