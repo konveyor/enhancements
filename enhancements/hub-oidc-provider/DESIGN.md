@@ -712,7 +712,7 @@ stringData:
 
 ### Login UI
 
-The login page UI fragment is read from a ConfigMap managed by the operator. This enables:
+The login page UI fragment is read from a file selected by build tooling. This enables:
 - Branding customizations managed by the operator
 - Consistent UI updates across installations
 - Separation of presentation from application logic
