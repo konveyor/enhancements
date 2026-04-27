@@ -25,15 +25,17 @@ The Hub will function as an OIDC provider with the following components:
 
 ### Standard OIDC Endpoints
 
-| Method | Path                              | Purpose                                                                                        |
-|--------|-----------------------------------|------------------------------------------------------------------------------------------------|
-| GET    | /.well-known/openid-configuration | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc.      |
-| GET    | /oidc/authorize                   | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
-| POST   | /oidc/token                       | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token      |
-| GET    | /oidc/jwks                        | JSON Web Key Set – Public keys used by clients to verify your JWT signatures                   |
-| GET    | /oidc/userinfo                    | UserInfo Endpoint – Returns user claims (optional, but commonly used)                          |
-| POST   | /oidc/introspect                  | Token Introspection – Allows resource servers to validate opaque tokens (optional)             |
-| POST   | /oidc/revoke                      | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended)          |
+| Method      | Path                              | Purpose                                                                                        |
+|-------------|-----------------------------------|------------------------------------------------------------------------------------------------|
+| GET         | /.well-known/openid-configuration | Discovery document – Tells clients all the endpoints, supported scopes, grant types, etc.      |
+| GET         | /oidc/authorize                   | Authorization Endpoint – Starts the login flow (shows login form or redirects to external IdP) |
+| POST        | /oidc/token                       | Token Endpoint – Exchanges authorization code for access_token + id_token + refresh_token      |
+| GET         | /oidc/jwks                        | JSON Web Key Set – Public keys used by clients to verify your JWT signatures                   |
+| GET         | /oidc/userinfo                    | UserInfo Endpoint – Returns user claims (optional, but commonly used)                          |
+| POST        | /oidc/introspect                  | Token Introspection – Allows resource servers to validate opaque tokens (optional)             |
+| POST        | /oidc/revoke                      | Token Revocation – Allows clients to revoke refresh tokens (optional but recommended)          |
+| POST        | /oidc/device/code                 | Device Authorization – Initiates device flow for CLI tools (returns user_code and device_code) |
+| GET \| POST | /oidc/device                      | Device Verification – User enters code to authorize device (part of device flow)               |
 
 ## Data Model
 
@@ -137,6 +139,9 @@ erDiagram
         string subject "indexed"
         string refresh_token "unique, digest"
         string auth_code "indexed"
+        string device_code "indexed"
+        string user_code "indexed"
+        string status "pending, authorized, denied"
         string scopes
         time issued
         time expiration
@@ -175,7 +180,9 @@ erDiagram
 - The Token table is unified and contains all token types (JWTs, PATs, etc.) differentiated by the `kind` field
 - The Token.expiration column is mainly used for reaping expired tokens
 - The Token.digest column stores hashed tokens for lookup (PATs and refresh tokens)
-- The Grant table stores OIDC authorization grants, including authorization codes and refresh token metadata
+- The Grant table stores OIDC authorization grants, including authorization codes, device codes, and refresh token metadata
+- Grant.kind values include: "authorization_code", "device_code", "refresh_token"
+- Grant.status tracks device authorization state: "pending", "authorized", "denied"
 - Client registrations are stored in the Client table
 - RSA signing keys are stored in the RsaKey table
 
@@ -372,6 +379,106 @@ sequenceDiagram
 
     deactivate ProtectedAPI
 ```
+
+### Device Authorization Grant (DAC) Flow
+
+The Device Authorization Grant flow (RFC 8628) enables authentication for CLI tools and devices with limited input capabilities:
+
+```mermaid
+sequenceDiagram
+    participant CLI as CLI Tool
+    participant Hub as Hub Provider<br>(OIDC Provider)
+    participant User as User<br>(Browser)
+    participant DB as Database
+
+    Note over CLI,Hub: Device Authorization Flow for CLI Tools
+
+    %% === Device Code Request ===
+    CLI->>Hub: POST /oidc/device/code<br>client_id=cli&scope=openid profile email
+    activate Hub
+    
+    Hub->>Hub: Generate device_code + user_code
+    Hub->>DB: Store device authorization grant (pending)
+    
+    Hub-->>CLI: device_code, user_code, verification_uri<br>expires_in, interval
+    deactivate Hub
+
+    Note over CLI: Display to user:<br>"Visit https://hub.example.com/oidc/device<br>and enter code: ABCD-EFGH"
+
+    %% === User Authorization ===
+    User->>Hub: GET /oidc/device (verification_uri)
+    activate Hub
+    Hub-->>User: Show code entry form
+    deactivate Hub
+
+    User->>Hub: POST /oidc/device<br>user_code=ABCD-EFGH
+    activate Hub
+    
+    Hub->>DB: Lookup device grant by user_code
+    
+    alt Invalid or expired user_code
+        Hub-->>User: Error: Invalid code
+    else Valid user_code
+        alt User not authenticated
+            Hub-->>User: Redirect to login page
+            User->>Hub: Authenticate (username + password or external IdP)
+            Hub->>DB: Verify credentials / fetch user + roles
+        else User already authenticated
+            Note right of Hub: User has active session
+        end
+        
+        Hub-->>User: Show authorization prompt<br>"CLI tool wants to access your account"
+        
+        User->>Hub: Approve authorization
+        
+        Hub->>DB: Mark device grant as authorized<br>store subject + scopes
+        Hub-->>User: Success: "You can close this window"
+    end
+    deactivate Hub
+
+    %% === Token Polling ===
+    Note over CLI,Hub: CLI polls for token (every interval seconds)
+
+    loop Polling until authorized or timeout
+        CLI->>Hub: POST /oidc/token<br>grant_type=urn:ietf:params:oauth:grant-type:device_code<br>device_code=...&client_id=cli
+        activate Hub
+        
+        Hub->>DB: Lookup device grant by device_code
+        
+        alt Grant not yet authorized
+            Hub-->>CLI: 400 authorization_pending<br>(keep polling)
+        else Grant denied
+            Hub-->>CLI: 403 access_denied
+        else Grant expired
+            Hub-->>CLI: 400 expired_token
+        else Grant authorized
+            Hub->>Hub: Generate tokens with user scopes/roles
+            Hub->>DB: Create token records + update grant
+            Hub-->>CLI: Access Token + ID Token + Refresh Token
+            Note over CLI: Authentication complete!
+        end
+        
+        deactivate Hub
+        
+        CLI->>CLI: Wait interval seconds before next poll
+    end
+
+    Note over CLI: Store tokens for API access<br>Use refresh_token for token renewal
+```
+
+**Key endpoints:**
+- **POST /oidc/device/code** - Initiate device flow, returns user_code and device_code
+- **GET /oidc/device** - User verification page (displays code entry form)
+- **POST /oidc/device** - User submits user_code for authorization
+- **POST /oidc/token** - CLI polls for token using grant_type=urn:ietf:params:oauth:grant-type:device_code
+
+**Implementation notes:**
+- User codes should be short and human-friendly (e.g., "ABCD-EFGH", 8 characters)
+- Device codes are long, random strings for security
+- Default expiration: 900 seconds (15 minutes)
+- Default polling interval: 5 seconds
+- Clients should implement exponential backoff if Hub returns `slow_down` error
+- Device grants are single-use and must be deleted after token issuance or expiration
 
 ## Token Validation
 
@@ -702,12 +809,24 @@ stringData:
 | response_type | code                                |
 | usePKCE       | true                                |
 
-**CLI (binding):**
+**CLI (Device Authorization Grant):**
 
-| setting   | value                    |
-|-----------|--------------------------|
-| issuerURL | hub-service-address/oidc |
-| clientID  | cli                      |
+| setting         | value                                               |
+|-----------------|-----------------------------------------------------|
+| issuerURL       | hub-service-address/oidc                            |
+| clientID        | cli                                                 |
+| grant_type      | urn:ietf:params:oauth:grant-type:device_code        |
+| scope           | openid profile email offline_access                 |
+| device_endpoint | hub-service-address/oidc/device/code                |
+| token_endpoint  | hub-service-address/oidc/token                      |
+
+**Device flow behavior:**
+- CLI initiates flow by requesting device_code and user_code
+- User opens verification_uri in browser and enters user_code
+- CLI polls token endpoint every 5 seconds (default interval)
+- Once user authorizes, CLI receives tokens
+- No client_secret required (public client)
+- Supports PKCE for additional security (optional but recommended)
 
 
 ### Login UI
