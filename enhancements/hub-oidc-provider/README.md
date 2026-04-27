@@ -340,7 +340,7 @@ external (federated) IdP.
 
 Currently, Keycloak integration is configured via environment variables in the Hub deployment:
 - `AUTH_REQUIRED` - Enable/disable authentication (e.g., `true`)
-- `KEYCLOAK_HOST` - Keycloak server URL (e.g., `https://keycloak.example.com`)
+- `KEYCLOAK_SERVERL_URL` - Keycloak server URL (e.g., `https://keycloak.example.com`)
 - `KEYCLOAK_REALM` - Realm name (e.g., `konveyor`)
 - `KEYCLOAK_CLIENT_ID` - Client identifier for the Hub (e.g., `tackle-hub`)
 - `KEYCLOAK_CLIENT_SECRET` - Client secret (stored in Secret)
