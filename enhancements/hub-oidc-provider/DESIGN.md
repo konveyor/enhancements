@@ -194,7 +194,7 @@ sequenceDiagram
 
     Note over UI,Hub: Local Authorization Code Flow (No Consent)
 
-    UI->>Hub: GET /oauth2/authorize<br>?client_id=...&scope=openid profile email
+    UI->>Hub: GET /oidc/authorize<br>?client_id=...&scope=openid profile email
     activate Hub
 
     Hub->>User: Redirect to Login Page
@@ -223,7 +223,7 @@ sequenceDiagram
 
     Note over UI,Hub: Back-channel token exchange
 
-    UI->>Hub: POST /oauth2/token<br>grant_type=authorization_code + code_verifier
+    UI->>Hub: POST /oidc/token<br>grant_type=authorization_code + code_verifier
     activate Hub
 
     Hub-->>UI: Access Token + ID Token + Refresh Token<br>(signed by Hub keys, containing role-based scopes)
@@ -247,7 +247,7 @@ sequenceDiagram
 
     Note over UI,Hub: Authorization Code Flow starts
 
-    UI->>Hub: GET /oauth2/authorize<br>?client_id=...&scope=...&idp=google
+    UI->>Hub: GET /oidc/authorize<br>?client_id=...&scope=...&idp=google
     activate Hub
 
     Hub->>User: Redirect to External Login<br>(or show IdP selector)
@@ -260,7 +260,7 @@ sequenceDiagram
     ExternalIdP-->>User: Redirect back to Hub Provider<br>with authorization code
     deactivate ExternalIdP
 
-    User->>Hub: Callback with code<br>(/oauth2/authorize/{callback_id}?code=...)
+    User->>Hub: Callback with code<br>(/oidc/authorize/{callback_id}?code=...)
 
     Hub->>ExternalIdP: POST /token (exchange code)
     activate ExternalIdP
@@ -289,7 +289,7 @@ sequenceDiagram
 
     Note over UI,Hub: Back-channel token exchange
 
-    UI->>Hub: POST /oauth2/token<br>grant_type=authorization_code + code_verifier
+    UI->>Hub: POST /oidc/token<br>grant_type=authorization_code + code_verifier
     activate Hub
 
     Hub-->>UI: Access Token + ID Token + Refresh Token<br>(signed by Hub keys, with local scopes/claims)
@@ -314,7 +314,7 @@ sequenceDiagram
     Note over Hub,LDAP: Authentication uses Search + Bind pattern<br>Group retrieval via memberOf (AD) or group search
 
     %% === Initial Login Flow (Authorization Code Flow) ===
-    UI->>Hub: GET /authorize (client_id, scope=openid profile email, redirect_uri...)
+    UI->>Hub: GET /oidc/authorize (client_id, scope=openid profile email, redirect_uri...)
     Hub-->>UI: Redirect to Hub Login Page
 
     UI->>Hub: POST Login (username + password)
@@ -340,7 +340,7 @@ sequenceDiagram
 
     deactivate Hub
 
-    UI->>Hub: POST /token (grant_type=authorization_code, code=...)
+    UI->>Hub: POST /oidc/token (grant_type=authorization_code, code=...)
     activate Hub
     Hub->>Hub: Validate code + issue tokens
     Hub-->>UI: Access Token (JWT with roles/scopes) + ID Token + Refresh Token
