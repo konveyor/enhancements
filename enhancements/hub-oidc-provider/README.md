@@ -184,9 +184,10 @@ Authentication options include:
 
 1. **Manual PAT configuration**: Users obtain a PAT through the Hub UI and provide it to Kantra
    via command line option (e.g., `--token`) or environment variable (e.g., `TOKEN`)
-2. **Device code flow**: Kantra initiates an OIDC device authorization flow, displays a code and
+2. **AC (device access grant)**: Kantra initiates an OIDC device authorization flow, displays a code and
    URL for the user to visit in a browser, completes authentication, then optionally requests a
-   PAT for long-lived access
+   PAT for long-lived access.  The Go binding will support this flow so if kantra used the binding,
+   it will get this for free.   
 
 The previous method of POSTing username/password directly to obtain a token is no longer
 supported. This approach relied on the OAuth 2.0 Resource Owner Password Credentials (Direct
