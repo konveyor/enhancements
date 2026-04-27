@@ -319,7 +319,7 @@ Keycloak:
   - `OIDC_CLIENT_ID`: Unique identifier for the UI client (e.g., `konveyor-ui`)
   - `OIDC_CLIENT_SECRET`: Client secret for confidential client authentication (stored in a Secret)
   - `OIDC_REDIRECT_URI`: Callback URL for the authorization code flow (e.g., `https://ui.konveyor.io/auth/callback`)
-  - `OIDC_SCOPES`: Requested scopes (e.g., `openid profile email`)
+  - `OIDC_SCOPES`: Requested scopes (e.g., `openid profile email offline_access`)
 
 #### OIDC Configuration Secret
 
