@@ -104,10 +104,9 @@ permissions, tokens, PATs, and external identity mappings. Users are
 assigned to roles, and roles are associated with permissions (represented as
 OAuth scopes).
 
-The UI will be refactored to use OIDC for authentication (replacing the current
-Keycloak client integration) and will include new pages for managing users,
-roles, and permissions. The login page will be served from a ConfigMap managed
-by the operator, enabling branding customization without code changes.
+The web UI will be refactored to use OIDC with RFE [Adopt a modern OIDC flow on the UI](https://github.com/konveyor/enhancements/issues/268).  This will handle the login, token refresh, and expired/revoked token handling.
+
+To support the full Hub OIDC provider UX, base user management pages will be implemented and deployed to the operator.  These pages will include the login flow, user self management (i.e. change password), user management, role management, and permission management as needed.  In a federated configuration, this UX will be delegated to the federated OIDC provider.
 
 All standard OIDC discovery endpoints will be implemented
 (`.well-known/openid-configuration`, authorization, token, JWKS, userinfo,
