@@ -235,7 +235,8 @@ The matching logic is identical for live and offline modes -- only the source of
 | Code | Meaning |
 |------|---------|
 | 0 | All GVKs compatible |
-| 1 | One or more incompatible GVKs found, or another error occurred |
+| 1 | One or more incompatible GVKs found |
+| 2 | Command/runtime error (I/O failure, discovery failure, invalid input, etc.) |
 
 ### Security, Risks, and Mitigations
 

@@ -142,7 +142,7 @@ Extend `crane transform` and `crane apply` to handle cluster-scoped resources:
 
 Cluster-scoped resources follow the existing convention but use `_cluster` as the namespace component:
 
-```
+```text
 export-dir/
   resources/
     my-namespace/
@@ -160,7 +160,7 @@ export-dir/
 
 Aligned with the multi-stage kustomize pipeline (#207):
 
-```
+```text
 transform-dir/
   10_KubernetesPlugin/
     kustomization.yaml

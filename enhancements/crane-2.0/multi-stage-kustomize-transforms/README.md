@@ -108,7 +108,7 @@ The earlier [kustomize-support](https://github.com/konveyor/enhancements/tree/ma
 
 #### On-Disk Layout: Single-Stage
 
-```
+```text
 transform/
   10_KubernetesPlugin/
     kustomization.yaml
@@ -118,7 +118,7 @@ transform/
 
 #### On-Disk Layout: Multiple-Stages
 
-```
+```text
 transform/
   10_KubernetesPlugin/
     kustomization.yaml
@@ -231,7 +231,7 @@ For stable Git diffs and reproducible CI runs:
 
 * **Breaking change.** Removing `transform-*.json` files will break any user scripts or CI pipelines that parse the old format. This is mitigated by documentation and a deprecation period, but is still disruptive.
 * **kubectl dependency.** Adding a hard runtime requirement on `kubectl` increases the tool's prerequisites. Users in air-gapped environments must ensure `kubectl` is available.
-* **Complexity.** The multi-stage pipeline adds conceptual and implementation complexity. For users running a single plugin, stages add overhead without clear benefit. Mitigation: single-plugin runs produce a flat (non-staged) layout by default.
+* **Complexity.** The multi-stage pipeline adds conceptual and implementation complexity. For users running a single plugin, the output still uses the staged directory layout (e.g., `10_KubernetesPlugin/`) for consistency, but only a single stage directory is created.
 
 ## Alternatives
 
