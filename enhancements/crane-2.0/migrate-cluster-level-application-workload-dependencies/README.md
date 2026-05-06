@@ -87,7 +87,7 @@ A developer runs `crane export --namespace myapp`. The app references a ClusterR
 
 #### Story 3: Cluster Admin Applies Cluster-Scoped Resources Separately
 
-After the namespace admin generates the export directory, the cluster admin reviews the cluster-scoped manifests (CRDs, SCCs, ClusterRoleBindings). The cluster admin runs `crane apply --cluster-scoped-only` to generate the final cluster-level resources and then uses `kubectl apply` to deploy them. Finally, the namespace admin follows the same process for the remaining namespace resources. This split workflow strictly respects organizational permission boundaries.
+After the namespace admin generates the export directory, the cluster admin reviews the cluster-scoped manifests (CRDs, SCCs, ClusterRoleBindings). The cluster admin runs `crane apply --cluster-scoped-only` to produce the cluster-scoped output artifacts for review, then runs `kubectl apply` on those artifacts to deploy them. Finally, the namespace admin follows the same process for the remaining namespace resources. This split workflow strictly respects organizational permission boundaries.
 
 #### Story 4: CI/CD Pipeline with Full Permissions
 
