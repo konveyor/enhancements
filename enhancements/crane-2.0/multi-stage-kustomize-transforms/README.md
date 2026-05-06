@@ -137,6 +137,25 @@ Each stage consumes the `resources/` directory from the previous stage as input.
 
 #### CLI Changes
 
+There is a new binary called `crane` with following set of subcommands:
+
+```
+Available Commands:
+  apply           Apply the transformations to the exported resources and save results in an output directory
+  completion      Generate the autocompletion script for the specified shell
+  convert         Convert a deprecated resource to its replacement
+  export          Export the namespace resources in an output directory
+  help            Help about any command
+  plugin-manager  Plugin-manager is command that helps manage plugins
+  skopeo-sync-gen Generate source yaml for skopeo sync and write the result to stdout
+  transfer-pvc    transfer a pvc data from one kube context to another
+  transform       Create the transformations for the exported resources and plugins and save the results in a transform directory
+  tunnel-api      set up an openvpn tunnel to access an (source) on premise cluster from a (cloud) destination cluster
+  version         Return the current crane (and crane-lib) version
+```
+
+This enhancement focuses on `transform` and `apply`.
+
 **`crane transform` — new flags:**
 
 | Flag | Purpose |
