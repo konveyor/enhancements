@@ -150,7 +150,7 @@ Each stage consumes the `resources/` directory from the previous stage as input.
 * Discovers stages automatically from directory structure
 * Supports same stage-selection flags as `transform`
 * Preflight checks: validates `kubectl` availability and `kustomization.yaml` existence before execution
-* Idempotent by design: `crane apply` delegates to `kubectl apply` with declarative semantics, so repeated runs produce the same result without side effects. Any future additions to the apply flow (pre/post hooks, logging, etc.) must preserve this property.
+* Idempotent by design: `crane apply` delegates to `kubectl kustomize` with declarative semantics, so repeated runs produce the same result without side effects. Any future additions to the apply flow (pre/post hooks, logging, etc.) must preserve this property.
 
 #### Plugin Compatibility
 
