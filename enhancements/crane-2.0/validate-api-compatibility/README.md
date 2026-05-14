@@ -50,7 +50,7 @@ This enhancement adds a new **`crane validate`** command -- a read-only prefligh
 The enhancement is delivered in phases:
 
 * **Phase 1 (implemented):** Live-cluster validation -- `crane validate` queries the target cluster's discovery API directly via kubeconfig.
-* **Phase 2 (planned):** Offline/disconnected validation -- `crane validate --api-resources api-resources.json` accepts the JSON output of `kubectl api-resources -o json` for air-gapped environments, pre-provisioning checks, and CI/CD pipelines without cluster access.
+* **Phase 2 (planned):** Offline/disconnected validation -- `crane validate --api-resources api-surface.json` accepts a captured API surface JSON file (produced by [scripts/capture-api-surface.sh](https://github.com/migtools/crane/blob/main/scripts/capture-api-surface.sh)) for air-gapped environments, pre-provisioning checks, and CI/CD pipelines without cluster access.
 * **Phase 3:** GitOps target (to be considered).
 
 ## Motivation
@@ -75,7 +75,7 @@ Additionally, many real-world migrations involve **disconnected or air-gapped en
 * **Low privilege:** Validate only requires basic cluster authentication -- it uses the Kubernetes discovery API (`/api`, `/apis`) which is accessible to all authenticated users via the default `system:discovery` ClusterRole. No special RBAC is needed.
 * **Pipeline composability:** Validate fits naturally into the export -> transform -> apply -> validate flow, reading from `crane apply`'s output directory without requiring changes to other commands.
 * **Suggestion engine:** When an incompatible resource's kind is available under a different apiVersion on the target, suggest the alternative to guide the user.
-* **Offline/disconnected support (Phase 2):** Support validation against air-gapped clusters by accepting `kubectl api-resources -o json` output as input, using the same matching logic as live mode.
+* **Offline/disconnected support (Phase 2):** Support validation against air-gapped clusters by accepting an API surface JSON file as input, using the same matching logic as live mode.
 
 ### Non-Goals
 
@@ -107,7 +107,7 @@ An application uses a CRD-backed type `widgets.example.com/v1`. The CRD is not i
 
 #### Story 5: Air-Gapped / Disconnected Environment (Phase 2 -- Offline Mode)
 
-The target cluster is on a restricted network. A team member with cluster access captures the API surface with `kubectl api-resources -o json`. The migration team validates without cluster access using `crane validate --api-resources api-resources.json`. The matching logic, report format, and exit codes are identical to live mode.
+The target cluster is on a restricted network. A team member with cluster access captures the API surface using [scripts/capture-api-surface.sh](https://github.com/migtools/crane/blob/main/scripts/capture-api-surface.sh). The migration team validates without cluster access using `crane validate --api-resources api-surface.json`. The matching logic, report format, and exit codes are identical to live mode.
 
 #### Story 6: Pre-Provisioning Check (Phase 2 -- Offline Mode)
 
@@ -115,7 +115,7 @@ The target cluster doesn't exist yet, but the team knows it will be OCP 4.14. So
 
 #### Story 7: CI/CD Pipeline Without Cluster Access (Phase 2 -- Offline Mode)
 
-For multi-cluster targeting, the pipeline runs validate once per cluster using the corresponding `api-resources.json` file.
+For multi-cluster targeting, the pipeline runs validate once per cluster using the corresponding API surface JSON file.
 
 ### Implementation Details/Notes/Constraints
 
@@ -137,7 +137,7 @@ New command at `cmd/validate/validate.go`, following the existing Cobra pattern 
 
 | Flag | Description |
 |------|-------------|
-| `--api-resources` | Path to `kubectl api-resources -o json` output file. Enables offline validation. Mutually exclusive with `--kubeconfig`/`--context`. |
+| `--api-resources` | Path to API surface JSON file for offline validation. Mutually exclusive with `--kubeconfig`/`--context`. |
 
 The command also inherits all standard kubeconfig flags from `genericclioptions.ConfigFlags` (`--cluster`, `--server`, `--token`, etc.) and global crane flags (`--debug`, `--flags-file`).
 
@@ -192,24 +192,28 @@ Input filenames are sanitized when writing failure artifacts to prevent path tra
 * Call `discoveryClient.Invalidate()` before querying to ensure fresh results (no stale cache)
 * Build a two-level lookup map: groupVersion -> kind -> APIResource
 
-**Offline mode (Phase 2):** Parse `kubectl api-resources -o json` output:
+**Offline mode (Phase 2):** Parse the API surface JSON file (format: `{"apiResourceLists": [<APIResourceList>, ...]}` containing native `metav1.APIResourceList` objects per group-version):
 
-* Deserialize the native Kubernetes `APIResourceList` JSON with `json.Unmarshal`
+* Deserialize with `json.Unmarshal` into the same Go types the discovery client returns
 * Build the same two-level lookup map as live mode
-* Zero custom parsing -- the JSON output uses the same Go types (`metav1.APIResource`) the discovery client returns internally
-
-The JSON output from `kubectl api-resources -o json` provides everything needed:
-
-| JSON field | Maps to | Used for |
-|------------|---------|----------|
-| `group` + `version` | `groupVersion` (e.g., `apps/v1`; core resources omit `group`, so groupVersion = `v1`) | GVK matching |
-| `kind` | `kind` | GVK matching |
-| `name` | `resourcePlural` | Report output |
-| `namespaced` | `namespaced` | Future: scope validation |
 
 **Permissions (live mode):** Only requires the Kubernetes discovery API (`/api`, `/apis`), which is accessible to all authenticated users via the default `system:discovery` ClusterRoleBinding -> `system:authenticated` group. No namespace-level RBAC or resource-read permissions are needed.
 
 **Permissions (offline mode):** No cluster access needed from the migration workstation. The person capturing the API resources file needs only basic authentication on the target cluster.
+
+### Capture Script
+
+The [`scripts/capture-api-surface.sh`](https://github.com/migtools/crane/blob/main/scripts/capture-api-surface.sh) script captures the full API surface of a target cluster into a single JSON file for offline validation. It queries every served group-version via the raw API endpoints and produces the `{"apiResourceLists": [...]}` format that `crane validate --api-resources` expects.
+
+Usage:
+
+```bash
+# On a machine with target cluster access:
+bash scripts/capture-api-surface.sh --context my-target-cluster -o api-surface.json
+
+# On the migration workstation (no cluster access needed):
+crane validate --api-resources api-surface.json
+```
 
 #### Matching Logic
 
@@ -260,7 +264,7 @@ The matching logic is identical for live and offline modes -- only the source of
 
 **Stale discovery cache (live mode):** The command calls `discoveryClient.Invalidate()` before querying to ensure fresh results from the target cluster's API server.
 
-**Stale data (offline mode):** The `kubectl api-resources -o json` file is a point-in-time snapshot. Users should re-capture after cluster upgrades or CRD changes. The report includes the source file path and mode for traceability.
+**Stale data (offline mode):** The API surface JSON file is a point-in-time snapshot. Users should re-capture after cluster upgrades or CRD changes.
 
 ## Design Details
 
@@ -329,15 +333,15 @@ Matching logic (`matchEntry`, `addSuggestion`, `buildKindIndex`) stays untouched
 | Concern | Handling |
 |---------|----------|
 | **Stale data** | Document that the file is a point-in-time snapshot. Users should re-capture after cluster upgrades or CRD changes. |
-| **CRDs installed after capture** | Same as above -- re-run the kubectl command. |
+| **CRDs installed after capture** | Same as above -- re-run the capture script. |
 | **Empty resources array** | Error: "api-resources file contains no resources" |
 | **Malformed JSON** | Error from `json.Unmarshal` with clear message. |
 | **Missing `kind` field at top level** | Warn if `kind` is not `APIResourceList`, but still attempt to parse. |
-| **Core resources (no `group` field)** | `group` is omitted for core API resources. Parser uses `version` alone as `groupVersion` (e.g., `"v1"`). |
+| **Core resources (no `group` field)** | Core API resources use groupVersion: `"v1"` (no group prefix). The parser handles this naturally since groupVersion is provided directly. |
 | **Duplicate resources across groups** | Multiple entries with the same kind but different group/version are valid (e.g., `Event` in `v1` and `events.k8s.io/v1`). Index handles this naturally since it's keyed by `groupVersion`. |
 | **Verbs / RBAC** | Out of scope. `verbs` field is present in JSON but ignored. |
 | **Multi-cluster** | `--api-resources` takes one file. For N clusters, run validate N times with the corresponding file. |
-| **kubectl version compatibility** | `kubectl api-resources -o json` is available since K8s 1.11+. The `APIResourceList` schema is stable. |
+| **kubectl version compatibility** | The API surface JSON format wraps native `metav1.APIResourceList` objects. The capture script uses standard discovery APIs available since K8s 1.11+. |
 | **GitOps without target cluster** | When crane outputs to a GitOps repo and no target cluster is known yet, offline validate is not applicable. GVK validation requires a target cluster's API surface. |
 
 ### Implementation Plan (Phase 2)
@@ -374,7 +378,7 @@ Single phase -- everything ships together.
 * **Additional step in the pipeline:** Users must remember to run `crane validate` -- it is not automatically invoked by `crane apply`. This is deliberate (composability), but means users can still skip it.
 * **Strict matching may over-report:** Some resources may work on the target under a different version of the same group (e.g., v1beta1 -> v1), but strict matching flags them as incompatible. The suggestion engine mitigates this by showing available alternatives.
 * **Discovery limitations (live mode):** The Kubernetes discovery API may not surface all available API versions in all configurations (e.g., aggregated API servers with intermittent availability). The command handles partial discovery failures gracefully.
-* **Stale data (offline mode):** The api-resources JSON file is a point-in-time snapshot that may drift from the actual cluster state. Documentation should emphasize re-capturing after changes.
+* **Stale data (offline mode):** The API surface JSON file is a point-in-time snapshot that may drift from the actual cluster state. Documentation should emphasize re-capturing after changes.
 
 ## Alternatives
 
@@ -382,7 +386,7 @@ Single phase -- everything ships together.
 2. **Validate at export time against both source and target:** Rejected because export is source-only by design, and requiring target access during export adds a dependency that doesn't exist today. Validate as a separate command keeps concerns cleanly separated.
 3. **Transform plugin that rewrites apiVersions:** Complementary, not a replacement. A transform plugin can fix known version mappings, but the user still needs a way to discover *which* mappings are needed. Validate provides that discovery.
 4. **Static compatibility database:** Ship a hardcoded map of "version X removed in Kubernetes Y." Rejected because it cannot cover CRDs, custom API servers, or OpenShift-specific APIs, and requires constant maintenance.
-5. **Custom offline format (Phase 2 alternative):** Define a crane-specific YAML format for target API surface. Rejected in favor of `kubectl api-resources -o json` because it requires zero custom parsing, uses native Kubernetes types, and needs no crane tooling on the target cluster side.
+5. **Custom offline format (Phase 2 alternative):** Define a crane-specific YAML format for target API surface. Rejected in favor of the API surface JSON format which wraps native Kubernetes `APIResourceList` types and only requires a lightweight capture script ([scripts/capture-api-surface.sh](https://github.com/migtools/crane/blob/main/scripts/capture-api-surface.sh)) on the target cluster side.
 6. **Using `kubectl apply --dry-run=server`** (or client for offline, without schema validation in this client case) to check if manifests are valid for target cluster.
 
 ## Infrastructure Needed

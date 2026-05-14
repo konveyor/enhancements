@@ -140,7 +140,7 @@ Each stage consumes the `resources/` directory from the previous stage as input.
 
 There is a new binary called `crane` with following set of subcommands:
 
-```
+```text
 Available Commands:
   apply           Apply the transformations to the exported resources and save results in an output directory
   completion      Generate the autocompletion script for the specified shell
