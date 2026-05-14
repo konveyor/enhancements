@@ -32,10 +32,12 @@ see-also:
 ## Open Questions
 
 1. What is the ordering strategy when applying cluster-scoped resources before namespace-scoped ones? CRDs and SCCs must exist before workloads that reference them.
-2. How should `crane apply` behave when cluster-scoped resources already exist on the target with conflicting definitions (merge, skip, fail)?
+2. How should `crane apply` behave when cluster-scoped resources already exist on the target with conflicting definitions — skip or fail? (Merge/reconcile is excluded per Non-Goals.)
 3. **Role Aggregation depth:** When a ServiceAccount is bound to an aggregated ClusterRole, should Crane export only the parent ClusterRole, or the full aggregation tree (the parent plus all child ClusterRoles carrying matching `aggregationRule` labels)? Exporting only the parent means the target cluster must already have the child roles installed for aggregation to produce the same effective permissions. Exporting the full tree is more complete but may pull in shared/system ClusterRoles that are not application-specific.
 4. **CRD export vs. CRD-assumed-on-target:** The current implementation exports CRDs referenced by CR instances in the namespace. If the user lacks permissions to GET the CRD, it is not exported and the user is responsible for ensuring the CRD exists on the target. Should the enhancement explicitly state this two-tier behavior (export when possible, assume-on-target when forbidden), or should a CRD that cannot be exported be treated as a hard failure?
+    * **Decision:** Two-tier behavior is adopted: export CRDs when permissions allow, assume-on-target when forbidden. Additionally, operator-managed CRDs (those owned by an operator, identifiable via owner references or well-known labels) are skipped during export, since copying them to the target without their managing operator would leave them orphaned. Non-operator-managed CRDs are exported normally.
 5. **Cluster-scoped apply opt-in vs. opt-out:** The current implementation exports cluster-scoped resources by default. For apply, should `crane apply` include cluster-scoped resources by default (opt-out via `--namespace-scoped-only`), or exclude them by default (opt-in via `--cluster-scoped-only` or `--include-cluster-scoped`)? The default matters because applying cluster-scoped resources affects the entire cluster and many admins will want to review them separately.
+    * **Decision:** Export follows the "export whatever we can" rule and includes cluster-scoped resources by default. Apply also includes cluster-scoped resources by default but provides a `--skip-cluster-scoped` flag so namespace admins can exclude them. The `--cluster-scoped-only` flag remains available for cluster admins who want to apply only the cluster-scoped portion.
 
 ## Summary
 
@@ -108,8 +110,8 @@ Extend `crane export` to:
 * Traverse exported namespace resources and identify references to cluster-scoped objects (SCCs, ClusterRoleBindings, CRDs, RoleAggregations, etc.)
 * Attempt to GET/list referenced cluster-scoped resources
 * On success: write them to the export directory alongside namespace resources
-* On forbidden: log a warning with the specific resource and required permission, and continue the export. The resource is recorded under `failures/clusterscoped/` so administrators can identify what was inaccessible.
-* **CRD handling:** When a namespace contains CR instances backed by a CRD, Crane attempts to export the CRD definition. If the user lacks GET permissions on the CRD, Crane logs a warning and continues -- the user is responsible for ensuring the CRD is available on the target cluster. *(See Open Question 4.)*
+* On forbidden: log a warning with the specific resource and required permission, and continue the export. The resource is recorded under `failures/` so administrators can identify what was inaccessible.
+* **CRD handling:** When a namespace contains CR instances backed by a CRD, Crane attempts to export the CRD definition. If the user lacks GET permissions on the CRD, Crane logs a warning and continues -- the user is responsible for ensuring the CRD is available on the target cluster. Operator-managed CRDs (those owned by an operator, identifiable via owner references or well-known labels) are skipped during export to avoid creating orphaned CRDs on the target without their managing operator. *(See Open Question 4.)*
 * **Role Aggregation:** When a ServiceAccount is bound (via ClusterRoleBinding) to a ClusterRole, Crane exports that ClusterRole. For aggregated ClusterRoles, the current behavior exports only the parent ClusterRole -- not the child ClusterRoles whose labels match the `aggregationRule`. This means the target cluster must already have the contributing child roles for aggregation to produce the same effective permissions. *(See Open Question 3 for whether this should be expanded.)*
 * Evaluate whether to replace the Velero discovery dependency with Crane-owned discovery logic for full control over cluster-scoped traversal
 
@@ -118,7 +120,7 @@ Extend `crane export` to:
 Extend `crane transform` and `crane apply` to handle cluster-scoped resources:
 
 * **Transform:** Plugins receive cluster-scoped manifests and can emit patches (e.g., renaming an SCC, adjusting a ClusterRoleBinding's subjects). The kustomize-based multi-stage pipeline (#207) must support cluster-scoped resources in its overlay structure.
-* **Apply:** Cluster-scoped resources are applied before namespace resources (CRDs before CRs, SCCs before pods). Apply supports filtering by scope (`--cluster-scoped-only`, `--namespace-scoped-only`) to enable split-responsibility workflows. Existing namespace-only workflows remain unchanged when no cluster-scoped resources are present.
+* **Apply:** Cluster-scoped resources are applied before namespace resources (CRDs before CRs, SCCs before pods). By default, apply includes both cluster-scoped and namespace-scoped resources. Apply supports filtering by scope (`--cluster-scoped-only`, `--skip-cluster-scoped`) to enable split-responsibility workflows. Existing namespace-only workflows remain unchanged when no cluster-scoped resources are present.
 
 ### Security, Risks, and Mitigations
 
@@ -153,7 +155,6 @@ export-dir/
       ClusterRoleBinding_clusterscoped_myapp-binding.yaml
       CustomResourceDefinition_clusterscoped_widgets.example.com.yaml
   failures/
-    clusterscoped/
 ```
 
 ### Transform Directory Layout (Kustomize)

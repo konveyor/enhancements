@@ -36,6 +36,7 @@ see-also:
 4. Is it right to assume:
     1. that user-created scripts around the previous `transform-*.json` files are not supported anymore? (not affecting plugins)
     2. that `crane apply` can call `kubectl kustomize` internally (or `oc`)? The binary itself will not have kustomize evaluation logic embedded.
+        * **Update:** Embedding Kustomize directly into the Crane binary is being evaluated to remove the `kubectl` runtime dependency ([crane#369](https://github.com/migtools/crane/issues/369)). The current implementation shells out to `kubectl kustomize`; this may change.
 
 ## Summary
 
@@ -169,7 +170,7 @@ This enhancement focuses on `transform` and `apply`.
 * Discovers stages automatically from directory structure
 * Supports same stage-selection flags as `transform`
 * Preflight checks: validates `kubectl` availability and `kustomization.yaml` existence before execution
-* Idempotent by design: `crane apply` delegates to `kubectl kustomize` with declarative semantics, so repeated runs produce the same result without side effects. Any future additions to the apply flow (pre/post hooks, logging, etc.) must preserve this property.
+* Deterministic by design: `crane apply` delegates manifest rendering to `kubectl kustomize`, so repeated runs with unchanged inputs produce identical rendered output. Any future additions to the apply flow (pre/post hooks, logging, etc.) must preserve this property.
 
 #### Plugin Compatibility
 
@@ -178,6 +179,10 @@ Existing plugins are unaffected. They continue to return JSONPatch operations vi
 #### Stage Discovery
 
 Stages are discovered by convention: Crane scans the transform directory for subdirectories matching `<number>_<pluginName>`. When no explicit configuration is provided, the KubernetesPlugin is assigned priority 10, and remaining plugins are assigned priorities starting at 20 in alphabetical order, with gaps of 10 to allow user-defined custom stages.
+
+#### One Plugin Per Stage
+
+Each stage executes exactly one plugin. This isolation ensures that when a transformation produces unexpected results, the responsible plugin can be identified immediately by inspecting the corresponding stage directory. Users who need multiple plugins chain multiple `crane transform --stage` invocations (one per plugin). For recurring multi-plugin workflows, a migration descriptor file is planned ([crane#370](https://github.com/migtools/crane/issues/370)) to allow defining all stages in a single configuration.
 
 #### Determinism
 
@@ -190,7 +195,7 @@ For stable Git diffs and reproducible CI runs:
 
 ### Security, Risks, and Mitigations
 
-**kubectl dependency.** `crane apply` gains a hard runtime dependency on `kubectl` or `oc`. Mitigation: preflight check with a clear error message; document the requirement.
+**kubectl dependency.** `crane apply` currently delegates to `kubectl kustomize` at runtime. Embedding Kustomize as a Go library is being evaluated ([crane#369](https://github.com/migtools/crane/issues/369)) to remove this external dependency. Until then, a preflight check verifies `kubectl` availability with a clear error message.
 
 **Kustomize rendering differences.** Kustomize may handle edge cases (e.g., `remove` on a missing path) differently than the current in-process applier. Mitigation: fixture-based parity tests comparing old and new output for the existing test suite.
 
@@ -249,12 +254,12 @@ For stable Git diffs and reproducible CI runs:
 ## Drawbacks
 
 * **Breaking change.** Removing `transform-*.json` files will break any user scripts or CI pipelines that parse the old format. This is mitigated by documentation and a deprecation period, but is still disruptive.
-* **kubectl dependency.** Adding a hard runtime requirement on `kubectl` increases the tool's prerequisites. Users in air-gapped environments must ensure `kubectl` is available.
+* **kubectl dependency (under evaluation).** The current implementation requires `kubectl` at runtime. Embedding Kustomize as a library is being evaluated ([crane#369](https://github.com/migtools/crane/issues/369)) to eliminate this prerequisite.
 * **Complexity.** The multi-stage pipeline adds conceptual and implementation complexity. For users running a single plugin, the output still uses the staged directory layout (e.g., `10_KubernetesPlugin/`) for consistency, but only a single stage directory is created.
 
 ## Alternatives
 
-1. **Embed a Kustomize library instead of shelling out to kubectl.** Pro: removes the `kubectl` runtime dependency. Con: Kustomize's Go library API is not stable and has historically been difficult to vendor. The `kubectl kustomize` path is simpler and always tracks the user's installed version.
+1. **Embed a Kustomize library instead of shelling out to kubectl.** Pro: removes the `kubectl` runtime dependency. Con: Kustomize's Go library API is not stable and has historically been difficult to vendor. **This option is being actively evaluated** ([crane#369](https://github.com/migtools/crane/issues/369)).
 2. **Keep JSONPatch files but add a `crane render` command.** Pro: no breaking change. Con: still requires users to learn Crane-specific tooling; does not integrate with the broader Kustomize/GitOps ecosystem.
 3. **Use Helm charts instead of Kustomize overlays.** Pro: Helm provides great flexibility with templating system and it is widely adopted. Con: Typical k8s workload migration process aims to clean resources with minimal needed changes to make possible to be imported to the target cluster, templating should not be required in most cases. Helm's templating model is fundamentally different from patch-based transformation.
 

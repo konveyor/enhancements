@@ -159,6 +159,16 @@ Validate operates on the **final rendered manifests** from `crane apply`'s outpu
 
 Validating after apply (rendering) ensures that transform plugins' changes are reflected in the check. Validating raw exports would produce false positives for resources that transforms will fix.
 
+#### Resource Filtering
+
+Runtime-generated resources such as Pods, ReplicaSets, Endpoints, and EndpointSlices are filtered out by `crane transform`. The default KubernetesPlugin (along with other transform plugins if configured) identifies and excludes controller-managed resources from the final `kustomization.yaml`, keeping only declarative resources that users should apply to the target cluster. As a result, `crane validate` only scans the declarative resources that will actually be applied.
+
+For example, a typical pipeline might show:
+
+* **Export stage:** 13 resources (includes Pod, ReplicaSet, Endpoints, EndpointSlice, default ServiceAccount, kube-root-ca.crt ConfigMap)
+* **Transform stage:** Filters to 7 declarative resources (removes the 6 runtime-generated resources above)
+* **Validate stage:** Reports 7 resources scanned
+
 #### Scanner
 
 Walk the input directory tree recursively using `filepath.WalkDir`. For each `.yaml`/`.yml`/`.json` file:
