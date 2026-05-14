@@ -197,7 +197,7 @@ Input filenames are sanitized when writing failure artifacts to prevent path tra
 * Deserialize with `json.Unmarshal` into the same Go types the discovery client returns
 * Build the same two-level lookup map as live mode
 
-**Permissions (live mode):** Only requires the Kubernetes discovery API (`/api`, `/apis`), which is accessible to all authenticated users via the default `system:discovery` ClusterRoleBinding -> `system:authenticated` group. No namespace-level RBAC or resource-read permissions are needed.
+**Permissions (live mode):** Only requires access to the Kubernetes discovery API (`/api`, `/apis`). In default RBAC configurations this is granted to authenticated users via `system:discovery`, but hardened clusters may restrict it. No namespace-level resource-read permissions are otherwise needed.
 
 **Permissions (offline mode):** No cluster access needed from the migration workstation. The person capturing the API resources file needs only basic authentication on the target cluster.
 
@@ -254,7 +254,7 @@ The matching logic is identical for live and offline modes -- only the source of
 
 ### Security, Risks, and Mitigations
 
-**Target cluster access (live mode):** Validate requires read access to the target cluster's discovery API. This is a low-privilege operation -- discovery is available to all authenticated users via the default `system:discovery` ClusterRole. No special RBAC setup is needed. The kubeconfig must be handled securely.
+**Target cluster access (live mode):** Validate requires read access to the target cluster's discovery API. This is a low-privilege operation -- discovery is typically available to authenticated users via the default `system:discovery` ClusterRole, though hardened clusters may restrict it. No special RBAC setup is needed in default configurations. The kubeconfig must be handled securely.
 
 **No write operations:** Validate is strictly read-only on the cluster. It only writes to the local filesystem (report and failure artifacts under `--validate-dir`).
 
@@ -324,7 +324,7 @@ Matching logic (`matchEntry`, `addSuggestion`, `buildKindIndex`) stays untouched
 * **Unit tests:** JSON parsing -- valid output, empty resources, malformed JSON, core resources (no group), non-core resources (with group), duplicate kinds across groups
 * **Unit tests:** Offline matching -- same scenarios as live matcher tests but with a parsed index from JSON instead of a discovery client
 * **Unit tests:** Mutual exclusion -- `--api-resources` with `--context` or `--kubeconfig` returns error
-* **Integration tests:** Capture `kubectl api-resources -o json` from a test cluster, run `crane validate --api-resources` with it -- ensure results match live validate against the same cluster
+* **Integration tests:** Capture API surface using `scripts/capture-api-surface.sh` from a test cluster, run `crane validate --api-resources` with it -- ensure results match live validate against the same cluster
 * **E2E tests:** Cross-platform scenarios (EKS api-resources validated against OCP manifests)
 * **Regression:** Live-mode validate behavior unchanged
 
