@@ -101,6 +101,95 @@ external network access or additional downloads.
 
 ### Implementation Details/Notes/Constraints
 
+#### Current Rule Distribution Architecture
+
+Before describing the proposed changes, it's important to understand how rules are currently distributed:
+
+**Current Flow:**
+1. **rulesets repository**: Rules are authored here organized by language (java/, nodejs/, dotnet/)
+2. **tackle2-seed repository**: Seeding process adds metadata (UUID, dependencies, checksums) to rules
+3. **Distribution to deployments**:
+   - **Hub**: Clones tackle2-seed during container build, copies `resources/` to `/tmp/seed`, seeds database with ALL rulesets
+   - **Kantra**: Clones tackle2-seed during container build, copies `resources/rulesets/` to `/opt/rulesets` in the runner container image with ALL rulesets. At runtime, kantra extracts these from the runner container to the host filesystem
+   - **Providers (containers)**: Do NOT bundle rules themselves; they receive rules from Hub or kantra at runtime
+
+**Key Point**: Currently, ALL seeded rules are bundled into both Hub and kantra containers, regardless of which providers are actually used. Individual provider containers (java-external-provider, dotnet-external-provider, etc.) do NOT contain any rules.
+
+**Current Architecture (Simplified):**
+```
+tackle2-seed/resources/rulesets/
+├── java/
+├── nodejs/
+└── dotnet/
+
+        ↓ (bundled at build time)
+
+┌─────────────────────────────────────┐
+│ Hub Container                       │
+│ /tmp/seed/rulesets/                 │
+│   ├── java/ (ALL)                   │
+│   ├── nodejs/ (ALL)                 │
+│   └── dotnet/ (ALL)                 │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ Kantra Runner Container             │
+│ /opt/rulesets/                      │
+│   ├── java/ (ALL)                   │
+│   ├── nodejs/ (ALL)                 │
+│   └── dotnet/ (ALL)                 │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ Provider Containers                 │
+│ (java/nodejs/dotnet-provider)       │
+│                                     │
+│ NO RULES BUNDLED                    │
+└─────────────────────────────────────┘
+```
+
+**Proposed Architecture:**
+```
+tackle2-seed/resources/rulesets/
+├── java/
+├── nodejs/
+└── dotnet/
+
+        ↓ (language-specific bundling in providers)
+
+┌───────────────────────────────────────┐
+│ Hub Container                         │
+│ /tmp/seed/rulesets/                   │
+│   ├── java/ (ALL - for DB/UI)         │
+│   ├── nodejs/ (ALL)                   │
+│   └── dotnet/ (ALL)                   │
+│                                       │
+│ Spawns provider → mounts filtered:    │
+│  -v /tmp/seed/rulesets/java:/opt/rules│
+└───────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ Kantra Runner Container             │
+│ /opt/rulesets/java/ (native only)   │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│ Java Provider Container             │
+│ /opt/bundled-rules/ (Java only)     │
+│                                     │
+│ Reads: /opt/rules (if mounted)      │
+│    OR: /opt/bundled-rules (fallback)│
+└─────────────────────────────────────┘
+
+┌──────────────────────────────────────┐
+│ X Provider Container                 │
+│ /opt/bundled-rules/ (provider X only)│
+│                                      │
+│ Reads: /opt/rules (if mounted)       │
+│    OR: /opt/bundled-rules (fallback) │
+└──────────────────────────────────────┘
+```
+
 #### Rule Source of Truth
 
 The `rulesets` repository will remain the authoritative source for all rule definitions. This provides:
@@ -113,30 +202,54 @@ The `tackle2-seed` repository will also remain the single source of truth for th
 will occur **after** the seeding process, meaning providers will fetch their language-specific rules from the
 seeded output in tackle2-seed, not directly from the rulesets repository.
 
+#### Required Changes to Current Architecture
+
+To achieve provider-specific rule packaging, the following changes are needed:
+
+**Provider Container Changes (Core Change):**
+- Currently: Provider containers do NOT bundle any rules
+- Proposed: Each provider bundles its language-specific seeded rules from tackle2-seed
+  - Dockerfile copies relevant ruleset directory: e.g., `COPY --from=rulesets /tackle2-seed/resources/rulesets/java/ /opt/bundled-rules/`
+- **Rule Loading Logic**: Providers support both bundled and external rules with simple precedence:
+  1. Check for externally-provided rules (e.g., `/opt/rules/` via volume mount) - use if present
+  2. Fall back to bundled rules at `/opt/bundled-rules/`
+- This dual-mode support enables both Hub (provides rules via mounts) and Kantra (uses bundled defaults)
+
+**Hub Changes:**
+- Continues to seed database with ALL rulesets for management/UI purposes
+- When spawning providers, mounts only relevant language-specific rules to `/opt/rules/`
+  - Example: nodejs provider gets mount `-v /tmp/seed/rulesets/nodejs:/opt/rules:ro`
+- Provider uses mounted rules (takes precedence over bundled rules)
+
+**Kantra Changes:**
+- **Runner container**: No longer needs to bundle all rulesets (only Java for native execution)
+  - Dockerfile line 89: `COPY --from=rulesets /tackle2-seed/resources/rulesets/java/ /opt/rulesets/java/`
+- **Ruleset extraction**: Extract only Java rules from runner container (for native Java provider)
+- **Containerized providers**: Use their bundled rules directly (no mounts needed)
+- Simpler architecture: providers are self-contained
+
+**tackle2-seed Changes:**
+- Ensure seeding metadata (rulesets.yaml index) supports provider/language filtering
+- No structural changes needed; providers will consume existing language-organized directories
+
 #### Rule Distribution Mechanism
 
-Rules will be distributed to providers through one of these mechanisms (to be determined before implementation):
+Providers will use **build-time bundling with runtime override capability**:
 
-**Option A: Build-Time Vendoring**
-- During provider build process, fetch the relevant seeded ruleset directory from tackle2-seed
-- Embed the rules as resources in the provider binary or container image
-- Providers reference a specific tackle2-seed repository version/tag
-- Pros: No runtime dependencies, offline operation, version consistency, includes all metadata
-- Cons: Providers must be rebuilt to pick up rule changes
+**Build Time:**
+- Provider Dockerfile clones tackle2-seed at a specific version/tag
+- Copies language-specific seeded rules to `/opt/bundled-rules/` in the container image
+- Example: `COPY --from=rulesets /tackle2-seed/resources/rulesets/java/ /opt/bundled-rules/`
 
-**Option B: Runtime Fetching**
-- Providers fetch their seeded rules at initialization time from tackle2-seed
-- Could use git clone, HTTP download, or dedicated API
-- Configurable tackle2-seed repository location and version
-- Pros: Rule updates without provider rebuilds
-- Cons: Requires network access, potential version skew issues
+**Runtime:**
+- Providers check `/opt/rules/` first (for externally-provided rules via volume mount)
+- If not present, fall back to `/opt/bundled-rules/` (bundled defaults)
+- Simple precedence: external > bundled
 
-**Option C: Hybrid Approach**
-- Default rules embedded at build time (Option A)
-- Optional runtime override mechanism (Option B)
-- Best of both worlds for different deployment scenarios
-
-The initial implementation should start with **Option A** for simplicity and reliability, with Option C as a potential future enhancement.
+**Deployment Modes:**
+- **Hub deployment**: Mounts filtered rules to `/opt/rules/`, provider uses those
+- **Kantra deployment**: No mounts, provider uses bundled defaults at `/opt/bundled-rules/`
+- **Custom rules**: Users can mount their own rules to `/opt/rules/` in either deployment
 
 #### Kantra-Specific Handling
 
@@ -145,10 +258,19 @@ Kantra has unique requirements because:
 - Java provider can run without containers (direct binary execution)
 - Other providers run in containers
 
-For kantra:
-- **Java rules**: Package directly with the kantra binary (since Java provider runs natively)
-- **Other provider rules**: Include in each provider's container image
-- Each provider container is responsible for including its own ruleset at build time
+**Current State:**
+- Kantra's Dockerfile clones tackle2-seed and copies ALL `resources/rulesets/` to `/opt/rulesets` in the runner container
+- At runtime, kantra extracts rulesets from the runner container to the host filesystem  (e.g., `.rulesets-latest/`)
+- The extraction happens in `pkg/provider/env_container.go:extractDefaultRulesets()` which copies `/opt/rulesets` from the runner container
+
+**Proposed Changes:**
+For kantra runner container:
+- **Java rules**: Continue bundling `tackle2-seed/resources/rulesets/java/` at `/opt/rulesets/java/` (since Java provider runs natively)
+- **Other provider rules**: Should be bundled in their respective provider container images instead
+  - Node.js provider container bundles `/opt/rulesets/nodejs/`
+  - .NET provider container bundles `/opt/rulesets/dotnet/`
+- Update Dockerfile to copy only language-specific directories instead of all `resources/rulesets/`
+- Update extraction logic to handle provider-specific paths
 
 #### Builtin Provider Integration
 
@@ -192,19 +314,20 @@ This structure will be leveraged with clear documentation about which directory 
 
 #### Provider Configuration
 
-Each provider will need configuration to specify:
-- Which seeded ruleset directory it consumes
-- tackle2-seed repository version/tag to use (for build-time vendoring)
-- Any rule filtering or inclusion/exclusion patterns
+Each provider Dockerfile will specify:
+- tackle2-seed repository version/tag to use during build
+- Which language-specific directory to bundle from `resources/rulesets/`
+- Bundled rule location: `/opt/bundled-rules/`
+- External rule location (checked first): `/opt/rules/`
 
-Example configuration (format TBD):
-```yaml
-provider:
-  name: java-external-provider
-  ruleset:
-    source: konveyor/tackle2-seed
-    version: v1.2.3
-    directory: resources/rulesets/java  # seeded rules
+Example Dockerfile snippet:
+```dockerfile
+FROM registry.access.redhat.com/ubi9-minimal as rulesets
+ARG SEED_REF=v1.2.3
+RUN git clone --branch ${SEED_REF} https://github.com/konveyor/tackle2-seed
+
+FROM <base-image>
+COPY --from=rulesets /tackle2-seed/resources/rulesets/java/ /opt/bundled-rules/
 ```
 
 #### Migration Path for C# Provider
@@ -262,11 +385,15 @@ The C# (.NET) provider currently maintains rules in its own repository. The migr
 
 ### Provider Changes
 
-Each provider repository will need:
-1. **Build script updates**: Add rule fetching/vendoring step
-2. **Configuration file**: Specify ruleset source and version
-3. **Rule loader changes**: Load only embedded/configured rules instead of all rules
-4. **Documentation**: Explain which rules the provider uses
+Each provider container image will need:
+1. **Dockerfile updates**: 
+   - Add build stage to clone tackle2-seed
+   - Copy language-specific seeded rules to `/opt/bundled-rules/`
+   - Example for Java: `COPY --from=rulesets /tackle2-seed/resources/rulesets/java/ /opt/bundled-rules/`
+2. **Rule loader logic**: Implement dual-source rule loading
+   - Check `/opt/rules/` (external mount) first
+   - Fall back to `/opt/bundled-rules/` if not present
+3. **Documentation**: Document bundled rule location and override mechanism
 
 ### Rulesets Repository Changes
 
@@ -279,15 +406,29 @@ The rulesets repository will need:
 ### Tackle2-Seed Repository Changes
 
 The tackle2-seed repository will need:
-1. **Seeding process updates**: Potentially update to support language-specific seeding
-2. **Index updates**: The `rulesets.yaml` index may need language/provider tags to support filtering
+1. **Versioning coordination**: Ensure tackle2-seed versions align with rulesets versions
+2. **Index updates**: Add provider/language tags to `rulesets.yaml` if needed for filtering
+3. **Documentation**: Clarify that language-organized directories are consumed by respective providers
 
 ### Kantra Changes
 
 Kantra will need:
-1. **Build process**: Package Java rules directly
-2. **Container builds**: Ensure each provider container includes its rules
-3. **Documentation**: Explain bundled vs. containerized provider rule handling
+1. **Dockerfile updates** (line 89):
+   - Change from: `COPY --from=rulesets /tackle2-seed/resources/rulesets /opt/rulesets`
+   - To: `COPY --from=rulesets /tackle2-seed/resources/rulesets/java/ /opt/rulesets/java/`
+2. **Ruleset extraction logic** (`pkg/provider/env_container.go`):
+   - Update `extractDefaultRulesets()` to extract only Java rules (for native Java provider)
+   - Containerized providers use their bundled rules, no extraction needed
+3. **Documentation**: Explain that providers are now self-contained with bundled rules
+
+### Hub Changes
+
+Tackle2-hub will need:
+1. **Seeding process**: Continue seeding database with ALL rulesets for management/UI purposes
+2. **Provider spawning**: When launching provider containers, mount only language-specific rules
+   - Example: For nodejs provider, mount `-v /tmp/seed/rulesets/nodejs:/opt/rules:ro`
+3. **API enhancements**: Add provider/language filtering to ruleset queries (optional)
+4. **Documentation**: Update to reflect that providers use mounted rules over bundled defaults
 
 ### Test Plan
 
