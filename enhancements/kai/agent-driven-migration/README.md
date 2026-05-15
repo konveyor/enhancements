@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-03-31
-last-updated: 2026-04-09
+last-updated: 2026-05-15
 status: provisional
 see-also:
   - "https://github.com/konveyor/editor-extensions/issues/1243"
@@ -16,6 +16,7 @@ see-also:
   - "/enhancements/distributed-language-extensions/README.md"
   - "https://github.com/konveyor/enhancements/pull/259"
   - "https://agentskills.io"
+  - "https://agentclientprotocol.com"
 replaces: []
 superseded-by: []
 ---
@@ -45,10 +46,13 @@ containers.
    enhancement. The extension writes refreshed tokens to disk; the agent
    re-reads on auth failure.
 
-2. **Backend consolidation**: The POC supports Goose and OpenCode as agent
-   backends. Should the project commit to supporting multiple backends long-term,
-   or converge on one? The pluggable architecture allows deferring this decision,
-   but supporting multiple backends has ongoing maintenance cost.
+2. ~~**Backend consolidation**~~: **Resolved** — the project converges on the
+   [Agent Client Protocol (ACP)](https://agentclientprotocol.com) as the single
+   agent protocol. A unified `AcpClient` speaks ACP over stdio to any compliant
+   binary (`<binary> acp`). Supporting multiple backends reduces to adding an
+   entry in a config table (binary name, args, minimum version) — no new client
+   code is required. See
+   [editor-extensions#1368](https://github.com/konveyor/editor-extensions/pull/1368).
 
 3. **Session management**: When does the orchestrator start a new agent session
    vs. reuse an existing one? What context carries into a session? If session A
@@ -94,11 +98,13 @@ beyond this workflow to autonomous AI agents capable of:
 - **User-controlled autonomy**: Agent backends manage their own permission
   models; the IDE surfaces configuration for them
 
-The architecture is backend-agnostic: a common `AgentClient` interface allows
-different agent implementations (Goose via ACP protocol, OpenCode via SDK, or
-direct LLM calls) to be used interchangeably. The extension handles permission
-management, file change tracking, and user review regardless of which backend
-produces the changes.
+The architecture is backend-agnostic: a unified `AcpClient` speaks the
+[Agent Client Protocol (ACP)](https://agentclientprotocol.com) over stdio, so
+any binary that implements `<binary> acp` works as an agent backend — Goose,
+OpenCode, or any future ACP-compliant agent. Adding a new backend requires only
+a config entry (binary name, launch args, minimum version); no new client code
+is needed. A `DirectLLMClient` fallback preserves the existing single-shot LLM
+behavior for environments where an agent binary is unavailable.
 
 A fallback "workflow mode" preserves the existing single-shot LLM behavior for
 environments where autonomous agents are unavailable or undesirable.
@@ -136,10 +142,12 @@ users choose their preferred AI tool requires significant refactoring.
 
 ### Goals
 
-1. **Pluggable agent backends**: Define an `AgentClient` interface that any agent
-   implementation can satisfy. Ship with Goose (ACP protocol) and direct LLM
-   fallback. Architecture supports adding more backends without modifying core
-   orchestration.
+1. **Pluggable agent backends**: Define an `AgentBackendClient` interface with a
+   single `AcpClient` implementation that speaks
+   [ACP](https://agentclientprotocol.com) over stdio. Any ACP-compliant agent
+   binary (Goose, OpenCode, or others) works out of the box — new backends
+   require only a config entry, no code changes. A `DirectLLMClient` fallback
+   preserves the existing single-shot LLM behavior.
 
 2. **Autonomous codebase exploration**: Agents can read files, search code, and
    understand project structure before proposing changes, leading to
@@ -217,7 +225,7 @@ users choose their preferred AI tool requires significant refactoring.
 │  ┌───────────────────────────────────────────────────────────────┐  │
 │  │ Agent Feature Module                                          │  │
 │  │                                                               │  │
-│  │  AgentOrchestrator ──┬── AgentClient (Goose/OpenCode/Direct)  │  │
+│  │  AgentOrchestrator ──┬── AcpClient (any ACP agent) / DirectLLM │  │
 │  │       │              │         │                               │  │
 │  │       │              └── AgentFileTracker                     │  │
 │  │       │                                                       │  │
@@ -241,7 +249,7 @@ users choose their preferred AI tool requires significant refactoring.
 │  └───────────────────────────────────────────────────────────────┘  │
 │                              ↕                                      │
 │  ┌───────────────────────────────────────────────────────────────┐  │
-│  │ Agent Subprocess (Goose / OpenCode)                           │  │
+│  │ Agent Subprocess (any ACP-compliant binary)                   │  │
 │  │  • Reads skills/prompts from intelligence package             │  │
 │  │  • Explores codebase, executes tools                          │  │
 │  │  • Streams text, tool calls, permission requests              │  │
@@ -359,21 +367,29 @@ the final set of changes.
 
 ### Implementation Details
 
-#### AgentClient Interface
+#### AgentBackendClient Interface
 
-The core abstraction is the `AgentClient` interface that all backends implement:
+The core abstraction is the `AgentBackendClient` interface:
 
 ```typescript
-interface AgentClient extends EventEmitter {
+interface AgentBackendClient extends EventEmitter {
   // Lifecycle
+  getState(): AgentState;
   start(): Promise<void>;
   stop(): Promise<void>;
   dispose(): void;
 
   // Communication
-  sendMessage(message: string, sessionId?: string): Promise<void>;
+  sendMessage(content: string, responseMessageId: string): Promise<string>;
   createSession(): Promise<string>;
-  cancelGeneration(): Promise<void>;
+  cancelGeneration(): void;
+  respondToRequest(requestId: number, result: unknown): void;
+
+  // Configuration
+  getSessionId(): string | null;
+  isPromptActive(): boolean;
+  updateModelEnv(env: Record<string, string>): void;
+  setMcpServers(servers: McpServerConfig[]): void;
 
   // Events emitted:
   // - stateChange: AgentState transitions (stopped → starting → running → error)
@@ -381,23 +397,47 @@ interface AgentClient extends EventEmitter {
   // - streamingComplete: Full message with all content blocks
   // - toolCall: Tool invocation with name, arguments, status
   // - toolCallUpdate: Progress updates for long-running tools
-  // - permissionRequest: Tool needs user approval before executing
+  // - permissionRequest: Agent needs user approval before executing a tool
   // - error: Error conditions
 }
 ```
 
-Each backend translates its native protocol to these events:
-- **GooseClient**: JSON-RPC 2.0 over stdio (ACP protocol), parses
-  `session/update` notifications into events
-- **OpencodeAgentClient**: OpenCode SDK, maps SDK callbacks to events
-- **DirectLLMClient**: Wraps existing KaiInteractiveWorkflow, emits synthetic
-  permissionRequest events for file writes
+Two implementations satisfy this interface:
 
-The `AgentClient` interface is an internal abstraction — new backends are added
-by implementing the interface in the extension codebase. Third-party registration
-of agent backends (e.g., via a plugin API) is out of scope, but the interface
-makes it straightforward to add new implementations as the agent ecosystem
-evolves.
+- **`AcpClient`**: A single, backend-agnostic client that speaks the
+  [Agent Client Protocol (ACP)](https://agentclientprotocol.com) over stdio
+  using `@agentclientprotocol/sdk`. It spawns `<binary> acp` as a child
+  process and communicates via JSON-RPC 2.0 over newline-delimited JSON.
+  Backend-specific defaults (binary name, launch args, minimum version) are
+  config-driven:
+
+  ```typescript
+  const BACKEND_CONFIGS: Record<string, BackendConfig> = {
+    goose:    { binaryName: "goose",    binaryArgs: ["acp"], minimumVersion: "1.16.0" },
+    opencode: { binaryName: "opencode", binaryArgs: ["acp"], minimumVersion: "0.1.0" },
+  };
+  ```
+
+  Any ACP-compliant agent binary can be used by adding an entry to this table
+  or by setting the binary path directly in settings. No new client code is
+  required — the protocol handles the abstraction.
+
+  The minimum version check is advisory: if the binary's version output cannot
+  be parsed, the extension logs a warning and proceeds. When a user provides a
+  custom binary path, the version check should be skippable (e.g., via a
+  setting or by the fact that unknown backends have no minimum version entry).
+  The goal is to avoid blocking users who bring their own ACP-compliant agent.
+
+- **`DirectLLMClient`**: Wraps the existing `KaiInteractiveWorkflow` for
+  environments where an agent binary is unavailable. Emits synthetic events
+  to match the `AgentBackendClient` contract.
+
+This design directly answers whether new backends can be registered without
+shipping code in the core extension: **yes**. Any binary that implements the
+ACP protocol works. The user selects a backend name and optionally provides a
+binary path. The extension discovers the binary, optionally checks its version
+(advisory, not blocking), and communicates entirely through the protocol — no
+backend-specific SDK or client implementation is needed.
 
 #### Agent Orchestrator
 
@@ -537,7 +577,8 @@ A settings panel allows configuration of:
 
 - **LLM provider and model**: Supports OpenAI, Anthropic, Azure, Ollama, Bedrock,
   and custom endpoints
-- **Agent backend**: Goose or OpenCode (future: additional backends)
+- **Agent backend**: Any ACP-compliant agent binary (ships with Goose and
+  OpenCode defaults)
 - **Backend permissions**: Surface backend-native permission configuration
 - **Credentials**: Stored in VS Code SecretStorage (encrypted per platform)
 - **Agent extensions**: Enable/disable Goose extensions and MCP servers
@@ -585,9 +626,8 @@ New VS Code settings:
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `genai.agentMode` | boolean | `true` | Enable autonomous agent mode |
-| `experimentalChat.agentBackend` | enum | `"goose"` | Agent backend selection |
-| `experimentalChat.gooseBinaryPath` | string | `""` | Path to Goose binary |
-| `experimentalChat.opencodeBinaryPath` | string | `""` | Path to OpenCode binary |
+| `experimentalChat.agentBackend` | string | `"goose"` | ACP agent backend name (any ACP-compliant binary) |
+| `experimentalChat.agentBinaryPath` | string | `null` | Path to the ACP agent binary; if not set, searches PATH using the backend name |
 | `genai.batchReviewMode` | boolean | `false` | Queue file changes for batch review |
 
 ### State Management
@@ -653,15 +693,28 @@ at any time. Each backend starts fresh with a new session. Configuration
   ([editor-extensions#1334](https://github.com/konveyor/editor-extensions/issues/1334))
   — resolved via [credential file sidecar](https://github.com/konveyor/enhancements/pull/265)
 
+- **2026-05**: ACP unification
+  ([editor-extensions#1368](https://github.com/konveyor/editor-extensions/pull/1368),
+  in progress)
+  - Replacing per-backend SDK clients (`GooseClient`, `OpencodeAgentClient`)
+    with a single `AcpClient` using `@agentclientprotocol/sdk`
+  - Removing `@opencode-ai/sdk` dependency — OpenCode now speaks ACP like Goose
+  - Unifying binary path config into a single `agentBinaryPath` setting
+  - Backend-specific defaults (binary name, args, minimum version) moved to a
+    config table — new ACP-compliant backends require no code changes
+
 ## Drawbacks
 
 1. **Complexity**: The agent architecture adds significant complexity compared to
    the single-shot LLM approach — subprocess management, permission systems, MCP
    bridging, file tracking, and multiple UI components.
 
-2. **External dependencies**: Agents (Goose, OpenCode) are external projects with
-   their own release cycles, bugs, and breaking changes. The extension must track
-   upstream changes and adapt.
+2. **External dependencies**: Agent binaries (Goose, OpenCode, etc.) are external
+   projects with their own release cycles and bugs. However, by depending on the
+   ACP protocol rather than per-agent SDKs, the extension is insulated from
+   agent-specific internals. The protocol provides a stable interface boundary;
+   breaking changes in one agent's implementation do not require client-side code
+   changes as long as the agent remains ACP-compliant.
 
 3. **Binary distribution**: Agent binaries (Goose, OpenCode) must be installed
    separately. This adds friction to the user experience compared to the
