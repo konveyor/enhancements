@@ -43,7 +43,6 @@ and consistency across the IDE, Hub, and CLI environments.
 
 - Enable each provider to package and load only the rules for its specific target language
 - Maintain the rulesets repository as the single source of truth for all rule definitions
-- Support the builtin provider as a helper provider that can be used by any language-specific provider
 - Ensure the solution works seamlessly across IDE, Hub, and CLI (kantra) deployments
 - Make it easy for contributors to add or modify rules without needing to understand complex distribution mechanics
 - Provide clear guidelines for which rules belong to which provider
@@ -52,7 +51,6 @@ and consistency across the IDE, Hub, and CLI environments.
 
 - Support for rules that require multiple providers (beyond the builtin + one language provider combination)
 - Migration of existing C# provider rules from their current repository to the rulesets repository (can be addressed separately)
-- Environment-specific distribution strategies (IDE vs Hub vs CLI) - this will be addressed in a follow-up enhancement
 
 ## Proposal
 
@@ -88,7 +86,7 @@ As a contributor adding a new Java migration rule, I want to add my rule to the 
 have it automatically available in the Java provider without needing to modify multiple repositories or configuration files.
 
 #### Story 3: Multi-Language Project User
-As a user with a project containing both Java and Node.js code, I want to run both providers and have each one evaluate
+As a user with a project containing both Java and Node.js code (for instance), I want to run both providers and have each one evaluate
 only the rules relevant to its language, while both can leverage builtin provider conditions.
 
 #### Story 4: IDE User
