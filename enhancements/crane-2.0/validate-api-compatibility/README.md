@@ -33,13 +33,18 @@ superseded-by: []
 ## Open Questions
 
 1. Should crane validate also check that CRDs backing custom resources are installed on the target, or only check built-in API discovery rows?
+    * **Decision:** Yes — the discovery API already includes CRD-backed resources when the CRD is installed on the target. No extra logic needed for live mode. For offline mode, the capture script captures all served APIs including CRD-backed ones. Handled by the existing discovery mechanism.
 2. For the next phase (post Konveyor 0.10 release), should the command support a `--fix` or `--rewrite` mode that rewrites manifests to a compatible apiVersion when one exists, or should that remain a transform plugin concern?
+    * **Decision:** Leave as a transform plugin concern. Validate is read-only by design (stated in Non-Goals). A future transform plugin could consume the validation report to auto-rewrite apiVersions. This preserves separation of concerns and Crane's Unix-philosophy composability.
 3. Should the `validate` command be limited to a local schema check, or should it include a server-side "can-i" check to verify user permissions and cluster policies?
     * **Option 1: Local Schema Validation** -- Validates manifests against Kubernetes resource definitions without connecting to a cluster.
     * **Option 2: Server-Side Validation (The "can-i" approach)** -- Uses `kubectl apply --dry-run=server` to simulate the actual import process against the live API. Requires an active network connection and valid credentials at the time of validation.
     * **Option 3: Hybrid Approach** -- Implement Local Validation as the default while providing an optional `--server-side` flag.
+    * **Decision:** Hybrid (Option 3). Phase 1 implements live cluster discovery. Phase 2 adds offline validation via `--api-resources`. Server-side dry-run (`kubectl apply --dry-run=server`) is complementary but out of scope — users can run it independently after `crane validate` passes.
 4. Do we want to have both console output as well as a JSON report (detailed under the Design Details section below)?
+    * **Decision:** Yes — both. Table output to terminal for human readability, JSON/YAML report file for CI/automation.
 5. In the case where the target is GitOps, is the crane validate workflow valid here? If yes, whose responsibility is it?
+    * **Decision:** When a target cluster is known, validate is valid and the GitOps repo maintainer or CI pipeline is responsible for running it. When no target cluster is decided yet, validate is not applicable (already stated in Non-Goals). Deeper GitOps integration is deferred to Phase 3.
 
 ## Summary
 
