@@ -97,6 +97,10 @@ additional configuration required on my part.
 As a user running kantra for Java analysis, I want the bundled Java provider to include all Java rules without requiring
 external network access or additional downloads.
 
+#### Story 6: Custom Rules User
+As a user with organization-specific migration rules, I want to provide my custom rules in addition to the default
+bundled rules so that my analysis includes both standard and custom checks.
+
 ### Implementation Details/Notes/Constraints
 
 #### Current Rule Distribution Architecture
@@ -164,26 +168,35 @@ tackle2-seed/resources/rulesets/
 │                                       │
 │ Spawns provider containers            │
 │ (rules bundled in provider images)    │
+│                                       │
+│ Optional: mount custom rules          │
+│  -v /custom/rules:/opt/custom-rulesets:ro
 └───────────────────────────────────────┘
 
 ┌─────────────────────────────────────┐
 │ Kantra Distribution (ZIP)           │
 │ rulesets/java/ (for containerless)  │
+│                                     │
+│ Optional: custom rules on host      │
+│ mounted to provider containers      │
 └─────────────────────────────────────┘
 
 ┌─────────────────────────────────────┐
 │ Java Provider Container             │
-│ /opt/rulesets/ (Java only)          │
+│ /opt/rulesets/ (Java only - bundled)│
+│ /opt/custom-rulesets/ (optional)    │
 └─────────────────────────────────────┘
 
 ┌─────────────────────────────────────┐
 │ Node.js Provider Container          │
-│ /opt/rulesets/ (Node.js only)       │
+│ /opt/rulesets/ (Node.js - bundled)  │
+│ /opt/custom-rulesets/ (optional)    │
 └─────────────────────────────────────┘
 
 ┌─────────────────────────────────────┐
 │ .NET Provider Container             │
-│ /opt/rulesets/ (dotnet only)        │
+│ /opt/rulesets/ (dotnet - bundled)   │
+│ /opt/custom-rulesets/ (optional)    │
 └─────────────────────────────────────┘
 ```
 
@@ -243,7 +256,39 @@ Providers will use **build-time bundling**:
 - **Kantra deployment**: 
   - Containerless Java: Uses Java rules from kantra distribution (extracted to host filesystem)
   - Containerized providers: Use their bundled rules at `/opt/rulesets/`
-- **Custom rules**: Users can mount custom rules if needed, but default flow uses bundled rules
+
+#### Custom Rules Support
+
+In addition to the bundled default rules, users can provide their own custom rules for organization-specific
+migration scenarios, proprietary framework migrations, or other specialized analysis needs.
+
+**Custom Rules Mechanism:**
+- Providers load rules from two locations:
+  1. `/opt/rulesets/` - Default bundled rules (always loaded from the container image)
+  2. `/opt/custom-rulesets/` - Custom user-provided rules (optional, via volume mount)
+- Custom rules are loaded **in addition to** default rules, not as a replacement
+- Custom rules can be unstructured (do not need to follow the language-specific directory organization of default rules)
+- Override behavior: The existing rule loading logic for handling duplicate rule IDs is preserved
+
+**Deployment-Specific Custom Rules:**
+
+**Hub:**
+- Custom rules provided via volume mount when spawning provider containers
+- Example: `-v /path/to/custom/rules:/opt/custom-rulesets:ro`
+- Hub can manage custom rulesets through its storage mechanisms and mount them to providers
+
+**Kantra:**
+- Custom rules provided via volume mount from host filesystem to provider containers
+- Example: User places custom rules in a directory, kantra mounts it when spawning providers
+- For containerless Java provider, custom rules can be placed in a directory that the native provider reads
+
+**IDE:**
+- Custom rules support mechanism TBD (likely workspace or project-local directory)
+
+**Custom Rules Structure:**
+- Custom rules do not need to follow the `java/`, `nodejs/`, `dotnet/` directory structure
+- They can be organized however the user prefers
+- Provider loads all rule files recursively from `/opt/custom-rulesets/`
 
 #### Kantra-Specific Handling
 
@@ -385,9 +430,11 @@ Each provider container image will need:
    - Add build stage to clone tackle2-seed
    - Copy language-specific seeded rules to `/opt/rulesets/`
    - Example for Java: `COPY --from=rulesets /tackle2-seed/resources/rulesets/java/ /opt/rulesets/`
-2. **Rule loader logic**: Load rules from `/opt/rulesets/`
-   - All rules are bundled at build time in the container image
-3. **Documentation**: Document bundled rule location (`/opt/rulesets/`)
+2. **Rule loader logic**: Load rules from two locations
+   - `/opt/rulesets/` - Default bundled rules (always present in the container image)
+   - `/opt/custom-rulesets/` - Custom user-provided rules (optional, via volume mount)
+   - Custom rules are loaded in addition to default rules
+3. **Documentation**: Document bundled rule location (`/opt/rulesets/`) and custom rules location (`/opt/custom-rulesets/`)
 
 ### Rulesets Repository Changes
 
@@ -414,7 +461,11 @@ Kantra will need:
    - Update `extractDefaultRulesets()` to extract Java rules from the kantra distribution (not from a container)
    - Extract to host filesystem for native Java provider execution
    - Containerized providers use their bundled rules at `/opt/rulesets/`, no extraction needed
-3. **Documentation**: Explain that Java rules are in the distribution for containerless mode, and containerized providers are self-contained with rules bundled at `/opt/rulesets/`
+3. **Custom rules support**:
+   - Allow users to specify a custom rules directory (e.g., via CLI flag or configuration)
+   - Mount custom rules from host filesystem to provider containers at `/opt/custom-rulesets:ro`
+   - For containerless Java provider, provide custom rules directory path to the native provider
+4. **Documentation**: Explain that Java rules are in the distribution for containerless mode, and containerized providers are self-contained with rules bundled at `/opt/rulesets/`, plus optional custom rules support
 
 ### Hub Changes
 
@@ -422,9 +473,12 @@ Tackle2-hub will need:
 1. **Seeding process**: Continue seeding database with ALL rulesets for management/UI purposes
 2. **Provider spawning**: When launching provider containers, simply run them
    - Providers use their bundled rules at `/opt/rulesets/`
-   - No rule mounting needed - providers are self-contained
-3. **API enhancements**: Add provider/language filtering to ruleset queries (optional)
-4. **Documentation**: Update to reflect that providers are self-contained with bundled rules
+   - No rule mounting needed for default rules - providers are self-contained
+3. **Custom rules support**: Optionally mount custom rules when spawning providers
+   - Example: `-v /path/to/custom/rules:/opt/custom-rulesets:ro`
+   - Hub can manage custom rulesets and provide them to providers as needed
+4. **API enhancements**: Add provider/language filtering to ruleset queries (optional)
+5. **Documentation**: Update to reflect that providers are self-contained with bundled rules, with optional custom rules support
 
 ### Test Plan
 
@@ -432,16 +486,23 @@ Tackle2-hub will need:
 - Each provider correctly loads only its language-specific rules
 - Builtin conditions work within language-specific rules
 - Rule loading fails gracefully if rules are missing or malformed
+- Providers correctly load custom rules from `/opt/custom-rulesets/`
+- Custom rules are loaded in addition to default rules
 
 #### Integration Tests
 - Java provider runs only Java rules, not C# or Node.js rules
 - Multi-provider analysis works correctly with separate rulesets
 - Kantra correctly packages and runs Java rules
+- Custom rules are correctly mounted and loaded in Hub deployments
+- Custom rules are correctly mounted and loaded in Kantra deployments
+- Custom rules work with both containerized and containerless (Java) providers
 
 #### End-to-End Tests
 - Analyze sample projects with each provider
 - Verify only relevant rules are executed
 - Test in IDE, Hub, and kantra environments
+- Test custom rules workflow in Hub and Kantra
+- Verify custom rules execute alongside default rules
 
 #### Regression Tests
 - Existing analysis results remain consistent after migration
@@ -544,5 +605,8 @@ Tackle2-hub will need:
 3. **Seeding Pipeline**: Ensure seeding process runs after rulesets changes to update tackle2-seed
 4. **Provider Build Tooling**: Scripts or tools to fetch and package seeded rules from tackle2-seed during provider builds
 5. **CI/CD Updates**: Modify provider CI/CD pipelines to include rule packaging steps from tackle2-seed
-6. **Documentation Site Updates**: Ensure documentation reflects provider-to-ruleset mapping and the seeding process
-7. **Testing Infrastructure**: Ability to test each provider with its specific ruleset in isolation
+6. **Documentation Site Updates**: Ensure documentation reflects provider-to-ruleset mapping, the seeding process, and custom rules support
+7. **Testing Infrastructure**: 
+   - Ability to test each provider with its specific ruleset in isolation
+   - Test fixtures for custom rules scenarios
+   - Integration tests for custom rules mounting in Hub and Kantra
