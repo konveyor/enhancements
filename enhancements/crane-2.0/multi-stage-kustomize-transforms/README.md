@@ -41,7 +41,7 @@ see-also:
         * **Decision:** Yes — `transform-*.json` files are replaced by the Kustomize overlay layout. Existing user scripts that parse `transform-*.json` will break. Document the migration path and consider a one-release deprecation period (already noted in Breaking Change section).
     2. that `crane apply` can call `kubectl kustomize` internally (or `oc`)? The binary itself will not have kustomize evaluation logic embedded.
         * **Update:** Embedding Kustomize directly into the Crane binary is being evaluated to remove the `kubectl` runtime dependency ([crane#369](https://github.com/migtools/crane/issues/369)). The current implementation shells out to `kubectl kustomize`; this may change.
-        * **Decision:** Currently yes — `crane apply` shells out to `kubectl kustomize`. Embedding Kustomize as a Go library is being evaluated ([crane#369](https://github.com/migtools/crane/issues/369)) to remove the `kubectl` runtime dependency. The answer may change based on that evaluation.
+        * **Decision:** Resolved — Kustomize is now embedded directly into the Crane binary as a Go library (`sigs.k8s.io/kustomize/api/krusty`). There is no runtime dependency on `kubectl` or `oc` for transform or apply operations ([crane#369](https://github.com/migtools/crane/issues/369), [crane#388](https://github.com/migtools/crane/pull/388)).
 
 ## Summary
 
@@ -68,7 +68,7 @@ The earlier [kustomize-support](https://github.com/konveyor/enhancements/tree/ma
 
 ### Goals
 
-1. **Kustomize-native output.** `crane transform` produces a valid Kustomize overlay (`kustomization.yaml` + patch files) instead of flat JSONPatch files. Users can run `kubectl kustomize <transform-dir>` to preview the final manifests at any time.
+1. **Kustomize-native output.** `crane transform` produces a valid Kustomize overlay (`kustomization.yaml` + patch files) instead of flat JSONPatch files. Crane renders these internally via the embedded kustomize library. Users can also run `kubectl kustomize <transform-dir>` externally to preview the final manifests.
 2. **Multi-stage pipeline.** Each plugin produces its own isolated stage directory (`10_KubernetesPlugin/`, `20_OpenShiftPlugin/`, etc.). Each stage is independently inspectable and runnable. Each stage is suited for actual input manifests (from export or previous stage output), this means a new stage will internally apply the previous one.
 3. **Debug-friendly stages.** Each stage (plugin and custom) produces its own input and output manifests under directory `transform/.work/10_ThePlugin`.
 4. **Deterministic, Git-friendly output.** Patch files use stable naming (`<namespace>--<group>-<version>--<Kind>--<name>.patch.yaml`) and deterministic ordering so that repeated runs produce identical output when input is unchanged.
@@ -77,10 +77,10 @@ The earlier [kustomize-support](https://github.com/konveyor/enhancements/tree/ma
 
 ### Non-Goals
 
-* **Replacing Kustomize.** Crane is not building its own overlay engine. It produces standard Kustomize artifacts and delegates rendering to `kubectl kustomize`.
+* **Replacing Kustomize.** Crane is not building its own overlay engine. It produces standard Kustomize artifacts and renders them via the embedded kustomize library.
 * **Plugin distribution.** How plugins are discovered, installed, and updated is covered by the existing crane [plugin-management](https://github.com/konveyor/enhancements/tree/master/enhancements/crane-2.0/plugin-management) system.
 * **Operator/controller integration.** This enhancement covers the CLI workflow only. Integration with the Crane operator or mig-controller is out of scope.
-* **Semantic validation between stages.** Cross-stage content validation is delegated to `kubectl kustomize` at apply time.
+* **Semantic validation between stages.** Cross-stage content validation is delegated to the embedded kustomize at apply time.
 
 ## Proposal
 
@@ -91,7 +91,7 @@ The earlier [kustomize-support](https://github.com/konveyor/enhancements/tree/ma
 **As a** platform engineer migrating an application, **I want to** run `crane transform` to execute the default `10_KubernetesPlugin`, **So that** server-managed metadata is removed, generating standard Kustomize patches that I can easily inspect and debug.
 
 * **Patch Generation:** The plugin automatically generates JSONPatch operations that Crane transparently converts into Kustomize patches, saving them in `transform/10_KubernetesPlugin/patches/` using a predictable, Git-friendly naming convention (`<namespace>--<group>-<version>--<Kind>--<name>.patch.yaml`).
-* **Inspection:** At any time, I can preview the final cleaned YAML before applying it to the cluster by simply running `kubectl kustomize transform/10_KubernetesPlugin/`.
+* **Inspection:** At any time, I can preview the final cleaned YAML before applying it to the cluster. Crane renders this internally, or I can run `kubectl kustomize transform/10_KubernetesPlugin/` externally for manual inspection.
 * **Debugging:** If I need to see exactly what went into the transformation or what came out, I can check the intermediate raw snapshots inside the `transform/.work/10_KubernetesPlugin/input/` and `output/` directories.
 
 #### Story 2: Multi-Stage Transformation with Multiple Existing Plugins
@@ -99,7 +99,7 @@ The earlier [kustomize-support](https://github.com/konveyor/enhancements/tree/ma
 **As a** platform engineer performing a cross-platform migration (such as moving from OpenShift to vanilla Kubernetes), **I want to** run a multi-stage pipeline where each plugin has its own isolated directory (e.g., `10_KubernetesPlugin` and `20_OpenShiftPlugin`), **So that** I can accurately trace patch generation across plugins, inspect intermediate states, and debug unexpected changes without dealing with a single massive patch file.
 
 * **Patch Generation:** Each plugin's output is isolated into its own stage directory with its own `kustomization.yaml` and `patches/` folder, meaning patches from different plugins are never merged into an opaque file.
-* **Inspection:** I can inspect the output of any specific stage individually using standard tools like `kubectl kustomize <stage-dir>`.
+* **Inspection:** I can inspect the output of any specific stage individually. Crane renders each stage internally, or I can use `kubectl kustomize <stage-dir>` externally for manual verification.
 * **Debugging:** If a resource (like a Route or Deployment) is incorrectly modified, I can easily isolate the behavior of a single plugin by inspecting its specific patch folder or by re-executing just that specific stage using the `crane transform --stage <stage-dir>` command.
 
 #### Story 3: Custom Transformation Stage with User-Created Modifications
@@ -107,7 +107,7 @@ The earlier [kustomize-support](https://github.com/konveyor/enhancements/tree/ma
 **As a** platform engineer adapting migrated resources to new environment standards, **I want to** append a custom transformation stage (e.g., `50_CustomModifications`) to the pipeline, **So that** I can layer GitOps-friendly declarative patches and overrides (like swapping image tags or updating namespaces) directly on top of the automated Crane output.
 
 * **Modification Generation:** I can manually change the `kustomization.yaml` inside my custom stage directory and define custom modifications, like `namespace: migrated-app` or an `images:` block to swap container image tags, or changing annotation labels, or write custom patches without needing to write or compile a Go-based Crane plugin.
-* **Inspection:** I can verify my custom changes alongside the automated ones by running `kubectl kustomize` on my custom stage directory, ensuring my edits correctly apply over the output of the previous stage.
+* **Inspection:** I can verify my custom changes alongside the automated ones by running `crane apply` or `kubectl kustomize` on my custom stage directory, ensuring my edits correctly apply over the output of the previous stage.
 * **Debugging:** If my manual edits to the `kustomization.yaml` are incorrect or malformed, running `crane apply` will fail and provide a reasonable error message for me to troubleshoot. If my modifications drift or I need to overwrite my dirty custom stage directory, I can force recreation using the `crane transform --force` flag. It is expected that the last stage is modified manually to be sure that the following stage will not be broken by the previous one.
 
 ### Implementation Details/Notes/Constraints
@@ -171,11 +171,11 @@ This enhancement focuses on `transform` and `apply`.
 
 **`crane apply` — behavioral changes:**
 
-* Renders output with `kubectl kustomize`
+* Renders output via embedded kustomize library (no external `kubectl` or `oc` dependency)
 * Discovers stages automatically from directory structure
 * Supports same stage-selection flags as `transform`
-* Preflight checks: validates `kubectl` availability and `kustomization.yaml` existence before execution
-* Deterministic by design: `crane apply` delegates manifest rendering to `kubectl kustomize`, so repeated runs with unchanged inputs produce identical rendered output. Any future additions to the apply flow (pre/post hooks, logging, etc.) must preserve this property.
+* Preflight checks: validates `kustomization.yaml` existence before execution
+* Deterministic by design: `crane apply` renders manifests via the embedded kustomize library, so repeated runs with unchanged inputs produce identical rendered output. Any future additions to the apply flow (pre/post hooks, logging, etc.) must preserve this property.
 
 #### Plugin Compatibility
 
@@ -200,7 +200,7 @@ For stable Git diffs and reproducible CI runs:
 
 ### Security, Risks, and Mitigations
 
-**kubectl dependency.** `crane apply` currently delegates to `kubectl kustomize` at runtime. Embedding Kustomize as a Go library is being evaluated ([crane#369](https://github.com/migtools/crane/issues/369)) to remove this external dependency. Until then, a preflight check verifies `kubectl` availability with a clear error message.
+**Kustomize embedding.** Kustomize is embedded directly into the Crane binary as a Go library (`sigs.k8s.io/kustomize/api/krusty`). There is no runtime dependency on `kubectl` or `oc` for transform or apply operations ([crane#369](https://github.com/migtools/crane/issues/369), [crane#388](https://github.com/migtools/crane/pull/388)).
 
 **Kustomize rendering differences.** Kustomize may handle edge cases (e.g., `remove` on a missing path) differently than the current in-process applier. Mitigation: fixture-based parity tests comparing old and new output for the existing test suite.
 
@@ -217,7 +217,7 @@ For stable Git diffs and reproducible CI runs:
 | **A — crane-lib: Kustomize Foundations** | Library | `TransformArtifact`/`PatchTarget` types, Kustomize serializer, resource grouping, report structs |
 | **B — crane: Transform Refactor** | CLI | Kustomize overlay generation, resource type files, deterministic ordering, dirty check |
 | **C — Multi-Stage Pipeline** | CLI + Lib | Stage discovery, per-stage execution, stage-aware CLI flags, priority auto-assignment |
-| **D — crane: Apply Refactor** | CLI | `kubectl kustomize` delegation, preflight checks, output handling |
+| **D — crane: Apply Refactor** | CLI | Embedded kustomize rendering, output handling |
 | **E — Compatibility & Parity** | Testing | Plugin compatibility suite, edge-case regression tests |
 | **F — Documentation & Rollout** | Docs | User migration guide, plugin-author notes |
 
@@ -259,19 +259,19 @@ For stable Git diffs and reproducible CI runs:
 ## Drawbacks
 
 * **Breaking change.** Removing `transform-*.json` files will break any user scripts or CI pipelines that parse the old format. This is mitigated by documentation and a deprecation period, but is still disruptive.
-* **kubectl dependency (under evaluation).** The current implementation requires `kubectl` at runtime. Embedding Kustomize as a library is being evaluated ([crane#369](https://github.com/migtools/crane/issues/369)) to eliminate this prerequisite.
+* **~~kubectl dependency.~~** Resolved — Kustomize is now embedded. No `kubectl` runtime dependency for transform or apply ([crane#369](https://github.com/migtools/crane/issues/369), [crane#388](https://github.com/migtools/crane/pull/388)).
 * **Complexity.** The multi-stage pipeline adds conceptual and implementation complexity. For users running a single plugin, the output still uses the staged directory layout (e.g., `10_KubernetesPlugin/`) for consistency, but only a single stage directory is created.
 
 ## Alternatives
 
-1. **Embed a Kustomize library instead of shelling out to kubectl.** Pro: removes the `kubectl` runtime dependency. Con: Kustomize's Go library API is not stable and has historically been difficult to vendor. **This option is being actively evaluated** ([crane#369](https://github.com/migtools/crane/issues/369)).
+1. **~~Embed a Kustomize library instead of shelling out to kubectl.~~** **Adopted.** Kustomize is now embedded via `sigs.k8s.io/kustomize/api/krusty` ([crane#369](https://github.com/migtools/crane/issues/369), [crane#388](https://github.com/migtools/crane/pull/388)). The `kustomize/api` module was already a transitive dependency, so binary size did not increase.
 2. **Keep JSONPatch files but add a `crane render` command.** Pro: no breaking change. Con: still requires users to learn Crane-specific tooling; does not integrate with the broader Kustomize/GitOps ecosystem.
 3. **Use Helm charts instead of Kustomize overlays.** Pro: Helm provides great flexibility with templating system and it is widely adopted. Con: Typical k8s workload migration process aims to clean resources with minimal needed changes to make possible to be imported to the target cluster, templating should not be required in most cases. Helm's templating model is fundamentally different from patch-based transformation.
 
 ## Infrastructure Needed
 
 * No new repositories required. Changes land in [migtools/crane](https://github.com/migtools/crane) and [konveyor/crane-lib](https://github.com/konveyor/crane-lib).
-* CI must have `kubectl` available for integration tests (already the case in the existing test infrastructure).
+* CI must have `kubectl` available for E2E tests that deploy to clusters (already the case in the existing test infrastructure). Transform and apply unit tests do not require `kubectl`.
 
 ## References
 
