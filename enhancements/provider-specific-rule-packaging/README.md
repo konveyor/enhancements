@@ -9,10 +9,11 @@ reviewers:
   - "@djzager"
   - "@pranavgaikwad"
 approvers:
-  - TBD
+  - "@eemcmullan"
+  - "@djzager"
 creation-date: 2026-05-14
-last-updated: 2026-05-15
-status: provisional
+last-updated: 2026-05-27
+status: implementable
 ---
 
 # Provider-Specific Rule Packaging
