@@ -30,7 +30,7 @@ see-also:
 
 ## Open Questions
 
-1. **Migration descriptor file vs. CLI flags + conventions (dev preferred):** Should Crane require a declarative descriptor file that specifies which transformers run and in what order, or is the current approach sufficient — CLI commands with flags (`--stage`) combined with the convention-based directory structure (`10_PluginName/`, `20_PluginName/`, `50_CustomChange/`)? The current approach keeps configuration minimal and co-located with the output. A future migration pipeline abstraction may introduce a migration plan file (including these descriptors) naturally, but it is unclear whether the transform descriptor file is needed at the single-tool level.
+1. **Migration descriptor file vs. CLI flags + conventions (dev preferred):** Should Crane require a declarative descriptor file that specifies which transformers run and in what order, or is the current approach sufficient — CLI commands with flags (stage or plugin name) combined with the convention-based directory structure (`10_PluginName/`, `20_PluginName/`, `50_CustomChange/`)? The current approach keeps configuration minimal and co-located with the output. A future migration pipeline abstraction may introduce a migration plan file (including these descriptors) naturally, but it is unclear whether the transform descriptor file is needed at the single-tool level.
     * **Decision:** Both. Keep CLI flags + conventions as the default for simple cases. Add a transform descriptor file (tracked in [crane#370](https://github.com/migtools/crane/issues/370)) for repeatable multi-stage workflows. The descriptor file is optional and complements the CLI approach rather than replacing it.
 2. **Confirm strategy on rewriting transform stages and apply.** Stages backed by a plugin (e.g. default KubernetesPlugin) are not expected to be edited manually by the user, so could be safely re-created. Custom stages (not ending with `Plugin`) are expected to be user-specific modifications, so they need `--force` with transform to be re-created. Those custom stages are not idempotent, that is different to previous crane implementation. Need to confirm this is OK, or it is easier to tell each transform step re-creation needs `--force` and only `crane apply` stays idempotent.
     * **Decision:** Plugin-backed stages (ending with `Plugin` suffix) can be safely regenerated without `--force`. Custom stages (user-modified) require `--force` to overwrite. `crane apply` remains deterministic. This is already reflected in the Risks section.
@@ -100,7 +100,7 @@ The earlier [kustomize-support](https://github.com/konveyor/enhancements/tree/ma
 
 * **Patch Generation:** Each plugin's output is isolated into its own stage directory with its own `kustomization.yaml` and `patches/` folder, meaning patches from different plugins are never merged into an opaque file.
 * **Inspection:** I can inspect the output of any specific stage individually. Crane renders each stage internally, or I can use `kubectl kustomize <stage-dir>` externally for manual verification.
-* **Debugging:** If a resource (like a Route or Deployment) is incorrectly modified, I can easily isolate the behavior of a single plugin by inspecting its specific patch folder or by re-executing just that specific stage using the `crane transform --stage <stage-dir>` command.
+* **Debugging:** If a resource (like a Route or Deployment) is incorrectly modified, I can easily isolate the behavior of a single plugin by inspecting its specific patch folder or by re-executing just that specific stage using the `crane transform <stage-dir>` command.
 
 #### Story 3: Custom Transformation Stage with User-Created Modifications
 
@@ -166,7 +166,7 @@ This enhancement focuses on `transform` and `apply`.
 
 | Flag | Purpose |
 |------|---------|
-| `--stage <dir>` | Transform only one stage |
+| `[<dir> [<dir> [<dir> ...]]` | Transform only selected stages (defaults to all if empty) |
 | `--force` | Overwrite modified (dirty) stage directories |
 
 **`crane apply` — behavioral changes:**
@@ -183,11 +183,13 @@ Existing plugins are unaffected. They continue to return JSONPatch operations vi
 
 #### Stage Discovery
 
-Stages are discovered by convention: Crane scans the transform directory for subdirectories matching `<number>_<pluginName>`. By default, `crane transform` creates only `10_KubernetesPlugin`. Additional plugin stages are created explicitly (via repeated `--stage` invocations, or via descriptor file once implemented — see [crane#370](https://github.com/migtools/crane/issues/370)), with priorities starting at 20 and gaps of 10 to allow user-defined custom stages.
+Stages are discovered by convention: Crane scans the transform directory for subdirectories matching `<number>_<pluginName>`. By default, `crane transform` creates only `10_KubernetesPlugin`. Additional plugin stages are created explicitly (via `crane transform [<plugin_or_stage_names_list>]`, or via descriptor file — see [crane#370](https://github.com/migtools/crane/issues/370)), with priorities starting at 20 and gaps of 10 to allow user-defined custom stages.
+
+Available plugins for transform stages creation could be listed with `crane transform list-plugins` command or got via the shell command autocompletion.
 
 #### One Plugin Per Stage
 
-Each stage executes exactly one plugin. This isolation ensures that when a transformation produces unexpected results, the responsible plugin can be identified immediately by inspecting the corresponding stage directory. Users who need multiple plugins chain multiple `crane transform --stage` invocations (one per plugin). For recurring multi-plugin workflows, a migration descriptor file is planned ([crane#370](https://github.com/migtools/crane/issues/370)) to allow defining all stages in a single configuration.
+Each stage executes exactly one plugin. This isolation ensures that when a transformation produces unexpected results, the responsible plugin can be identified immediately by inspecting the corresponding stage directory. Users who need multiple plugins chain multiple plugin or custom stage names to the `crane transform` command. For recurring multi-plugin workflows, it is possible define all stages in a single configuration.
 
 #### Determinism
 
