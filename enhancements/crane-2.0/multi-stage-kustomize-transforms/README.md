@@ -166,7 +166,7 @@ This enhancement focuses on `transform` and `apply`.
 
 | Flag | Purpose |
 |------|---------|
-| `[<dir> [<dir> [<dir> ...]]` | Transform only selected stages (defaults to all if empty) |
+| `[<dir> [<dir> [<dir> ...]]` | Transform only selected stages. Defaults to all stages if empty. |
 | `--force` | Overwrite modified (dirty) stage directories |
 
 **`crane apply` — behavioral changes:**
@@ -185,7 +185,7 @@ Existing plugins are unaffected. They continue to return JSONPatch operations vi
 
 Stages are discovered by convention: Crane scans the transform directory for subdirectories matching `<number>_<pluginName>`. By default, `crane transform` creates only `10_KubernetesPlugin`. Additional plugin stages are created explicitly (via `crane transform [<plugin_or_stage_names_list>]`, or via descriptor file — see [crane#370](https://github.com/migtools/crane/issues/370)), with priorities starting at 20 and gaps of 10 to allow user-defined custom stages.
 
-Available plugins for transform stages creation could be listed with `crane transform list-plugins` command or got via the shell command autocompletion.
+Available plugins for transform stages creation could be listed with `crane transform list-plugins` command or obtained via the shell command autocompletion.
 
 #### One Plugin Per Stage
 
