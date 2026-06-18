@@ -8,10 +8,11 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-06-17
-last-updated: 2026-06-17
+last-updated: 2026-06-18
 status: provisional
 see-also:
   - "/enhancements/kai/agent-driven-migration/README.md"
+  - "/enhancements/agentic-platform-agent-images/README.md"
   - "https://github.com/redhat-et/skillimage"
   - "https://github.com/kubernetes-sigs/agent-sandbox"
   - "https://agentskills.io"
@@ -29,6 +30,10 @@ executed as Agent Sandbox workloads. The controller handles skill resolution
 (OCI, git, inline markdown), LLM provider verification, context budget
 computation, and execution lifecycle management.
 
+Agent workspaces are ephemeral — git is the persistence layer. The agent
+clones a repo, works on a branch, commits results (code and session
+context), pushes, and the pod dies. Everything durable lives in git.
+
 ## Release Signoff Checklist
 
 - [ ] Enhancement is `implementable`
@@ -41,38 +46,46 @@ computation, and execution lifecycle management.
 1. **Model role names**: The AgentRun selects models with roles (e.g.
    `primary`, `efficient`). The base image harness maps roles to
    runtime-specific env vars. Should the set of recognized roles be
-   fixed by convention (a known set like `primary`, `planner`,
-   `efficient`) or free-form (any string, mapped by the harness)?
+   fixed by convention or free-form?
 
 2. **SkillCard content hashing**: When a SkillCard uses inline content,
-   the controller builds an OCI artifact and pushes it. Should it use
-   content-addressable tags (hash of the content) to avoid rebuilding
-   unchanged skills, or always rebuild on spec change?
+   should the controller use content-addressable tags (hash of content)
+   to avoid rebuilding unchanged skills?
 
-3. **LLMProvider verification frequency**: The LLMProvider controller
-   launches a container to verify connectivity. Should this happen only
-   on create/update, or periodically (e.g. every N minutes) to detect
-   endpoint outages?
+3. **LLMProvider verification frequency**: Should the LLMProvider
+   controller verify connectivity only on create/update, or
+   periodically?
 
-4. **Agent Sandbox API stability**: Agent Sandbox is v1beta1. What is the
-   project's timeline to v1? If the API changes significantly before our
-   v1, what is the migration cost?
+4. **Agent Sandbox API stability**: Agent Sandbox is v1beta1. What is
+   the migration cost if the API changes before our v1?
+
+5. **Incremental push frequency**: How often should the harness push
+   during long-running agent sessions? Time-based (every N minutes),
+   commit-count-based, or configurable?
 
 ## Summary
 
-The Konveyor agentic platform defines a set of Kubernetes CRDs for
-composing and executing AI agent workloads. The platform separates
-capability definition (what skills, providers, and models are available)
-from execution (specific selections for a particular run). Skills are
-sourced from OCI registries, git repositories, or inline content and
-resolved to OCI artifacts by the controller. Agent workloads run in
-Agent Sandbox pods with skills mounted as ImageVolumes.
+The Konveyor agentic platform defines Kubernetes CRDs for composing and
+executing AI agent workloads. The platform separates capability
+definition (what skills, providers, and models are available) from
+execution (specific selections for a particular run). Skills are sourced
+from OCI registries, git repositories, or inline content and resolved to
+OCI artifacts. Agent workloads run in Agent Sandbox pods with skills
+mounted as ImageVolumes.
 
-This enhancement covers the controller that reconciles these CRDs. The
-IDE-side agent integration is covered by the
+Workspaces are ephemeral. The agent clones the application's git repo
+into an EmptyDir, creates a branch, does its work, commits code changes
+and session context (`.konveyor/` files) to the branch, and pushes.
+When the pod dies, the EmptyDir is gone — all durable state is in git.
+This eliminates PVC lifecycle management between runs and enables
+parallel agents on the same application via separate branches.
+
+This enhancement covers the controller that reconciles these CRDs. Agent
+container image composition is covered by the
+[agent-base-image-composition](/enhancements/agentic-platform-agent-images/README.md)
+enhancement. IDE-side agent integration is covered by the
 [agent-driven-migration](/enhancements/kai/agent-driven-migration/README.md)
-enhancement. Agent container image composition (how language-specific
-images are built) is out of scope and will be a separate enhancement.
+enhancement.
 
 ## Motivation
 
@@ -89,6 +102,11 @@ startup, adding network dependency and startup latency. Skills are not
 versioned as artifacts, making reproducibility and supply chain security
 difficult.
 
+Workspaces in the addon model are EmptyDir volumes — entirely ephemeral.
+The only durable output is a git branch pushed by the addon before pod
+termination. Session context (what the agent did, why, what to do next)
+is lost when the pod dies.
+
 ### Goals
 
 1. **Kubernetes-native agent management**: Define agent capabilities and
@@ -103,37 +121,40 @@ difficult.
    are reachable and models are available before accepting agent
    execution requests.
 
-4. **Portable execution**: Agent workloads run in Agent Sandbox pods,
-   decoupled from Hub. Hub remains a runtime data service (analysis
-   results, app metadata) but does not launch or manage agent workloads.
+4. **Git-as-persistence**: Agent workspaces are ephemeral (EmptyDir).
+   All durable state — code changes, session context, handoff notes —
+   is committed to a git branch. No PVCs survive between runs. Cross-
+   stage continuity in playbooks is through branch content.
 
 5. **Runtime-agnostic CRDs**: The CRDs do not encode assumptions about
    specific agent runtimes (goose, opencode). Runtime selection is
    determined by the container image. The base image harness translates
    generic controller inputs to runtime-specific configuration.
 
-6. **MVP scope**: Ship SkillCard, SkillCollection, LLMProvider, Agent,
-   and AgentRun as the initial release. These five CRDs and four
-   controllers enable single-agent execution end to end.
+6. **Portable execution**: Agent workloads run in Agent Sandbox pods,
+   decoupled from Hub. Hub remains a runtime data service (analysis
+   results, app metadata) but does not launch or manage agent workloads.
 
 ### Non-Goals
 
 1. **Agent container image composition**: How language-specific agent
-   images are built (devcontainers, buildpacks, fat images, etc.) is a
-   separate enhancement. This enhancement assumes images exist and are
-   selected by the user.
+   images are built is covered by the
+   [agent-base-image-composition](/enhancements/agentic-platform-agent-images/README.md)
+   enhancement.
 
-2. **Tekton integration**: Tekton Pipelines integration for multi-phase
-   orchestration is future work. The MVP uses a simple sequential
-   controller for AgentPlaybookRun (post-MVP).
+2. **Tekton integration**: Tekton Pipelines integration for multi-stage
+   orchestration is future work.
 
 3. **Skill authoring tools**: How users author, test, and publish skills
-   is the domain of the skillimage project. This enhancement consumes
-   skills; it does not provide authoring tools.
+   is the domain of the skillimage project.
 
 4. **Hub API changes**: No new Hub API endpoints, database tables, or Go
    models are required. The UI talks directly to the Kubernetes API for
    CRD operations via a proxy route.
+
+5. **Interactive / human-in-the-loop execution**: ACP-based interactive
+   agent sessions are a future enhancement. This enhancement covers
+   batch execution (run to completion).
 
 ## Proposal
 
@@ -144,8 +165,8 @@ difficult.
                     │          Kubernetes API Server               │
                     │                                             │
                     │  SkillCard    SkillCollection   LLMProvider │
-                    │  Agent       AgentPlaybook                      │
-                    │  AgentRun    AgentPlaybookRun                   │
+                    │  Agent       AgentPlaybook                  │
+                    │  AgentRun    AgentPlaybookRun               │
                     └──────────────┬──────────────────────────────┘
                                    │
                     ┌──────────────▼──────────────────────────────┐
@@ -154,43 +175,28 @@ difficult.
                     │  ┌──────────────┐  ┌────────────────────┐  │
                     │  │ SkillCard    │  │ SkillCollection    │  │
                     │  │ Controller   │  │ Controller         │  │
-                    │  │              │  │                    │  │
-                    │  │ OCI ref:     │  │ Creates child      │  │
-                    │  │  validate    │  │ SkillCard CRs for  │  │
-                    │  │ Git source:  │  │ git-sourced entries│  │
-                    │  │  clone/build │  │                    │  │
-                    │  │  /push       │  │ Reports ready when │  │
-                    │  │ Inline:      │  │ all children       │  │
-                    │  │  build/push  │  │ resolved           │  │
-                    │  └──────┬───────┘  └────────────────────┘  │
-                    │         │                                   │
-                    │         ▼ resolved OCI ref in status        │
+                    │  │ OCI/git/     │  │ Creates child      │  │
+                    │  │ inline →     │  │ SkillCard CRs,     │  │
+                    │  │ resolved ref │  │ reports readiness   │  │
+                    │  └──────────────┘  └────────────────────┘  │
                     │                                             │
                     │  ┌──────────────┐  ┌────────────────────┐  │
                     │  │ Agent        │  │ LLMProvider        │  │
                     │  │ Controller   │  │ Controller         │  │
-                    │  │              │  │                    │  │
-                    │  │ Watches deps │  │ Launches base      │  │
-                    │  │ Computes     │  │ image container    │  │
-                    │  │ context      │  │ to verify endpoint │  │
-                    │  │ budget       │  │ connectivity       │  │
-                    │  │ Reports      │  │                    │  │
-                    │  │ readiness    │  │ Reports discovered │  │
-                    │  └──────────────┘  │ models in status   │  │
-                    │                    └────────────────────┘  │
+                    │  │ Context      │  │ Launches base      │  │
+                    │  │ budget,      │  │ image to verify    │  │
+                    │  │ readiness    │  │ connectivity       │  │
+                    │  └──────────────┘  └────────────────────┘  │
+                    │                                             │
                     │  ┌──────────────┐  ┌────────────────────┐  │
-                    │  │ AgentRun     │  │ AgentPlaybookRun       │  │
+                    │  │ AgentRun     │  │ AgentPlaybookRun   │  │
                     │  │ Controller   │  │ Controller         │  │
-                    │  │              │  │ (post-MVP)         │  │
-                    │  │ Validates    │  │                    │  │
-                    │  │ selections   │  │ Creates AgentRuns  │  │
-                    │  │ Creates      │  │ sequentially per   │  │
-                    │  │ Sandbox      │  │ phase              │  │
-                    │  │ Tracks       │  │                    │  │
-                    │  │ completion   │  │ Manages session +  │  │
-                    │  └──────────────┘  │ workspace PVCs     │  │
-                    │                    └────────────────────┘  │
-                    └─────────────────────────────────────────────┘
+                    │  │ Creates      │  │ Creates AgentRuns  │  │
+                    │  │ Sandbox,     │  │ sequentially per   │  │
+                    │  │ tracks       │  │ stage, same branch │  │
+                    │  │ completion   │  │                    │  │
+                    │  └──────────────┘  └────────────────────┘  │
+                    └──────────────┬──────────────────────────────┘
                                    │
                     ┌──────────────▼──────────────────────────────┐
                     │      Agent Sandbox (agents.x-k8s.io)       │
@@ -199,10 +205,50 @@ difficult.
                     │  - Agent container image (runtime + tools)  │
                     │  - ImageVolumes (skills as OCI artifacts)   │
                     │  - Secret env vars (LLM credentials)       │
-                    │  - Controller env vars (instructions, etc.) │
-                    │  - Workspace PVC                            │
+                    │  - KONVEYOR_* env vars (source, branch,    │
+                    │    instructions, model roles)               │
+                    │  - EmptyDir at /workspace                   │
                     └─────────────────────────────────────────────┘
+                                   │
+                            ┌──────▼──────┐
+                            │  Git Remote │  ← branch with code
+                            │             │    changes + .konveyor/
+                            └─────────────┘    session context
 ```
+
+### Workspace Model: Git-as-Persistence
+
+Agent workspaces are **ephemeral**. The workspace is an EmptyDir that
+dies with the pod. All durable state lives in git:
+
+1. The harness clones the application's git repo into `/workspace/repo`
+2. Creates (or checks out) a target branch
+3. The agent works — harness commits incrementally with structured
+   trailers
+4. On exit, harness commits `.konveyor/` context files to the branch
+5. Pushes the branch to the remote
+6. Writes `/.konveyor/results.json` (pod-local, read by controller)
+7. Pod terminates. EmptyDir is destroyed. Work is in git.
+
+**Cross-stage continuity** in AgentPlaybooks: all stages share the same
+target branch. Each stage checks out the branch, reads the previous
+stage's `.konveyor/handoff.md`, does its work, commits, pushes. The
+branch content IS the handoff mechanism.
+
+**Parallel agents**: Multiple AgentRuns against the same application
+use different branches (`konveyor/migrate-app-123-attempt-1`,
+`konveyor/migrate-app-123-attempt-2`). No shared state, no contention.
+
+**Session context on the branch** (`.konveyor/` directory):
+
+| File | Purpose | Written by |
+|---|---|---|
+| `handoff.md` | Human-readable summary for the next stage | Harness on exit |
+| `session.json` | Session metadata (model, tokens, timing, tool calls) | Harness on exit |
+| `results.json` | Structured output for traceability | Harness on exit |
+
+These files travel with the branch. The next stage's agent reads them
+naturally when it checks out the branch.
 
 ### CRD Definitions
 
@@ -225,7 +271,7 @@ spec:
   # -- OR --
   source:
     url: https://github.com/konveyor/skills/tree/main/maven-migration
-    ref: main  # optional, branch/tag/commit
+    ref: main
 
   # -- OR --
   inline:
@@ -233,15 +279,11 @@ spec:
       You must never use javax.* imports.
       Always replace with jakarta.* equivalents.
 
-  # skillimage metadata (under spec, not metadata)
   displayName: Maven Migration
   version: "1.0.0"
   description: Migrates Maven POM files from Java EE to Jakarta EE.
   type: skill  # skill (default) or rule
-  tags:
-    - java
-    - maven
-    - migration
+  tags: [java, maven, migration]
   authors:
     - name: Konveyor Team
   license: Apache-2.0
@@ -257,12 +299,9 @@ status:
 
 | Source type | Action |
 |---|---|
-| `image` | Validate the OCI ref exists in the registry. Set `status.resolvedImage`. |
-| `source` | Clone the git repo using skillimage `pkg/source.Resolve()`. Build the OCI image using `pkg/oci.Client.Build()`. Push to the configured registry. Set `status.resolvedImage`. |
-| `inline` | Create a temporary skill directory with the content as `SKILL.md` and a generated `skill.yaml`. Build and push. Set `status.resolvedImage`. |
-
-Re-reconciliation triggers: spec changes, referenced git repo changes
-(periodic or webhook-driven).
+| `image` | Validate OCI ref exists. Set `status.resolvedImage`. |
+| `source` | Clone via skillimage `pkg/source.Resolve()`, build via `pkg/oci.Client.Build()`, push to registry. Set `status.resolvedImage`. |
+| `inline` | Create temp skill directory with content as `SKILL.md`, build and push. Set `status.resolvedImage`. |
 
 #### SkillCollection
 
@@ -280,23 +319,15 @@ spec:
   description: Skills for Java EE to Quarkus migration
   skills:
     - name: maven-migration
-      skillCardRef: maven-migration  # reference a SkillCard CR
-
+      skillCardRef: maven-migration
     - name: javax-imports
-      image: quay.io/konveyor/skills/javax-imports:1.0.0  # OCI ref
-
-    - source: https://github.com/konveyor/skills/tree/main/ejb-to-cdi  # git
+      image: quay.io/konveyor/skills/javax-imports:1.0.0
+    - source: https://github.com/konveyor/skills/tree/main/ejb-to-cdi
 
 status:
   resolvedSkills:
     - name: maven-migration
       resolvedImage: quay.io/konveyor/skills/maven-migration:1.0.0
-      ready: true
-    - name: javax-imports
-      resolvedImage: quay.io/konveyor/skills/javax-imports:1.0.0
-      ready: true
-    - name: ejb-to-cdi
-      resolvedImage: registry.internal:5000/konveyor/ejb-to-cdi:abc123
       ready: true
   conditions:
     - type: Ready
@@ -305,8 +336,7 @@ status:
 
 **Controller behavior**: For `skillCardRef` entries, watch the referenced
 SkillCard's status. For `image` entries, validate the OCI ref. For
-`source` entries, create a child SkillCard CR with the git source and
-let the SkillCard controller handle resolution. Report aggregate
+`source` entries, create a child SkillCard CR. Report aggregate
 readiness.
 
 #### LLMProvider
@@ -344,15 +374,16 @@ status:
 ```
 
 **Controller behavior**: On create/update, launch a short-lived container
-using the known agent base image with provider credentials and endpoint
-injected. The container runs a verification entrypoint that attempts to
-list models or send a trivial request. The controller reads the result
-and updates status with `connectionVerified` and `discoveredModels`.
-This tests the real network path and credential chain, not a simulation.
+using the agent base image with provider credentials and endpoint
+injected. The container runs a verification entrypoint that tests the
+real network path and credential chain. Updates status with
+`connectionVerified` and `discoveredModels`.
 
 #### Agent
 
 A capability definition declaring what is available for execution.
+An Agent does not select a specific model — it declares what is
+available. Model selection happens at execution time in the AgentRun.
 
 ```yaml
 apiVersion: konveyor.io/v1alpha1
@@ -363,9 +394,7 @@ metadata:
 spec:
   image: quay.io/konveyor/agent-java-goose:latest
   prompt: |
-    You are a Java migration specialist. You analyze Java EE
-    applications and migrate them to Quarkus, following best
-    practices for CDI, JAX-RS, and MicroProfile.
+    You are a Java migration specialist.
 
   providers:
     - ref: anthropic-provider
@@ -393,15 +422,14 @@ status:
       status: "True"
 ```
 
-**Controller behavior**: Watch all referenced SkillCards,
-SkillCollections, and LLMProviders. Compute context budget by summing
-token counts of all `type: rule` SkillCards against the smallest context
-window across all referenced models. Report readiness when all
-dependencies are resolved and context budget is within limits.
+**Controller behavior**: Watch referenced SkillCards, SkillCollections,
+LLMProviders. Compute context budget (always-loaded rule content vs.
+smallest context window). Report readiness.
 
 #### AgentRun
 
-A request to execute a single Agent with specific selections.
+A request to execute a single Agent with specific selections against
+an application's git repository.
 
 ```yaml
 apiVersion: konveyor.io/v1alpha1
@@ -420,10 +448,13 @@ spec:
       provider: anthropic-provider
       model: claude-haiku
 
+  source:
+    url: https://github.com/acme/legacy-app.git
+    credentialRef: git-creds
+    baseBranch: main
+
   instructions: |
     Migrate this application from Java EE 7 to Quarkus 3.x.
-    Focus on EJB to CDI conversion first, then update the
-    Maven POM, then fix javax imports.
 
   parameters:
     APP_ID: "123"
@@ -431,7 +462,8 @@ spec:
 
 status:
   sandboxName: migrate-app-123-sandbox
-  sessionID: "sess_abc123"
+  branch: konveyor/migrate-app-123
+  commitSHA: abc123def456
   phase: Running
   startTime: "2026-06-17T10:35:00Z"
   conditions:
@@ -442,65 +474,69 @@ status:
 
 **Controller behavior**:
 
-1. Validate that selected providers and models are in the referenced
-   Agent's available set.
-2. Resolve all SkillCards and SkillCollections from the Agent to their
-   OCI image refs.
-3. Create a Sandbox (agents.x-k8s.io/v1beta1) with:
-   - The Agent's container image
-   - ImageVolumes for each resolved skill OCI artifact
-   - Secret environment variables for LLM credentials from the selected
-     providers
-   - Environment variables for model role mappings
-     (`KONVEYOR_MODEL_PRIMARY`, `KONVEYOR_MODEL_EFFICIENT`, etc.)
-   - Environment variables for instructions and parameters
-   - Workspace PVC mount
-4. Watch the Sandbox's `Finished` condition.
-5. On completion, read the session ID and results from convention paths
-   on the workspace PVC.
-6. Update AgentRun status.
+1. Validate selected providers/models are in the Agent's available set
+2. Resolve all skills from the Agent to OCI image refs
+3. Determine target branch: `konveyor/<agentrun-name>` (or use
+   `spec.source.targetBranch` if set)
+4. Create an Agent Sandbox with:
+   - Agent's container image
+   - ImageVolumes for each resolved skill
+   - Secret env vars for LLM credentials
+   - `KONVEYOR_SOURCE_URL`, `KONVEYOR_SOURCE_CREDENTIAL`,
+     `KONVEYOR_TARGET_BRANCH`, `KONVEYOR_BASE_BRANCH`
+   - `KONVEYOR_MODEL_PRIMARY`, `KONVEYOR_MODEL_EFFICIENT`
+   - `KONVEYOR_AGENT_PROMPT`, `KONVEYOR_INSTRUCTIONS`
+   - EmptyDir at `/workspace`
+5. Watch Sandbox `Finished` condition
+6. Read `/.konveyor/results.json` from the pod
+7. Update AgentRun status with branch, commitSHA, summary
 
-#### AgentPlaybook (post-MVP)
+#### AgentPlaybook
 
-A reusable playbook with stages and phases. Defined in the CRD spec
-but controller implementation is deferred.
+A reusable playbook with an ordered sequence of stages. Each stage
+references an Agent and carries instructions. Stages execute
+sequentially, each in its own Sandbox with a fresh agent session.
+Cross-stage continuity is through the shared git branch.
 
 ```yaml
 apiVersion: konveyor.io/v1alpha1
 kind: AgentPlaybook
 metadata:
-  name: full-java-migration
+  name: java-migration
   namespace: konveyor
 spec:
   guide: |
-    This plan migrates a Java EE application to Quarkus in three
-    stages: analysis, migration, and validation.
+    Migrate a Java EE application to Quarkus.
 
   stages:
-    - name: migration
-      phases:
-        - name: update-pom
-          agentRef: java-migration-agent
-          instructions: |
-            Update the Maven POM to use Quarkus BOM and dependencies.
+    - name: discover-and-plan
+      agentRef: discovery-agent
+      instructions: |
+        Analyze the application. Write MIGRATION_PLAN.md.
+        Write .konveyor/handoff.md summarizing findings.
 
-        - name: migrate-source
-          agentRef: java-migration-agent
-          instructions: |
-            Migrate Java source files: EJB to CDI, javax to jakarta.
+    - name: implement
+      agentRef: migration-agent
+      instructions: |
+        Read MIGRATION_PLAN.md and .konveyor/handoff.md.
+        Execute the migration. Commit changes incrementally.
+        Update .konveyor/handoff.md with what you did.
 
-    - name: validation
-      phases:
-        - name: build-and-test
-          agentRef: java-migration-agent
-          instructions: |
-            Build the project and run the test suite. Fix any failures.
+    - name: review
+      agentRef: review-agent
+      instructions: |
+        Review all changes on this branch.
+        Run the build and tests. Write REVIEW.md.
 ```
 
-#### AgentPlaybookRun (post-MVP)
+**Controller behavior**: Validate all referenced Agents exist and are
+ready. Report readiness.
 
-A request to execute an AgentPlaybook. Controller implementation is
-deferred.
+#### AgentPlaybookRun
+
+A request to execute an AgentPlaybook against an application. The
+controller creates AgentRuns sequentially, one per stage, all pushing
+to the same target branch.
 
 ```yaml
 apiVersion: konveyor.io/v1alpha1
@@ -509,37 +545,68 @@ metadata:
   name: migrate-app-123-full
   namespace: konveyor
 spec:
-  agentPlaybookRef: full-java-migration
+  playbookRef: java-migration
 
   models:
     - role: primary
       provider: anthropic-provider
       model: claude-sonnet-4-20250514
 
+  source:
+    url: https://github.com/acme/legacy-app.git
+    credentialRef: git-creds
+    baseBranch: main
+
   parameters:
     APP_ID: "123"
     HUB_BASE_URL: "https://hub.konveyor.svc"
+
+status:
+  branch: konveyor/migrate-app-123-full
+  currentStage: implement
+  stages:
+    - name: discover-and-plan
+      agentRunRef: migrate-app-123-full-discover
+      phase: Succeeded
+      commitSHA: abc123
+    - name: implement
+      agentRunRef: migrate-app-123-full-implement
+      phase: Running
+    - name: review
+      phase: Pending
+  conditions:
+    - type: Succeeded
+      status: "Unknown"
+      reason: StageRunning
 ```
+
+**Controller behavior**:
+
+1. Determine target branch: `konveyor/<playbookrun-name>`
+2. Write the playbook's `guide` to the branch (via stage 1's harness
+   as `.konveyor/guide.md`)
+3. For each stage sequentially:
+   a. Create an AgentRun with the stage's Agent and instructions
+   b. Set `targetBranch` to the shared branch
+   c. Wait for the AgentRun to succeed
+   d. Update per-stage status
+4. On final stage completion, update AgentPlaybookRun status
+
+Each stage's agent sees the previous stage's work on the branch:
+committed code changes, `.konveyor/handoff.md`, `.konveyor/session.json`.
+Fresh agent session per stage — no session PVC, no session resumption.
 
 ### User Stories
 
 #### Story 1: Platform admin configures skills and providers
 
-A platform admin creates SkillCard CRs for the organization's migration
-rules. Some are OCI artifacts from the team's registry, some are pulled
-from a public git repo, and a few quick rules are defined inline:
-
 ```bash
 kubectl apply -f skills/maven-migration.yaml      # OCI ref
 kubectl apply -f skills/community-rules.yaml       # git source
 kubectl apply -f skills/no-javax-rule.yaml         # inline content
-kubectl apply -f collections/java-migration.yaml   # groups them
-kubectl apply -f providers/anthropic.yaml           # LLM endpoint
-```
+kubectl apply -f collections/java-migration.yaml
+kubectl apply -f providers/anthropic.yaml
 
-The admin checks that skills resolved and the provider connected:
-
-```bash
 kubectl get skillcards
 # NAME              TYPE    SOURCE   READY
 # maven-migration   skill   oci      True
@@ -551,34 +618,33 @@ kubectl get llmproviders
 # anthropic-provider   True       claude-sonnet-4-20250514, claude-haiku
 ```
 
-#### Story 2: Architect creates an Agent
-
-An architect composes an Agent from the available skills and providers:
-
-```bash
-kubectl apply -f agents/java-migration-agent.yaml
-kubectl get agents
-# NAME                    READY   CONTEXT-BUDGET   PROVIDERS
-# java-migration-agent    True    0.75%            anthropic-provider, openai-provider
-```
-
-The Agent controller reports readiness once all dependencies resolve
-and the context budget is within limits.
-
-#### Story 3: Developer runs a migration
-
-A developer (or the Konveyor UI on their behalf) creates an AgentRun:
+#### Story 2: Developer runs a single-agent migration
 
 ```bash
 kubectl apply -f runs/migrate-app-123.yaml
 kubectl get agentruns
-# NAME              AGENT                   PHASE     AGE
-# migrate-app-123   java-migration-agent    Running   2m
+# NAME              AGENT                   BRANCH                         PHASE
+# migrate-app-123   java-migration-agent    konveyor/migrate-app-123       Running
 ```
 
-The controller creates a Sandbox with the Agent's image, mounts skills
-as ImageVolumes, injects LLM credentials, and starts the agent. The
-developer monitors progress via the UI or kubectl.
+After completion, the developer reviews the branch:
+```bash
+git fetch origin
+git diff main..konveyor/migrate-app-123
+# Code changes + .konveyor/session.json + .konveyor/handoff.md
+```
+
+#### Story 3: Architect runs a multi-stage playbook
+
+```bash
+kubectl apply -f runs/migrate-app-123-full.yaml
+kubectl get agentplaybookruns
+# NAME                    PLAYBOOK          STAGE              BRANCH
+# migrate-app-123-full    java-migration    implement          konveyor/migrate-app-123-full
+```
+
+Three stages execute sequentially on the same branch. Each stage reads
+the previous stage's handoff, does its work, commits, pushes.
 
 ### Implementation Details
 
@@ -586,45 +652,35 @@ developer monitors progress via the UI or kubectl.
 
 ```
 konveyor/agentic-controller/
-  api/
-    v1alpha1/
-      skillcard_types.go
-      skillcollection_types.go
-      llmprovider_types.go
-      agent_types.go
-      agentplaybook_types.go
-      agentrun_types.go
-      agentplaybookrun_types.go
-      groupversion_info.go
-      zz_generated.deepcopy.go
-  internal/
-    controller/
-      skillcard_controller.go
-      skillcollection_controller.go
-      llmprovider_controller.go
-      agent_controller.go
-      agentrun_controller.go
-      # agentplaybookrun_controller.go (post-MVP)
-    registry/
-      client.go          # OCI registry client (wraps skillimage pkg/oci)
-      detect.go          # auto-detect OpenShift built-in registry
+  api/v1alpha1/
+    skillcard_types.go
+    skillcollection_types.go
+    llmprovider_types.go
+    agent_types.go
+    agentplaybook_types.go
+    agentrun_types.go
+    agentplaybookrun_types.go
+    groupversion_info.go
+  internal/controller/
+    skillcard_controller.go
+    skillcollection_controller.go
+    llmprovider_controller.go
+    agent_controller.go
+    agentrun_controller.go
+    agentplaybookrun_controller.go
+  internal/registry/
+    client.go          # wraps skillimage pkg/oci
+    detect.go          # auto-detect OpenShift registry
   config/
-    crd/                 # generated CRD manifests
-    rbac/                # RBAC for the controller
-    manager/             # controller-manager deployment
-  charts/
-    agentic-controller/
-      Chart.yaml
-      values.yaml
-      templates/
-      charts/
-        zot/             # optional subchart for dev environments
-  cmd/
+    crd/               # generated CRD manifests
+    rbac/
     manager/
-      main.go
+  charts/agentic-controller/
+    Chart.yaml
+    charts/zot/        # optional subchart for dev
+  cmd/manager/main.go
   Dockerfile
   go.mod
-  go.sum
   Makefile
 ```
 
@@ -636,191 +692,189 @@ konveyor/agentic-controller/
 | `agents.x-k8s.io/v1beta1` | Agent Sandbox CRD types |
 | `github.com/redhat-et/skillimage/pkg/oci` | OCI image build/push/pull |
 | `github.com/redhat-et/skillimage/pkg/source` | Git source resolution |
-| `github.com/redhat-et/skillimage/pkg/skillcard` | SkillCard parsing/validation |
+| `github.com/redhat-et/skillimage/pkg/skillcard` | SkillCard parsing |
 | `github.com/redhat-et/skillimage/pkg/collection` | SkillCollection parsing |
 
 #### In-cluster OCI registry
 
 The controller pushes built skill artifacts (from git sources and inline
-content) to an OCI registry. The registry URL is provided via
-configuration (flag, ConfigMap, or environment variable).
+content) to an OCI registry. The registry URL is configured via flag,
+ConfigMap, or environment variable.
 
-**OpenShift**: The controller auto-detects the built-in image registry
-at `image-registry.openshift-image-registry.svc:5000`. No additional
-deployment needed.
+**OpenShift**: Auto-detect the built-in image registry at
+`image-registry.openshift-image-registry.svc:5000`.
 
-**Vanilla Kubernetes**: The Helm chart includes Zot
-(project-zot/zot-minimal) as an optional subchart, disabled by default.
-Enable for development or environments without an existing registry. For
-production, the konveyor operator (ansible-based) deploys Zot as part
-of the platform installation.
+**Vanilla Kubernetes**: Helm chart includes Zot (project-zot/zot-minimal)
+as an optional subchart. The konveyor operator deploys Zot for
+production.
 
 The controller does not own registry lifecycle. If git or inline source
 SkillCards are created without a configured registry, the controller
 sets a clear error condition on the CR.
 
-#### Base image and harness
+#### Harness and git workflow
 
-Agent container images follow a layered hierarchy:
+The harness entrypoint (`/usr/local/bin/konveyor-harness`) in the base
+image handles the git workspace lifecycle. The controller sets env vars;
+the harness does the git work. See the
+[agent-base-image-composition](/enhancements/agentic-platform-agent-images/README.md)
+enhancement for harness details.
 
-```
-agent-base                  (UBI + harness + core skills + konveyor tools)
-  ├── agent-base-goose      (extends base + goose binary)
-  ├── agent-base-opencode   (extends base + opencode binary)
-  ├── agent-java-goose      (extends goose + JDK + Maven + Gradle)
-  ├── agent-java-opencode   (extends opencode + JDK + Maven + Gradle)
-  └── ...
-```
+The harness git workflow:
 
-The `agent-base` image contains:
-- A **harness entrypoint** (Go binary) that translates controller-set
-  environment variables into runtime-specific configuration
-- Core skills baked into `/opt/skills/`
-- Konveyor tools (`fetch-analysis`, `run-analysis`)
-- git, ssh, and basic utilities
+1. **Clone**: `git clone $KONVEYOR_SOURCE_URL /workspace/repo`
+2. **Branch**: If `KONVEYOR_TARGET_BRANCH` exists on remote, check it
+   out. Otherwise create it from `KONVEYOR_BASE_BRANCH`.
+3. **Credentials**: Write git credentials from
+   `KONVEYOR_SOURCE_CREDENTIAL` to `$HOME/.git-credentials`.
+4. **Agent execution**: Discover skills, configure runtime, compose
+   prompt, invoke agent with `/workspace/repo` as working directory.
+5. **Incremental commits**: Commit during execution with structured
+   trailers (`Konveyor-AgentRun`, `Konveyor-Agent`, `Konveyor-Model`).
+6. **Context commit**: On exit, commit `.konveyor/handoff.md` and
+   `.konveyor/session.json` to the branch.
+7. **Push**: `git push origin $KONVEYOR_TARGET_BRANCH`
+8. **Results**: Write `/.konveyor/results.json` (pod-local) with branch,
+   SHA, files modified, duration.
 
-The harness entrypoint:
-1. Discovers skills from ImageVolume mounts and `/opt/skills/`
-2. Reads `KONVEYOR_MODEL_*` env vars and maps to runtime-specific vars
-   (e.g. `GOOSE_MODEL`, `OPENCODE_MODEL`)
-3. Reads LLM credentials from env vars and configures the runtime
-4. Configures memory service if `KONVEYOR_MEMORY_URL` is set
-5. Handles session resumption if `KONVEYOR_SESSION_ID` is set
-6. Composes the prompt from `KONVEYOR_AGENT_PROMPT` +
-   `KONVEYOR_INSTRUCTIONS`
-7. Invokes the detected agent runtime
-8. On exit, writes session ID and results to `/.konveyor/`
+The harness pushes incrementally during long-running sessions to protect
+against pod crashes.
 
-The harness auto-detects which runtime is installed by checking PATH.
-This means the controller never needs to know which runtime a container
-carries -- the image is the runtime commitment.
+#### Env var contract
 
-The harness also serves as the entrypoint for LLMProvider verification.
-When invoked with `KONVEYOR_VERIFY_PROVIDER=true`, it runs a lightweight
-check (model list or trivial completion) and writes the result to
-`/.konveyor/verification.json`.
+The controller sets these env vars on every Sandbox:
 
-Image composition (how language-specific images are built, which
-language runtimes to include, devcontainer vs. buildpack vs. fat image
-strategies) is out of scope for this enhancement.
+| Env var | Purpose |
+|---|---|
+| `KONVEYOR_SOURCE_URL` | Git repo URL to clone |
+| `KONVEYOR_SOURCE_CREDENTIAL` | Path to credential file for git auth |
+| `KONVEYOR_TARGET_BRANCH` | Branch name to create/checkout |
+| `KONVEYOR_BASE_BRANCH` | Branch to base work on (default: repo default) |
+| `KONVEYOR_AGENT_PROMPT` | Agent's standing prompt |
+| `KONVEYOR_INSTRUCTIONS` | Run-specific instructions |
+| `KONVEYOR_MODEL_PRIMARY` | Primary model (provider/model) |
+| `KONVEYOR_MODEL_EFFICIENT` | Efficient model (optional) |
+| `KONVEYOR_MEMORY_URL` | Memory service endpoint (optional) |
+| `KONVEYOR_VERIFY_PROVIDER` | When `true`, run LLM verification mode |
+
+Hub-specific parameters (`APP_ID`, `HUB_BASE_URL`, etc.) are passed as
+generic key-value pairs from `spec.parameters`.
 
 ### Security, Risks, and Mitigations
 
 **Risk: Agent containers execute arbitrary code.**
-- *Mitigation*: Agent Sandbox provides network isolation and security
-  defaults. The agent runtime's permission model controls tool access.
-  Agent containers run as non-root. RBAC controls who can create
-  AgentRuns.
+- *Mitigation*: Agent Sandbox provides network isolation. Non-root
+  execution. RBAC controls who can create AgentRuns. OpenShell
+  (NVIDIA) can be layered on top for L7 egress policy, Landlock
+  filesystem isolation, and credential boundary enforcement.
 
 **Risk: LLM credentials exposed in environment variables.**
-- *Mitigation*: Credentials are stored in Kubernetes Secrets and
-  injected as env vars by the controller. The Sandbox's security
-  context prevents credential exfiltration via process listing. RBAC
-  restricts Secret access to the controller's service account.
+- *Mitigation*: Stored in Kubernetes Secrets, injected by controller.
+  RBAC restricts Secret access to controller's service account.
+
+**Risk: Git credentials in the Sandbox.**
+- *Mitigation*: Credentials are scoped (read/write to the specific
+  repo). The harness writes them to `$HOME/.git-credentials` inside
+  the pod's EmptyDir, destroyed with the pod. Agent Sandbox network
+  isolation limits where the credentials can be used.
+
+**Risk: Agent pushes to wrong branch or repo.**
+- *Mitigation*: The harness only pushes to `KONVEYOR_TARGET_BRANCH` on
+  `KONVEYOR_SOURCE_URL`. The controller generates the branch name. Git
+  credentials can be scoped to specific repos via deploy keys or app
+  tokens.
 
 **Risk: Skill OCI artifacts contain malicious content.**
-- *Mitigation*: Skills are mounted as read-only ImageVolumes. They
-  contain markdown instructions and metadata, not executable code.
-  OCI artifacts support cosign signing and SLSA provenance for supply
-  chain verification. The controller can be configured to require
-  signed artifacts.
-
-**Risk: In-cluster registry stores unvetted content.**
-- *Mitigation*: The registry is internal (ClusterIP service, not
-  exposed externally). Only the controller's service account has push
-  access. Git sources and inline content are transformed by the
-  controller, not by untrusted users directly.
+- *Mitigation*: Mounted as read-only ImageVolumes. Contain markdown,
+  not executables. Support cosign signing for supply chain verification.
 
 **Risk: Agent Sandbox API changes.**
-- *Mitigation*: Agent Sandbox is a Kubernetes SIG project with
-  community governance. The single-container Sandbox primitive is
-  simple enough that fallback to bare Pods is straightforward if
-  needed. Pin to a specific API version and test against it in CI.
+- *Mitigation*: SIG project with community governance. Sandbox primitive
+  is simple; fallback to bare Pods is feasible. Pin to specific API
+  version.
 
 ## Design Details
 
-### MVP scope
+### Phased Rollout
 
-The MVP includes five CRDs and four controllers:
+#### POC: Single AgentRun
 
-| CRD | Controller | MVP |
+Five CRDs, five controllers. Single-agent execution end to end.
+
+| CRD | Controller | Scope |
 |---|---|---|
-| SkillCard | SkillCard controller | Yes |
-| SkillCollection | SkillCollection controller | Yes |
-| LLMProvider | LLMProvider controller | Yes |
-| Agent | Agent controller | Yes |
-| AgentRun | AgentRun controller | Yes |
-| AgentPlaybook | Validating webhook only | CRD defined, no controller |
-| AgentPlaybookRun | Validating webhook only | CRD defined, no controller |
+| SkillCard | SkillCard controller | POC |
+| SkillCollection | SkillCollection controller | POC |
+| LLMProvider | LLMProvider controller | POC |
+| Agent | Agent controller | POC |
+| AgentRun | AgentRun controller | POC |
 
-AgentPlaybook and AgentPlaybookRun CRDs are included in the API definitions so
-the full model is visible and reviewable, but their controllers are
-deferred. The AgentPlaybookRun controller is the most complex component
-(session PVC management, stage boundaries, phase sequencing, handoff
-files) and is not required for single-agent execution.
+The agent clones the app's repo, works on a branch, commits results
+and session context, pushes. Git strategy: direct push to the source
+repo (option A).
 
-### Post-MVP: AgentPlaybookRun controller
+#### Phase 2: AgentPlaybook (flat stages)
 
-The AgentPlaybookRun controller creates AgentRun CRs sequentially per
-phase. For each phase:
+Two more CRDs, one more controller.
 
-1. Determine the Agent and instructions from the AgentPlaybook.
-2. Create an AgentRun with a shared workspace PVC.
-3. Within a stage, pass the session ID from the previous phase's
-   AgentRun to enable session resumption.
-4. At stage boundaries, start a new session ID for fresh context.
-5. Track per-phase status in AgentPlaybookRun status.
+| CRD | Controller | Scope |
+|---|---|---|
+| AgentPlaybook | AgentPlaybook controller | Phase 2 |
+| AgentPlaybookRun | AgentPlaybookRun controller | Phase 2 |
 
-Session continuity relies on the workspace PVC containing the agent
-runtime's session state (e.g. goose's SQLite database at
-`GOOSE_PATH_ROOT`). The harness handles session discovery and
-resumption.
+An AgentPlaybook is a flat sequence of stages — no phases within
+stages. Each stage is an AgentRun with a fresh session. All stages
+share the same target branch. Cross-stage continuity is through
+committed files (`.konveyor/handoff.md`, code changes).
 
-Tekton Pipeline integration is a future option for users who want
-pipeline-based orchestration with conditionals, parallelism, retries,
-and supply chain features. The current design does not preclude this.
+#### Phase 3: Configurable git strategy
+
+Add configurability for how changes are committed back. The git
+strategy is configured per-application or per-run:
+
+| Strategy | Behavior | Use case |
+|---|---|---|
+| `direct` | Push branch to app's own repo | POC, simple setups |
+| `fork` | Controller creates a fork, pushes there, creates PR | Production, keeps user repo clean |
+| `mirror` | Controller uses in-cluster bare repo | Air-gapped environments |
+
+The harness behavior changes per strategy. The controller handles fork
+creation (forge API) or mirror maintenance based on configuration.
 
 ### Test Plan
 
 **Unit tests**:
-- SkillCard controller: test all three source paths (OCI, git, inline)
-- SkillCollection controller: test child SkillCard creation and
-  aggregate readiness
-- Agent controller: test context budget computation, dependency
-  resolution
-- AgentRun controller: test Sandbox creation, env var injection,
-  status tracking
+- SkillCard controller: all three source paths (OCI, git, inline)
+- SkillCollection controller: child SkillCard creation, readiness
+- Agent controller: context budget computation, dependency resolution
+- AgentRun controller: Sandbox creation, env var injection, status
+- AgentPlaybookRun controller: sequential stage execution, branch
+  sharing
 
 **Integration tests** (envtest):
-- Full lifecycle: create LLMProvider + SkillCards + Agent + AgentRun,
-  verify Sandbox is created with correct configuration
-- Skill resolution: create SkillCard with git source, verify OCI
-  artifact is built and pushed
-- Error handling: create AgentRun referencing non-existent Agent,
-  verify error condition
+- Full lifecycle: LLMProvider + SkillCards + Agent + AgentRun
+- Skill resolution: git source → OCI artifact
+- AgentPlaybookRun: three stages sequentially, same branch
+- Error handling: non-existent Agent, unresolved skills
 
 **E2E tests** (real cluster):
-- Deploy the controller with Agent Sandbox, create an AgentRun, verify
-  the agent container starts and completes
-- LLMProvider verification: create a provider with valid/invalid
-  credentials, verify status reflects reality
-- SkillCard inline: create a skill with inline content, verify it
-  appears as an ImageVolume in the Sandbox
+- Deploy controller with Agent Sandbox, run an AgentRun, verify
+  branch exists on remote with expected commits
+- LLMProvider verification: valid/invalid credentials
+- AgentPlaybookRun: three-stage playbook, verify branch has commits
+  from all three stages with `.konveyor/` context files
 
 ### Upgrade / Downgrade Strategy
 
-**Initial deployment**: The controller is deployed alongside the
-existing Konveyor operator. CRDs are registered at install time.
-No migration from Hub-based agent resources is required for the MVP
--- the CRD-based system runs in parallel.
+**Initial deployment**: Deployed alongside existing Konveyor operator.
+CRDs registered at install time. No migration from Hub-based agent
+resources — CRD system runs in parallel.
 
 **CRD versioning**: All CRDs start at `v1alpha1`. Breaking changes
-are expected during alpha. The conversion webhook pattern will be
-used when moving to `v1beta1`.
+expected during alpha. Conversion webhooks for `v1beta1` transition.
 
 **Controller upgrades**: Standard controller-runtime rolling update.
-The controller is stateless -- all state lives in CRD status fields
-and the Kubernetes API.
+Stateless — all state in CRD status and Kubernetes API.
 
 ## Implementation History
 
@@ -829,107 +883,82 @@ and the Kubernetes API.
 - **2026-06**: Investigation of Tekton Custom Task integration with
   Agent Sandbox (documented, deferred).
 - **2026-06-17**: Enhancement proposal drafted.
+- **2026-06-18**: Revised with git-as-persistence workspace model,
+  simplified AgentPlaybook (flat stages), phased rollout, connection
+  to agent-base-image-composition enhancement.
 
 ## Drawbacks
 
 1. **New repository and component**: Adds a Go controller to a project
-   that currently runs Python (kai), Java (analyzer), and TypeScript
-   (UI). Increases the technology surface and maintainer skill
-   requirements.
+   that currently runs Python, Java, and TypeScript.
 
-2. **Agent Sandbox dependency**: The project depends on a SIG Apps
-   project that is v1beta1. If the API changes significantly, the
-   controller must adapt. Mitigation: the Sandbox primitive is simple
-   and fallback to bare Pods is feasible.
+2. **Agent Sandbox dependency**: v1beta1 SIG project. Mitigation:
+   simple primitive, fallback to bare Pods feasible.
 
-3. **skillimage dependency**: skillimage is a young project (v0.7.2,
-   single primary contributor). The controller imports its Go packages
-   for OCI operations. Mitigation: Red Hat OCTO backing, and the
-   project actively encourages community adoption. Konveyor would be a
-   significant consumer driving stability.
+3. **skillimage dependency**: Young project (v0.7.2). Mitigation:
+   Red Hat OCTO backing, Konveyor as significant consumer.
 
-4. **In-cluster registry requirement**: Git and inline source SkillCards
-   require a registry to push built artifacts. This is an infrastructure
-   dependency that vanilla Kubernetes clusters may not have. Mitigation:
-   Helm subchart for Zot, OpenShift auto-detection, clear error
-   conditions when no registry is configured.
+4. **In-cluster registry**: Required for git/inline SkillCards.
+   Mitigation: Helm subchart for Zot, OpenShift auto-detection.
 
-5. **AgentPlaybook/AgentPlaybookRun complexity deferred**: The PM may want
-   multi-phase execution sooner than post-MVP. The risk is that the
-   MVP feels incomplete without orchestration. Mitigation: single-agent
-   execution via AgentRun is immediately useful and covers the primary
-   developer use case.
+5. **Git as sole persistence**: If the git remote is unavailable, work
+   in progress is lost on pod crash. Mitigation: incremental push
+   during execution, not just on exit.
 
 ## Alternatives
 
 ### Hub as the controller
 
-Extend Hub (Go, gin framework) with controllers for these resources.
-Hub already manages tasks and addons.
-
-**Rejected because**: ADR 0001 explicitly decouples agent execution
-from Hub. Hub is a data service, not a workload launcher. Adding
-controller-runtime to Hub's gin-based architecture mixes concerns
-and couples the agent platform to Hub's release cycle.
+**Rejected**: ADR 0001 decouples agent execution from Hub.
 
 ### Tekton as the orchestration engine
 
-Use Tekton Pipelines for multi-phase execution, with a Custom Task
-controller bridging to Agent Sandbox.
-
-**Deferred, not rejected**: Tekton provides ordering, parallelism,
-retries, conditionals, timeouts, and supply chain signing for free.
-However, the MVP requires only sequential execution, and adding a
-Tekton dependency increases the install surface. The architecture
-does not preclude Tekton integration later -- AgentPlaybookRun could
-generate Tekton PipelineRuns as an implementation detail.
+**Deferred**: MVP requires only sequential execution. Architecture
+does not preclude Tekton integration later.
 
 ### Bare Pods instead of Agent Sandbox
 
-Create Pods directly instead of depending on Agent Sandbox.
+**Rejected**: Agent Sandbox provides warm pools, hibernation, network
+isolation. Betting on the community project is stronger than building
+custom pod management.
 
-**Rejected because**: Agent Sandbox provides warm pools, hibernation,
-stable identity, and network isolation. These are important for
-running agent workloads at scale. Betting on the community project
-and contributing upstream is a stronger position than building custom
-pod management.
+### PVCs for workspace persistence
+
+**Rejected**: PVCs add lifecycle management complexity (create, retain,
+GC per application). Git-as-persistence eliminates this — the workspace
+is ephemeral, the branch is the durable state. No PVCs survive between
+runs.
 
 ### SkillCards as pure OCI refs without CRDs
 
-Reference skills only by OCI image ref in the Agent spec, no
-cluster-resident SkillCard CRDs.
-
-**Rejected because**: SkillCollections support git sources and inline
-content that need to be resolved to OCI artifacts. CRDs make skills
-visible in the cluster (`kubectl get skillcards`), enable RBAC, and
-provide status reporting. The controller uses skillimage's Go library
-to handle the OCI lifecycle.
+**Rejected**: Git sources and inline content need resolution to OCI
+artifacts. CRDs provide visibility, RBAC, status reporting.
 
 ### Single base image with multiple runtimes
 
-Ship one base image containing both goose and opencode, select at
-runtime.
+**Rejected**: Bloated image, different release cadences. One base per
+runtime is cleaner.
 
-**Rejected because**: Increases image size with unused binaries,
-runtimes update on different cadences requiring monolithic rebuilds,
-and session resumption within AgentPlaybook stages requires runtime
-homogeneity anyway. One base image per runtime is cleaner.
+### Separate branch for session context
+
+**Deferred**: Committing `.konveyor/` files on a separate branch
+(e.g., `konveyor/context/<run-name>`) keeps the working branch clean
+for PRs. For now, session context goes on the same branch as code
+changes — simpler, one branch to reason about. If the PR noise becomes
+a problem, session files can be stripped at PR-creation time or moved
+to a separate branch later.
 
 ## Infrastructure Needed
 
-- **New repository**: `konveyor/agentic-controller` for the Go
-  controller, CRD types, Helm chart, and CI configuration.
+- **New repository**: `konveyor/agentic-controller`
 
-- **Container image builds**: CI pipeline to build and publish the
-  controller image to `quay.io/konveyor/agentic-controller`.
+- **Container image builds**: CI for controller image at
+  `quay.io/konveyor/agentic-controller`
 
-- **Base image builds**: CI pipeline to build `agent-base`,
-  `agent-base-goose`, `agent-base-opencode`, and language-specific
-  images. (Detailed image composition is a separate enhancement but
-  the base image with harness is needed for LLMProvider verification.)
+- **Base image builds**: CI for `agent-base`, `agent-base-goose`,
+  `agent-base-opencode`, and language images. See
+  [agent-base-image-composition](/enhancements/agentic-platform-agent-images/README.md).
 
-- **OCI registry access**: Push access to `quay.io/konveyor/` for
-  publishing controller and base images.
+- **OCI registry access**: Push to `quay.io/konveyor/`
 
-- **Test cluster**: CI environment with Agent Sandbox installed for
-  E2E testing.
+- **Test cluster**: Agent Sandbox + ImageVolumes enabled
