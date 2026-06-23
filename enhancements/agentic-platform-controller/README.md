@@ -564,8 +564,8 @@ kubectl get llmproviders
 
 1. User selects application from Hub inventory
 2. UI resolves git URLs + credential Secret names from Hub
-3. UI creates AgentRun CR with param values and envFrom
-4. UI watches AgentRun status
+3. UI creates AgentRun CR via Hub's passthrough proxy to the k8s API
+4. UI watches AgentRun status via the same passthrough
 5. On completion: shows branch link
 
 #### Story 3: CLI user runs an agent against any repo
@@ -665,6 +665,22 @@ The harness reads `KONVEYOR_PARAM_*` env vars for git coordinates
 and handles clone, branch, commit, push. It also reads LLM
 credentials from env vars set via `envFrom` and configures the
 agent runtime accordingly.
+
+#### UI access via Hub passthrough
+
+The UI accesses CRDs through Hub's existing service passthrough
+pattern (`ServiceHandler.Forward`). Hub proxies requests to the
+Kubernetes API server using its service account token and provides
+RBAC scope checking. The UI does not need a separate `/k8s` proxy
+route — all traffic flows through Hub.
+
+This is the POC approach. The long-term API surface (whether Hub
+should expose curated REST endpoints for agent resources instead
+of raw k8s API passthrough) is left for future investigation.
+Trade-offs to evaluate include: k8s API conventions vs Hub
+conventions, privilege escalation via Hub's SA, and cross-plane
+data joining (agent resources in etcd, application data in Hub's
+DB).
 
 ### Security, Risks, and Mitigations
 
