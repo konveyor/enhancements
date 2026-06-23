@@ -724,9 +724,10 @@ Five CRDs, five controllers. SkillCards OCI refs only.
 | Agent | Agent controller | POC |
 | AgentRun | AgentRun controller | POC |
 
-The UI resolves application metadata from Hub and creates the
-AgentRun with all values filled in. The controller passes them
-through.
+**UI access:** Via Hub's service passthrough proxy to the k8s API,
+scoped to `konveyor.io` API group only. The UI resolves application
+metadata from Hub and creates the AgentRun CR with all values
+filled in. The controller passes them through.
 
 #### Phase 2: AgentPlaybook (flat stages)
 
@@ -738,12 +739,27 @@ through.
 All stages share a target branch. Cross-stage handoff via
 committed `.konveyor/handoff.md`.
 
-#### Phase 3: Configurable git strategy + skill sources
+#### Phase 3: SkillCard sources + curated Hub API
 
-SkillCard git source and inline content resolution. In-cluster
-registry integration. Configurable git push strategy
-(direct/fork/mirror) driven by the UI or CLI creating the
-AgentRun with appropriate params.
+**SkillCard resolution:** Git source and inline content resolution.
+In-cluster registry integration (Zot or OpenShift built-in).
+
+**Curated Hub API:** Replace the k8s API passthrough with
+purpose-built Hub REST endpoints for agent resources. Hub reads
+CRs from the cluster using its controller-runtime client and
+exposes them in Hub's REST format. Benefits over passthrough:
+
+- Hub controls the API contract (no raw k8s response format)
+- Hub can join agent data with application data (SQL + k8s)
+- Hub validates inputs with business logic before creating CRs
+- Hub returns Hub-style errors, not k8s Status objects
+- No privilege escalation risk (Hub exposes only what it chooses)
+- For AgentRun creation, Hub resolves app metadata and fills
+  params before creating the CR — the UI sends a simple request
+
+Hub endpoints follow the existing handler pattern (~150 lines
+per resource). Four handlers for POC resources (Agent, SkillCard,
+LLMProvider, AgentRun), expanding as CRDs are added.
 
 #### Phase 4: Agent memory
 
@@ -809,9 +825,10 @@ expected. Conversion webhooks for `v1beta1`.
 5. **Git remote as sole persistence**: Work in progress lost on pod
    crash if harness hasn't pushed. Mitigated by incremental push.
 
-6. **UI does more work**: The UI resolves application metadata from
-   Hub before creating the AgentRun. The controller doesn't help
-   with this. Trade-off: controller stays domain-agnostic.
+6. **UI does more work (POC)**: The UI resolves application metadata
+   from Hub before creating the AgentRun. The controller doesn't
+   help with this. In Phase 3, curated Hub endpoints take over
+   this resolution, simplifying the UI.
 
 ## Alternatives
 
