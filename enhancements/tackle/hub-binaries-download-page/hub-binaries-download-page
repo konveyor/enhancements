@@ -1,0 +1,64 @@
+---
+title: binaries-download-page
+authors:
+  - "@fabianvf"
+reviewers:
+  - TBD
+approvers:
+  - TBD
+creation-date: 2024-07-30
+last-updated: 2024-07-30
+status: implementable
+---
+
+# Add a binaries download page to the hub UI
+
+## Release Signoff Checklist
+
+- [x] Enhancement is `implementable`
+- [x] Design details are appropriately documented from clear requirements
+- [ ] Test plan is defined
+- [ ] User-facing documentation is created
+
+## Summary
+
+A new page is added to the Konveyor Hub UI. On the page, users can view and download all the user-facing Konveyor tooling binaries.
+
+## Motivation
+
+Users should have easy ways to download the appropriate tooling for the version of Konveyor they are using.
+This page is inspired by a similar page in the OpenShift UI that allows users to download the `oc` binary.
+
+### Goals
+
+- Users can download the Konveyor binaries for their OS and architecture from the Hub UI
+
+### Non-Goals
+
+- Magically determining which binaries they should install. We should just provide a list.
+
+## Proposal
+
+### User Stories [optional]
+
+#### Story 1
+
+As a user, I want to use the CLI Konveyor tools. I go to the HUB UI, click the binary for my Operating System and architecture, and use it.
+
+## Design Details
+
+### Test Plan
+
+When testing the CLI tools with our current tests, we should download them from the Hub.
+
+## Implementation History
+
+TBD
+
+## Drawbacks
+
+- Requires us to bake all the binaries into the hub image. Could inflate the size and add complexity to the build process.
+
+## Alternatives
+
+TBD
