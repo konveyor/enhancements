@@ -830,6 +830,91 @@ expected. Conversion webhooks for `v1beta1`.
    help with this. In Phase 3, curated Hub endpoints take over
    this resolution, simplifying the UI.
 
+## Landscape
+
+### Lightspeed Agentic Operator (openshift/lightspeed-agentic-operator)
+
+The closest project architecturally. A Go controller-runtime operator
+that drives cluster remediation workflows through LLM agents in
+Agent Sandbox pods. Key observations:
+
+**Overlap:** Uses Agent Sandbox, OCI image volumes for skills, LLM
+provider management with multi-tier agents, approval gates, MCP
+server integration. Their `Agent` and `LLMProvider` CRDs solve
+similar problems to ours.
+
+**Differences:** Domain-locked to cluster ops via a fixed Proposal
+workflow (analyze → execute → verify → escalate). No generic
+execution model. No skill resolution from multiple sources. No
+git workspace lifecycle. No param model.
+
+**Opportunity:** Their `Agent` and `LLMProvider` types could be
+shared — same types, different controllers. Both projects consume
+the same upstream dependencies (Agent Sandbox, controller-runtime).
+A conversation about extracting shared API types into a common
+package would reduce duplication without coupling implementations.
+
+**Risk:** They are pre-release (v1alpha1, no releases, ~364 commits,
+all Red Hat employees). Coupling to their velocity or direction is
+risky. The shared-types approach minimizes this risk.
+
+### Kagenti (kagenti/kagenti)
+
+Platform middleware for deploying, securing, and governing agents.
+IBM + Red Hat joint project. Provides AuthBridge (zero-trust
+sidecars, SPIFFE identity), MCP Gateway (Envoy-based), Istio
+ambient mesh integration, NetworkPolicy automation.
+
+**Overlap:** Security and networking infrastructure for agent
+workloads. Their OpenShell integration provides agent sandboxing.
+
+**Differences:** Not an execution orchestrator. No skill packaging,
+no LLM management, no git lifecycle. Requires A2A protocol on
+every agent. Heavy infrastructure footprint (Istio, SPIRE,
+Keycloak).
+
+**Opportunity:** AuthBridge and MCP Gateway could be adopted
+independently for security hardening (our Phase 4+) without
+coupling to the full platform. Ladislav Smola (Red Hat) is a
+maintainer.
+
+### Fullsend (fullsend-ai/fullsend)
+
+Autonomous SDLC platform — agents triage issues, implement code,
+review PRs, and merge. Red Hat (Konflux CI team). Runs on GitHub
+Actions with OpenShell containers.
+
+**Overlap:** Validates the git-as-persistence model in production
+(ephemeral sandboxes, all output as git branches). Their harness
+model (three-tier config inheritance) is well-designed.
+
+**Differences:** Runs on GitHub Actions, not Kubernetes. Fully
+autonomous (no human-in-the-loop during execution). Explicitly
+rejected Agent Sandbox and ACP for their use case.
+
+**Opportunity:** If we build k8s-native agent execution well,
+fullsend could be a consumer when they add Kubernetes support
+(listed on their roadmap as "Later").
+
+### Positioning
+
+All three projects are Red Hat-adjacent, solving adjacent problems:
+
+- **Kagenti**: security/networking layer (infrastructure)
+- **Lightspeed Agentic**: cluster ops remediation (domain-specific)
+- **Fullsend**: autonomous SDLC (domain-specific, not k8s-native)
+- **Konveyor**: generic agent execution primitives (domain-agnostic)
+
+We build the generic layer. Agent Sandbox and OpenShell are shared
+infrastructure at the bottom. Our CRDs (Agent, AgentRun with params,
+SkillCard with OCI resolution) are the reusable primitives above
+the sandbox layer that none of the other projects provide in a
+domain-agnostic way.
+
+The differentiator nobody else is building: ACP-native interactive
+agents in Kubernetes — fleet-managed agents that feel like local
+agents from the IDE or terminal (Future phase).
+
 ## Alternatives
 
 ### Hub adapter in the controller
