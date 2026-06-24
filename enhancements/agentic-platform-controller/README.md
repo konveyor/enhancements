@@ -848,15 +848,12 @@ workflow (analyze → execute → verify → escalate). No generic
 execution model. No skill resolution from multiple sources. No
 git workspace lifecycle. No param model.
 
-**Opportunity:** Their `Agent` and `LLMProvider` types could be
-shared — same types, different controllers. Both projects consume
-the same upstream dependencies (Agent Sandbox, controller-runtime).
-A conversation about extracting shared API types into a common
-package would reduce duplication without coupling implementations.
-
-**Risk:** They are pre-release (v1alpha1, no releases, ~364 commits,
-all Red Hat employees). Coupling to their velocity or direction is
-risky. The shared-types approach minimizes this risk.
+**Opportunity:** Their `LLMProvider` CRD satisfies our requirements
+and could be adopted directly. Their `Agent` would need to be
+enriched (container image, system prompt, skills) to serve as a
+shared primitive. See the
+[Shared primitives with lightspeed-agentic-operator](#shared-primitives-with-lightspeed-agentic-operator)
+alternative for a detailed gap analysis and path forward.
 
 ### Kagenti (kagenti/kagenti)
 
@@ -916,6 +913,82 @@ agents in Kubernetes — fleet-managed agents that feel like local
 agents from the IDE or terminal (Future phase).
 
 ## Alternatives
+
+### Shared primitives with lightspeed-agentic-operator
+
+The [lightspeed-agentic-operator](https://github.com/openshift/lightspeed-agentic-operator)
+is the closest project to what we are building. Both projects use
+Agent Sandbox for execution, OCI image volumes for skills, and
+Kubernetes CRDs for LLM provider management. We evaluated whether
+we could adopt their `agentic.openshift.io/v1alpha1` primitives
+(`Agent`, `LLMProvider`, `Proposal`) instead of defining our own,
+and identified one area of strong alignment and four requirements
+that their current model does not satisfy.
+
+**What aligns: LLMProvider.** Their `LLMProvider` CRD is a
+discriminated union across five backends (Anthropic, GoogleCloudVertex,
+OpenAI, AzureOpenAI, AWSBedrock) with per-backend config structs,
+CEL validation ensuring exactly one is set, and credential management
+via Secret references. This is richer than what we have designed and
+satisfies our requirements. We could adopt it.
+
+**Gap 1: Agent as a reusable capability template.** We need the Agent
+to define the full execution environment — a container image (runtime
+and toolchains), a `systemPrompt` (standing behavioral instructions),
+and skills (OCI artifacts with domain knowledge). This makes Agent a
+composable template: the same container image can back multiple Agents
+with different personalities and skill sets, and many runs can
+reference the same Agent without re-specifying the environment. Their
+`Agent` CRD (`agent_types.go`) is an LLM tier configuration —
+`spec.llmProvider` (single ref), `spec.model`, `spec.timeouts`,
+`spec.maxTurns` — with no container image, no prompt, and no skills.
+The execution environment is instead assembled by the Proposal
+controller from a fixed base `SandboxTemplate` and per-Proposal
+`ToolsSpec` fields.
+
+**Gap 2: Multiple skills images per agent.** We mount multiple OCI
+skill artifacts as separate ImageVolumes under a shared directory
+(`/opt/skills/{name}/`). Being able to define an Agent with the
+specific skills it should use — each sourced from its own OCI
+image — is what makes the Agent a meaningful unit of composition.
+Their `ToolsSpec.skills` field (`shared_types.go`) is a list of
+`SkillsSource` entries (OCI image ref + paths), but the Proposal
+controller's `patchSkillsImage()` function (`sandbox_templates.go`)
+patches a single image volume on the base `SandboxTemplate`, taking
+`skills[0]` — the first entry. Supporting multiple independently-
+sourced skill images would require changes to how they build derived
+`SandboxTemplate` resources.
+
+**Gap 3: Skills belong on the agent definition, not the workflow
+resource.** Skills define what an agent *can do* — they are part of
+its identity and are reused across runs. In their model, skills are
+specified on `Proposal.spec.tools` (or per-step overrides), meaning
+every Proposal must re-specify the full `ToolsSpec`. Moving skills
+to the Agent would enable reuse: a cluster admin defines an Agent
+once with its skills, and users reference it by name in Proposals
+without knowing the underlying skill composition.
+
+**Gap 4: A generic execution primitive without the Proposal
+workflow.** We need a way to say "run this Agent with these
+instructions, to completion" — a single-shot execution primitive
+analogous to a Tekton TaskRun. Their only execution path is the
+`Proposal` CRD, which enforces a fixed state machine
+(Pending → Analyzing → Proposed → Executing → Verifying → Completed,
+with approval gates, escalation, and retry logic). There is no way
+to execute an agent without entering this workflow. A lower-level
+execution primitive (similar to our AgentRun) that Proposal could
+be built on top of — creating one per step — would give both
+projects a shared foundation while preserving their domain-specific
+workflow as a higher-order resource.
+
+**Path forward.** If the lightspeed-agentic-operator project is
+interested in generalizing these primitives — enriching Agent to
+carry image, prompt, and skills; supporting multiple skill images;
+and introducing a generic execution resource below Proposal — we
+would collaborate on shared CRD definitions and controllers. Their
+`LLMProvider` is a strong starting point. Until such collaboration
+materializes, we define our own primitives under `konveyor.io` to
+avoid blocking on external alignment.
 
 ### Hub adapter in the controller
 
