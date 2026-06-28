@@ -27,12 +27,7 @@ workloads. Covers the base image contents, runtime layers, language
 toolchain layers, filesystem conventions, non-root execution, multi-arch
 support, user extension path, and build pipeline.
 
-This enhancement fills the gap identified in the
-[agentic-platform-controller](/enhancements/agentic-platform-controller/README.md)
-enhancement:
-
-> "Agent container image composition (how language-specific images are
-> built) is out of scope and will be a separate enhancement."
+Companion to [agentic-platform-controller](/enhancements/agentic-platform-controller/README.md).
 
 ## Release Signoff Checklist
 
@@ -106,9 +101,10 @@ Specifically:
 2. **Define runtime layers**: how goose and opencode are added on top
 3. **Define language layers**: how Java, Node.js, .NET, Go toolchains
    are added
-4. **UBI compliance**: Red Hat Universal Base Image for OpenShift
-   certification
-5. **Non-root execution**: compatible with OpenShift's restricted SCC
+4. **UBI compliance**: Red Hat Universal Base Image for Kubernetes
+   environments (e.g., OpenShift certification)
+5. **Non-root execution**: compatible with restricted security
+   policies in Kubernetes environments (e.g., OpenShift restricted SCC)
 6. **Multi-architecture**: amd64 and arm64
 7. **User extensibility**: enterprise users extend with a single FROM
 8. **Skills mounted, not baked**: image provides skillctl for skill
@@ -281,8 +277,9 @@ PVC persists across Sandboxes within an AgentPlaybookRun.
 
 ### Non-Root Execution
 
-OpenShift runs containers with a random non-root UID by default
-(restricted SCC). All images must support this.
+Kubernetes environments may enforce non-root execution by default
+(e.g., OpenShift restricted SCC assigns a random non-root UID).
+All images must support this.
 
 **Requirements**:
 
@@ -296,8 +293,9 @@ OpenShift runs containers with a random non-root UID by default
        && chgrp -R 0 /workspace /.konveyor
    ```
 
-3. The harness uses `$HOME` (set by OpenShift to a writable tmpdir)
-   for runtime config, not hardcoded `/root/`.
+3. The harness uses `$HOME` for runtime config, not hardcoded `/root/`.
+   In environments with random UIDs (e.g., OpenShift), `$HOME` must be
+   set to a writable path via Dockerfile or pod spec.
 
 4. `/opt/skills/` is read-only. Skills are reference content, not
    written to at runtime.
@@ -305,7 +303,7 @@ OpenShift runs containers with a random non-root UID by default
 5. The harness creates `$HOME/.config/<runtime>/` at startup for
    runtime-specific config files (goose config, opencode config).
 
-**Tested with**: `runAsUser: 1000650000` (typical OpenShift random UID).
+**Tested with**: `runAsUser: 1000650000` (typical random UID in restricted environments).
 
 ### Multi-Architecture
 
@@ -434,7 +432,7 @@ layered approach avoids duplicate base packages.
 ### Security
 
 - All images based on UBI 9 (Red Hat security updates, CVE scanning)
-- Non-root by default (compatible with OpenShift restricted SCC)
+- Non-root by default (compatible with restricted security policies, e.g., OpenShift restricted SCC)
 - No credentials baked into images (injected at runtime via Secrets)
 - `/opt/skills/` is read-only (skills are reference content)
 - OCI artifacts (skills) support cosign signing for supply chain verification
@@ -490,5 +488,5 @@ building the agent itself. The abstraction doesn't match the use case.
 - **quay.io push access**: Automated push access for CI to
   `quay.io/konveyor/agent-*` repositories.
 
-- **Test cluster**: OpenShift cluster with Agent Sandbox and
-  ImageVolumes enabled for integration testing.
+- **Test cluster**: Kubernetes cluster (e.g., OpenShift) with Agent
+  Sandbox and ImageVolumes enabled for integration testing.
