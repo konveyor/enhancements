@@ -169,33 +169,37 @@ pvcs:
 
 New PVC names follow MTC's naming pattern: `<original-name>-mig-<suffix>` where suffix is a random 4-character alphanumeric string, consistent across all PVCs in a plan.
 
-For StatefulSet PVCs, the user must edit target names in the plan to follow the Kubernetes convention: `<newTemplateName>-<statefulSetName>-<ordinal>`. Example: `data-redis-0` -> `data-mig-a1b2-redis-0`.
+For StatefulSet PVCs, the plan subcommand auto-detects the naming convention and generates correct target names: `<templateName>-mig-<suffix>-<statefulSetName>-<ordinal>`. Example: `data-redis-0` -> `data-mig-a1b2-redis-0`.
 
 #### Per-PVC Conversion Flow
 
-```
+```text
  1. Pre-flight validation:
     - Source PVC exists and is Bound
     - Target StorageClass exists (Get by name; Forbidden = warn + proceed)
     - Target PVC name doesn't already exist (collision check)
- 2. Create destination PVC with target StorageClass
- 3. Detect UID requirements (OCP namespace annotation / workload spec fallback)
- 4. Create rsync server pod (mounts destination PVC)
- 5. Create stunnel TLS tunnel + endpoint (Route on OCP / Ingress on K8s)
- 6. Copy server cert secret under client's expected name (intra-cluster cert sharing)
- 7. Create rsync client pod (mounts source PVC)
- 8. Monitor progress via rsync log parsing
- 9. Wait for completion
-10. Garbage collect rsync infrastructure (pods, stunnel, endpoint, secrets)
-11. Label old PVC with migration metadata
+ 2. Quiesce workloads referencing this PVC (scale Deployments/StatefulSets to 0)
+ 3. Create destination PVC with target StorageClass
+ 4. Detect UID requirements (OCP namespace annotation / workload spec fallback)
+ 5. Create rsync server pod (mounts destination PVC)
+ 6. Create stunnel TLS tunnel + endpoint (Route on OCP / Ingress on K8s)
+ 7. Copy server cert secret under client's expected name (intra-cluster cert sharing)
+ 8. Create rsync client pod (mounts source PVC)
+ 9. Monitor progress via rsync log parsing
+10. Wait for completion
+11. Garbage collect rsync infrastructure (pods, stunnel, endpoint, secrets)
+12. Label old PVC with migration metadata
 ```
 
 After all PVCs are transferred:
+```text
+13. Swap workload references (Deployments, DaemonSets, ReplicaSets, CronJobs)
+14. Skip completed Jobs; delete + recreate active Jobs that reference old PVC
+15. Auto-detect StatefulSet volumeClaimTemplates via regex and perform delete+recreate
+16. Report summary
 ```
-12. Swap workload references (Deployments, DaemonSets, ReplicaSets, CronJobs, Jobs)
-13. Auto-detect StatefulSet volumeClaimTemplates via regex and perform delete+recreate
-14. Report summary
-```
+
+Workloads are quiesced (scaled to 0) before data transfer to prevent writes during rsync that would be lost after the swap. The swap itself triggers a new rollout that scales workloads back up on the new PVC.
 
 #### Workload Reference Swap
 
@@ -205,7 +209,7 @@ After all PVCs are transferred:
 | DaemonSet | Patch volume references |
 | ReplicaSet | Patch (standalone only — skip owned-by-Deployment) |
 | CronJob | Patch jobTemplate volume references |
-| Job | Delete + recreate (immutable) |
+| Job | Delete + recreate (immutable; completed Jobs are skipped) |
 | StatefulSet | Delete + recreate dance (volumeClaimTemplates immutable) |
 
 **StatefulSet handling** (matching MTC's `swapStatefulSetPVCRefs()`):
@@ -244,7 +248,8 @@ The command works with namespace-admin permissions:
 | Create/Delete Pods | Namespace | Allowed for namespace-admin |
 | Create/Delete Secrets, ConfigMaps | Namespace | Allowed for namespace-admin |
 | Create/Delete Routes/Ingresses | Namespace | Allowed for namespace-admin |
-| List/Update Deployments, StatefulSets, etc. | Namespace | Allowed for namespace-admin |
+| List/Update Deployments, DaemonSets, ReplicaSets, CronJobs | Namespace | Allowed for namespace-admin |
+| Delete/Create Jobs, StatefulSets (for immutable swap) | Namespace | Allowed for namespace-admin |
 | Get StorageClass by name | Cluster | Gracefully handles Forbidden — warns and proceeds |
 | List StorageClasses | Cluster | Plan subcommand: best-effort — warns if Forbidden, user sets target SC manually |
 
