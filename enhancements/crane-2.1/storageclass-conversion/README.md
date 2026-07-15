@@ -16,7 +16,6 @@ last-updated: 2026-07-14
 status: implementable
 see-also:
   - "https://github.com/migtools/crane/issues/655"
-  - "https://github.com/migtools/crane/issues/319"
 replaces: []
 superseded-by: []
 ---
@@ -35,8 +34,8 @@ superseded-by: []
 1. Should the command support access mode changes (e.g., RWO -> RWX) as part of conversion?
     * **Decision:** Yes, via optional `--target-access-mode` flag and the plan file's `accessModes` field. Not enforced — user is responsible for ensuring target SC supports the requested mode.
 
-2. Should the `plan` subcommand auto-detect StatefulSet PVC naming and generate correct target names automatically?
-    * **Decision:** Yes. Both the **plan generation** and **swap phase** auto-detect StatefulSet volumeClaimTemplate PVCs using regex `^<templateName>-<stsName>-(\d+)$`. The plan subcommand generates correct target names (`<templateName>-mig-<suffix>-<stsName>-<ordinal>`), and the swap phase performs the delete+recreate dance automatically.
+2. Should the command support batch conversion of multiple PVCs in a single run?
+    * **Decision:** Yes, via a YAML plan file. The `plan` subcommand discovers PVCs in a namespace and generates an editable plan. The user reviews, sets `action: skip` on PVCs that should not be converted, and executes with `--plan`. PVCs are processed sequentially.
 
 3. Should old PVCs be cleaned up automatically or left for the user?
     * **Decision:** Old PVCs are labeled (`crane.konveyor.io/migrated-to`) but never deleted. The user verifies data integrity and deletes manually.
