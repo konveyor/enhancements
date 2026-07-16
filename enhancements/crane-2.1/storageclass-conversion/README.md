@@ -8,15 +8,16 @@ reviewers:
   - "@jwmatthews"
   - "@shawn-hurley"
   - "@pranavgaikwad"
+  - "@aufi"
 approvers:
   - "@istein1"
   - "@stillalearner"
-creation-date: 2026-07-14
-last-updated: 2026-07-14
+creation-date: 2026-07-16
+last-updated: 2026-07-16
 status: implementable
 see-also:
   - "https://github.com/migtools/crane/issues/655"
-replaces: []
+
 superseded-by: []
 ---
 
@@ -31,57 +32,57 @@ superseded-by: []
 
 ## Open Questions
 
-1. Should the command support access mode changes (e.g., RWO -> RWX) as part of conversion?
-    * **Decision:** Yes, via optional `--target-access-mode` flag and the plan file's `accessModes` field. Not enforced — user is responsible for ensuring target SC supports the requested mode.
+1. Should workload reference updates be handled by a new plugin or existing optional flags?
+    * **Decision:** Use existing `pvc-rename-map` optional flag in KubernetesPlugin. The flag mechanism may evolve as part of the plugins system enhancement (parametrized custom stages), but the underlying plugin logic stays the same.
 
 2. Should the command support batch conversion of multiple PVCs in a single run?
-    * **Decision:** Yes, via a YAML plan file. The `plan` subcommand discovers PVCs in a namespace and generates an editable plan. The user reviews, sets `action: skip` on PVCs that should not be converted, and executes with `--plan`. PVCs are processed sequentially.
+    * **Decision:** Not as a new command. The user runs `transfer-pvc` once per PVC, then a single export/transform/apply pass handles all workload reference updates in the manifests.
 
-3. Should old PVCs be cleaned up automatically or left for the user?
-    * **Decision:** Old PVCs are labeled (`crane.konveyor.io/migrated-to`) but never deleted. The user verifies data integrity and deletes manually.
+3. Should old PVCs be cleaned up automatically?
+    * **Decision:** No. Old PVCs remain on the cluster. The user verifies data integrity and deletes manually.
+
+4. How should StatefulSet immutable volumeClaimTemplates be handled?
+    * **Decision:** The transform pipeline generates the correct manifest with renamed templates. The user handles the delete+recreate of the StatefulSet manually. Crane does not do live workload patching.
 
 ## Summary
 
-Crane currently has no mechanism for converting PVCs from one StorageClass to another within the same cluster. The only existing option is the `--dest-storage-class` flag on `crane transfer-pvc`, which is designed for cross-cluster migration — not intra-cluster StorageClass changes.
+Crane currently has no mechanism for converting PVCs from one StorageClass to another within the same cluster. The only existing option is `--dest-storage-class` on `crane transfer-pvc`, but the command rejects same-cluster transfers.
 
-This enhancement adds a new **`crane convert-storage`** command that provides MTC-equivalent `StorageConversionPlan` functionality as a CLI tool. The command creates a new PVC with the target StorageClass, transfers data via rsync (reusing the pvc-transfer library), automatically swaps workload references (Deployments, StatefulSets, DaemonSets, CronJobs, Jobs, ReplicaSets), and preserves the old PVC for rollback safety.
+This enhancement extends the existing crane pipeline to support intra-cluster StorageClass conversion by:
 
-The command supports two modes:
-* **Single-PVC mode:** Convert one PVC via CLI flags
-* **Batch mode:** Generate an editable YAML plan file, then execute it to convert multiple PVCs
+1. **Extending `transfer-pvc`** to allow same-cluster transfers — creating a new PVC with the target StorageClass and copying data via rsync within the same cluster
+2. **Using the existing `pvc-rename-map`** in the KubernetesPlugin to generate updated manifests with renamed PVC references across all workload types
+
+No new commands are introduced. The feature composes existing crane primitives (`transfer-pvc`, `export`, `transform`, `apply`) following crane's Unix-philosophy pipeline.
 
 ## Motivation
 
 StorageClass changes within a single cluster are a common operational need:
 
-* **Cloud provider upgrades:** AWS `gp2` -> `gp3` (better performance, lower cost), Azure `managed-standard` -> `managed-premium`
+* **Cloud provider upgrades:** `gp2` → `gp3`, `managed-standard` → `managed-premium`
 * **Storage system migration:** GlusterFS decommissioned, replaced by Ceph/OCS
 * **Performance tiering:** Moving workloads between fast/slow storage tiers
 * **Compliance/policy:** Organization mandates encryption-at-rest via a specific StorageClass
 
-MTC provides this capability through `StorageConversionPlan` in `mig-controller`, but it requires the full MTC operator stack (MigPlan CR, MigMigration CR, MigCluster, controllers, UI). Crane users need a lightweight CLI alternative that fits the Unix-philosophy pipeline.
-
-Since Kubernetes PVC `spec.storageClassName` is immutable after creation, converting a PVC's StorageClass requires creating a new PVC, copying data, and updating all workload references — a multi-step process that is error-prone when done manually.
+Since Kubernetes PVC `spec.storageClassName` is immutable after creation, converting requires: creating a new PVC with the target StorageClass, copying data, and updating workload references — a multi-step process that is error-prone when done manually.
 
 ### Goals
 
-* **Single-command conversion:** Convert a PVC from one StorageClass to another with one command, including data transfer and workload reference swap.
-* **Batch support:** Convert multiple PVCs in a namespace via an editable YAML plan file.
-* **Non-admin support:** Work with namespace-admin RBAC — no cluster-admin required.
-* **StatefulSet support:** Handle immutable `volumeClaimTemplates` via delete+recreate dance, matching MTC's approach.
-* **Data integrity:** Transfer data via rsync with optional checksum verification (`--verify`).
-* **Rollback safety:** Preserve old PVCs (labeled, not deleted) so the user can verify and roll back if needed.
-* **OCP and K8s:** Work on both OpenShift (Route endpoint, SCC UID detection) and vanilla Kubernetes (Ingress endpoint).
-* **MTC feature parity:** Cover the core `StorageConversionPlan` functionality from `mig-controller`.
+* **No new commands:** Extend existing `transfer-pvc` and leverage existing `pvc-rename-map` in transform
+* **Composable pipeline:** Data transfer and manifest generation are separate steps that the user composes
+* **Non-destructive:** Crane generates updated manifests on disk — the user reviews and applies
+* **No live workload patching:** Crane does not modify running workloads directly
+* **Data integrity:** Transfer data via rsync with optional checksum verification
+* **OCP and K8s:** Work on both OpenShift (Route endpoint) and vanilla Kubernetes (Ingress endpoint)
+* **Non-admin support:** Work with namespace-admin RBAC
 
 ### Non-Goals
 
-* **Cross-cluster StorageClass change:** Already handled by `crane transfer-pvc --dest-storage-class`. This command is intra-cluster only.
-* **Snapshot-based copy:** Only rsync-based data transfer. CSI snapshot copy is out of scope.
-* **PV move/re-bind:** Only copy action. NFS PV re-bind (MTC's `move` action) is out of scope.
-* **Automatic rollback:** The command labels old PVCs but does not provide an automated rollback mechanism.
-* **VirtualMachine (KubeVirt) swap:** Not in initial scope.
-* **Cross-namespace conversion:** Source and destination PVC must be in the same namespace.
+* **Automatic workload patching:** Crane generates manifests; the user applies them
+* **Automatic quiesce/restore:** User scales down workloads before transfer and scales up after applying
+* **StatefulSet delete+recreate automation:** Crane generates the correct manifest; the user handles the immutable field update
+* **Cross-cluster StorageClass change:** Already handled by the existing `transfer-pvc` cross-cluster flow
+* **Snapshot-based copy:** Only rsync-based data transfer
 
 ## Proposal
 
@@ -89,224 +90,110 @@ Since Kubernetes PVC `spec.storageClassName` is immutable after creation, conver
 
 #### Story 1: Single PVC Conversion
 
-A developer needs to convert one specific PVC to a different StorageClass. They run a single command specifying the PVC name and target StorageClass. The command creates the new PVC, transfers data, swaps the workload reference, and labels the old PVC.
+A developer needs to convert a PVC from one StorageClass to another within the same cluster. They scale down the workload, run `transfer-pvc` with same source and destination context to copy data to a new PVC, then use the export/transform/apply pipeline to generate updated workload manifests and apply them.
 
-#### Story 2: Batch Conversion of Multiple PVCs
+#### Story 2: Multiple PVC Conversion
 
-An operator needs to convert all PVCs in a namespace from one StorageClass to another. They generate a plan, review and edit it, and execute. All PVCs are converted, workload references swapped, old PVCs preserved.
+An operator needs to convert multiple PVCs in a namespace. They run `transfer-pvc` once per PVC, then run a single export/transform/apply pass with all rename mappings to generate updated manifests for all workloads at once.
 
-#### Story 3: StatefulSet Storage Upgrade
+#### Story 3: Non-Admin User
 
-A team runs a multi-replica StatefulSet with volumeClaimTemplates. They generate a plan, edit target names to follow the StatefulSet naming convention, and execute. The swap phase auto-detects the StatefulSet volumeClaimTemplate match and performs the delete+recreate dance to update the immutable template field.
+A namespace-admin converts PVCs using `transfer-pvc` with same-cluster contexts. The command gracefully handles Forbidden responses for cluster-scoped operations.
 
-#### Story 4: Non-Admin User
+### Workflow
 
-A namespace-admin (not cluster-admin) converts PVCs. The command gracefully handles Forbidden responses for cluster-scoped operations (StorageClass listing) and falls back to user-provided values.
+#### Simple case: Deployment with one PVC
 
-#### Story 5: Selective Conversion via Plan
+```bash
+# 1. Quiesce workload
+kubectl scale deploy webapp --replicas=0 -n myapp
 
-A namespace has multiple PVCs but only some need conversion. The user generates a plan, sets `action: skip` on PVCs that should remain unchanged, and executes. Only the non-skipped PVCs are converted.
+# 2. Transfer data to new PVC with new StorageClass
+crane transfer-pvc \
+  --source-context mycluster --destination-context mycluster \
+  --pvc-name "mysql-data:mysql-data-new" \
+  --pvc-namespace myapp \
+  --dest-storage-class gp3 \
+  --endpoint route
 
-### Implementation Details/Notes/Constraints
+# 3. Generate updated manifests
+crane export --context mycluster --namespace myapp --export-dir ./export
+crane transform --export-dir ./export --transform-dir ./transform \
+  --optional-flags '{"pvc-rename-map": "mysql-data=mysql-data-new"}'
+crane apply --export-dir ./export --transform-dir ./transform --output-dir ./output
 
-#### Command Structure
-
-New command at `cmd/convert-storage/`, following the existing Cobra pattern (Complete/Validate/Run).
-
-**Root command (`crane convert-storage`):**
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `--context` | string | yes* | Cluster kubeconfig context |
-| `--pvc-name` | string | yes* | Source PVC name |
-| `--pvc-namespace` | string | yes* | PVC namespace |
-| `--target-storage-class` | string | yes* | Target StorageClass name |
-| `--target-pvc-name` | string | no | Override auto-generated target PVC name (default: `<name>-mig-<suffix>`) |
-| `--target-access-mode` | string | no | Override access mode |
-| `--target-capacity` | string | no | Override storage capacity |
-| `--endpoint` | string | no | `route` or `nginx-ingress` (auto-detected) |
-| `--subdomain` | string | no | Subdomain for nginx-ingress |
-| `--ingress-class` | string | no | IngressClass for nginx-ingress |
-| `--plan` | string | no | Path to plan YAML (batch mode) |
-| `--skip-swap` | bool | no | Skip workload reference swap |
-| `--verify` | bool | no | Enable checksum verification |
-| `--image` | string | no | Container image for rsync pods |
-
-*Not required when `--plan` is provided.
-
-**Plan subcommand (`crane convert-storage plan`):**
-
-| Flag | Type | Required | Description |
-|------|------|----------|-------------|
-| `--context` | string | yes | Cluster kubeconfig context |
-| `--namespace` | string | yes | Namespace to discover PVCs in |
-| `--output` | string | yes | Path to write plan YAML |
-| `--label-selector` | string | no | Filter PVCs by label |
-
-#### Plan File Format
-
-```yaml
-context: mycluster
-namespace: myapp
-suffix: a1b2
-endpoint: route
-pvcs:
-  - name: mysql-data
-    sourceStorageClass: gp2-csi
-    targetStorageClass: gp3-csi
-    targetName: mysql-data-mig-a1b2
-    capacity: 10Gi
-    accessModes: [ReadWriteOnce]
-    action: convert
-  - name: cache-vol
-    sourceStorageClass: gp2-csi
-    targetStorageClass: ""
-    targetName: ""
-    action: skip
+# 4. Review and apply
+kubectl apply -f ./output/output.yaml -n myapp
 ```
 
-#### Auto-Naming Convention
+#### StatefulSet case
 
-New PVC names follow MTC's naming pattern: `<original-name>-mig-<suffix>` where suffix is a random 4-character alphanumeric string, consistent across all PVCs in a plan.
+```bash
+# 1. Scale StatefulSet to 0
+kubectl scale sts redis --replicas=0 -n myapp
 
-For StatefulSet PVCs, the plan subcommand auto-detects the naming convention and generates correct target names: `<templateName>-mig-<suffix>-<statefulSetName>-<ordinal>`. Example: `data-redis-0` -> `data-mig-a1b2-redis-0`.
+# 2. Transfer each PVC
+crane transfer-pvc --source-context ctx --destination-context ctx \
+  --pvc-name "data-redis-0:data-new-redis-0" --pvc-namespace myapp \
+  --dest-storage-class gp3 --endpoint route
+crane transfer-pvc --source-context ctx --destination-context ctx \
+  --pvc-name "data-redis-1:data-new-redis-1" --pvc-namespace myapp \
+  --dest-storage-class gp3 --endpoint route
 
-#### Per-PVC Conversion Flow
+# 3. Generate manifests with renamed volumeClaimTemplates
+crane export --context ctx --namespace myapp --export-dir ./export
+crane transform --export-dir ./export --transform-dir ./transform \
+  --optional-flags '{"pvc-rename-map": "data=data-new"}'
+crane apply --export-dir ./export --transform-dir ./transform --output-dir ./output
 
-```text
- 1. Pre-flight validation:
-    - Source PVC exists and is Bound
-    - Target StorageClass exists (Get by name; Forbidden = warn + proceed)
-    - Target PVC name doesn't already exist (collision check)
- 2. Quiesce workloads referencing this PVC (scale Deployments/StatefulSets to 0)
- 3. Create destination PVC with target StorageClass
- 4. Detect UID requirements (OCP namespace annotation / workload spec fallback)
- 5. Create rsync server pod (mounts destination PVC)
- 6. Create stunnel TLS tunnel + endpoint (Route on OCP / Ingress on K8s)
- 7. Copy server cert secret under client's expected name (intra-cluster cert sharing)
- 8. Create rsync client pod (mounts source PVC)
- 9. Monitor progress via rsync log parsing
-10. Wait for completion
-11. Garbage collect rsync infrastructure (pods, stunnel, endpoint, secrets)
-12. Label old PVC with migration metadata
+# 4. Delete old StatefulSet (preserve PVCs) and apply new manifest
+kubectl delete sts redis --cascade=orphan -n myapp
+kubectl apply -f ./output/output.yaml -n myapp
 ```
 
-After all PVCs are transferred:
-```text
-13. Swap workload references (Deployments, DaemonSets, ReplicaSets, CronJobs)
-14. Skip completed Jobs; delete + recreate active Jobs that reference old PVC
-15. Auto-detect StatefulSet volumeClaimTemplates via regex and perform delete+recreate
-16. Report summary
-```
+### Implementation Details
 
-Workloads are quiesced (scaled to 0) before data transfer to prevent writes during rsync that would be lost after the swap. The swap itself triggers a new rollout that scales workloads back up on the new PVC.
+#### Part 1: Extend `transfer-pvc` for same-cluster
 
-#### Workload Reference Swap
+The current `transfer-pvc` rejects same-cluster transfers. Four changes are needed:
 
-| Workload | Method |
-|----------|--------|
-| Deployment | Patch volume references |
-| DaemonSet | Patch volume references |
-| ReplicaSet | Patch (standalone only — skip owned-by-Deployment) |
-| CronJob | Patch jobTemplate volume references |
-| Job | Delete + recreate (immutable; completed Jobs are skipped) |
-| StatefulSet | Delete + recreate dance (volumeClaimTemplates immutable) |
+1. **Remove same-cluster rejection** — allow `sourceContext.Cluster == destinationContext.Cluster`
+2. **Fix cert secret naming for same-namespace** — when source and destination are in the same namespace, copy the server's TLS cert secret under the name the client expects (different PVC names produce different secret names)
+3. **Split pod labels for same-namespace** — add a `role` label to distinguish server and client pods, so the log reader finds the correct pod
+4. **Dual garbage collection** — clean up both server-side and client-side resources when using split labels
 
-**StatefulSet handling** (matching MTC's `swapStatefulSetPVCRefs()`):
+#### Part 2: Workload manifest updates via existing `pvc-rename-map`
 
-1. Auto-detect: regex `^<templateName>-<stsName>-(\d+)$` matches PVC names to templates
-2. Scale to 0 replicas
-3. Create temporary StatefulSet (holds label selector to prevent PVC GC)
-4. Rename template name + update volumeMounts in containers and initContainers
-5. Delete original StatefulSet
-6. Recreate with modified spec + original replica count
-7. Delete temporary StatefulSet
+The KubernetesPlugin in crane-lib already supports `pvc-rename-map` which generates JSONPatch operations to rename PVC references. It covers all workload types:
 
-#### Intra-Cluster Stunnel Architecture
+* Deployments, DaemonSets, ReplicaSets, ReplicationControllers, Jobs, CronJobs, Pods — volume claim name references
+* StatefulSets — both pod spec volumes and `volumeClaimTemplates` names
 
-Since both rsync server and client pods run in the same cluster/namespace, the pvc-transfer library's cross-cluster design requires adaptations:
+No plugin changes needed. The user passes the rename mapping via `--optional-flags` (or the future parametrized stage flag when the plugins enhancement lands).
 
-* **Separate labels:** Server-side pods use `role: server` label, client-side pods use `role: client` label. This prevents the log reader from finding 2 pods when expecting 1.
-* **Cert sharing:** The stunnel server generates TLS certs in a secret named after the destination PVC. The client expects certs in a secret named after the source PVC. The command copies the server's cert data into a second secret with the client's expected name, ensuring both use the same CA for mutual TLS authentication.
-* **Garbage collection:** Both server-label and client-label resources are cleaned up separately after transfer.
-
-#### Old PVC Handling
-
-After successful conversion:
-* Old PVC is **NOT deleted**
-* Old PVC receives labels: `crane.konveyor.io/migrated-by: <run-id>` and `crane.konveyor.io/migrated-to: <new-pvc-name>`
-* User can manually delete after verification
-
-#### Non-Admin RBAC
-
-The command works with namespace-admin permissions:
-
-| Operation | Scope | Handling |
-|-----------|-------|----------|
-| List/Get PVCs | Namespace | Allowed for namespace-admin |
-| Create PVCs | Namespace | Allowed for namespace-admin |
-| Create/Delete Pods | Namespace | Allowed for namespace-admin |
-| Create/Delete Secrets, ConfigMaps | Namespace | Allowed for namespace-admin |
-| Create/Delete Routes/Ingresses | Namespace | Allowed for namespace-admin |
-| List/Update Deployments, DaemonSets, ReplicaSets, CronJobs | Namespace | Allowed for namespace-admin |
-| Delete/Create Jobs, StatefulSets (for immutable swap) | Namespace | Allowed for namespace-admin |
-| Get StorageClass by name | Cluster | Gracefully handles Forbidden — warns and proceeds |
-| List StorageClasses | Cluster | Plan subcommand: best-effort — warns if Forbidden, user sets target SC manually |
+Note: `pvc-rename-map` renames the volumeClaimTemplate name but does not update its `storageClassName`. This is acceptable because the new PVC already has the correct StorageClass from `transfer-pvc`. However, for StatefulSets, new replicas scaled up in the future would use the old StorageClass from the template. A `storage-class-map` optional flag could be added to KubernetesPlugin in a future iteration to address this.
 
 ### Security, Risks, and Mitigations
 
-**Data in transit:** All data transfer goes through stunnel (TLS 1.3) with mutual certificate verification. Certificates are auto-generated per conversion run and cleaned up afterward.
+**Data in transit:** All data transfer goes through stunnel (TLS 1.3) with mutual certificate verification, even for same-cluster transfers.
 
-**UID handling:** On OCP, the command reads the namespace's UID range annotation and runs rsync pods with the correct UID. On vanilla K8s, it reads the workload's security context. This ensures rsync can read/write files with the correct ownership.
+**UID handling:** On OCP, the command reads the namespace's UID range annotation and runs rsync pods with the correct UID. On vanilla K8s, it reads the workload's security context.
 
-**Old PVCs:** Preserved for rollback. If the conversion fails mid-way, the old PVC still has the original data. The user can manually revert the workload reference.
+**Non-destructive:** Crane generates manifests on disk. The user reviews before applying. No live workload mutations by crane.
 
-**StatefulSet delete+recreate:** During the brief window between delete and recreate, the StatefulSet doesn't exist. The temporary StatefulSet holds the label selector to prevent PVC garbage collection. Pods are already scaled to 0 before the dance.
-
-**No cluster-admin required:** The command operates within namespace RBAC boundaries. Cluster-scoped operations (SC validation) are best-effort with graceful fallback.
+**Old PVCs preserved:** The source PVC is not deleted. If the conversion fails or the user is unhappy with the result, the original data is still available.
 
 ## Design Details
 
-### Internal Package Structure
-
-| File | Purpose |
-|------|---------|
-| `cmd/convert-storage/convert_storage.go` | Root command: Complete/Validate/Run, single-PVC + batch dispatch, data transfer orchestration |
-| `cmd/convert-storage/plan.go` | `plan` subcommand: PVC discovery, SC listing, auto-suggestion, YAML output |
-| `cmd/convert-storage/swap.go` | Workload reference swap: Deployments, DaemonSets, ReplicaSets, CronJobs, Jobs, StatefulSets |
-| `cmd/convert-storage/types.go` | ConversionPlan, PVCEntry structs, YAML I/O, suffix generation, auto-naming |
-| `cmd/convert-storage/types_test.go` | Unit tests for types, naming, plan validation, plan round-trip, SC suggestion |
-| `cmd/convert-storage/swap_test.go` | Unit tests for workload swap with controller-runtime fake client |
-
-### Dependencies
-
-Reuses existing libraries — no new dependencies:
-* `github.com/backube/pvc-transfer` — rsync, stunnel, endpoint (Route/Ingress)
-* `github.com/konveyor/crane/cmd/transfer-pvc` — exported `Verify`, `RestrictedContainers`, `Verbose`, `FollowClientLogs` types
-* `sigs.k8s.io/controller-runtime/pkg/client` — K8s client
-* `k8s.io/cli-runtime/pkg/genericclioptions` — kubeconfig handling
-
 ### Test Plan
 
-**Unit tests:**
-
-* Plan types: suffix generation, auto-naming, plan YAML round-trip, validation of required fields and action values
-* SC suggestion: provisioner matching, GlusterFS/NFS -> Ceph mapping, default SC fallback
-* Workload swap: patch-based swap for Deployments, DaemonSets, ReplicaSets, CronJobs; delete+recreate for Jobs and StatefulSets (including initContainer volumeMount rename)
-
-**Integration / E2E tests:**
-
-* Single PVC conversion on minikube and OCP: data integrity via checksum, workload swap, old PVC labeling
-* Batch conversion via plan file: multiple PVCs with skip action, per-PVC checksum verification
-* StatefulSet conversion: volumeClaimTemplate rename, delete+recreate dance, replicas restored, data intact
-* Non-admin RBAC: all tests run as namespace-admin (not cluster-admin), verify graceful Forbidden handling
-* OCP-specific: Route endpoint, UID detection via namespace annotation, file ownership preservation
+Unit tests for the transfer-pvc changes and integration tests covering the full pipeline on both minikube and OCP clusters.
 
 ### Upgrade / Downgrade Strategy
 
-* **Additive command:** `crane convert-storage` is a new command. No existing behavior changes.
-* **Exported symbols in transfer-pvc:** Four types were exported (`Verify`, `RestrictedContainers`, `Verbose`, `FollowClientLogs`) for reuse. Internal callers updated. No API break.
-* **progress.go nil pointer fix:** Added nil guard on `TransferredData` in `Status()` — pre-existing bug #178.
+* **Additive change:** Removing the same-cluster check and adding intra-cluster support does not affect existing cross-cluster transfer behavior.
+* **No new commands or flags:** The feature uses existing flags (`--source-context`, `--destination-context`, `--dest-storage-class`, `--optional-flags`).
+* **Backwards compatible:** Existing scripts and CI pipelines that use `transfer-pvc` for cross-cluster transfers are unaffected.
 
 ## Implementation History
 
@@ -320,15 +207,16 @@ Reuses existing libraries — no new dependencies:
 
 ## Drawbacks
 
-* **Requires rsync infrastructure:** Even though source and destination are on the same cluster, the command still creates rsync server/client pods, stunnel TLS tunnel, and a Route/Ingress endpoint. This overhead is inherited from the pvc-transfer library which was designed for cross-cluster transfer. A future optimization could use a simpler copy mechanism for intra-cluster (e.g., a single pod mounting both PVCs).
-* **Sequential PVC processing:** In batch mode, PVCs are processed one at a time. Parallel conversion could speed up large-scale operations but adds complexity.
+* **Multiple manual steps:** The user must run `transfer-pvc` per PVC, then the export/transform/apply pipeline, then `kubectl apply`. This is by design (composability and reviewability) but requires more user effort than a single-command approach.
+* **StatefulSet requires manual delete+recreate:** Since `kubectl apply` cannot change immutable `volumeClaimTemplates`, the user must delete and recreate the StatefulSet manually. The generated manifest shows the correct target state.
+* **No automatic quiesce:** The user must manually scale down workloads before transfer to prevent data loss from writes during rsync.
+* **`pvc-rename-map` does not update StorageClass in templates:** For StatefulSets, new replicas scaled up after conversion would use the old StorageClass from the template unless a future `storage-class-map` flag is added.
 
 ## Alternatives
 
-1. **Direct `kubectl` scripting:** Users could manually create PVCs, run rsync pods, and patch workloads. Rejected because it's error-prone, doesn't handle StatefulSets, and requires significant Kubernetes expertise.
-2. **Transform plugin approach:** Add `--storage-class-map` flag to `crane transform` to rewrite `storageClassName` in manifests. Rejected as insufficient — transform only changes YAML files, it doesn't handle actual PVC data transfer or workload swapping at runtime.
-3. **Use MTC operator:** Install the full MTC stack and use `StorageConversionPlan`. Rejected for crane users who want a lightweight CLI tool without operator dependencies.
-4. **Single pod mounting both PVCs:** Instead of rsync over stunnel, create one pod that mounts both old and new PVCs and copies data with `cp -a`. Simpler but doesn't work with `ReadWriteOnce` PVCs that are already mounted by application pods. The rsync approach handles this by using the stunnel/endpoint networking layer.
+1. **New `crane convert-storage` command:** A monolithic command that handles data transfer, workload patching, quiesce, and restore in one step. Rejected because live workload patching is not consistent with crane's non-destructive, file-based pipeline philosophy.
+2. **New transform plugin for StorageClass mapping:** A dedicated plugin that remaps `storageClassName` in PVC manifests and volumeClaimTemplates. Not needed for the core use case — `pvc-rename-map` covers workload reference updates, and the new PVC's StorageClass is set by `transfer-pvc` at creation time.
+3. **Operator-based approach:** Deploy a controller that orchestrates the full conversion lifecycle. Rejected for crane users who want a lightweight CLI tool without operator dependencies.
 
 ## Infrastructure Needed
 
