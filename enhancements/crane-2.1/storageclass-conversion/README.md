@@ -119,11 +119,14 @@ crane transfer-pvc \
 # 3. Generate updated manifests
 crane export --context mycluster --namespace myapp --export-dir ./export
 crane transform --export-dir ./export --transform-dir ./transform \
-  --optional-flags '{"pvc-rename-map": "mysql-data=mysql-data-new"}'
+  --optional-flags '{"pvc-rename-map": "mysql-data:mysql-data-new"}'
 crane apply --export-dir ./export --transform-dir ./transform --output-dir ./output
 
 # 4. Review and apply
 kubectl apply -f ./output/output.yaml -n myapp
+
+# 5. Restore workload
+kubectl scale deploy webapp --replicas=<original-count> -n myapp
 ```
 
 #### StatefulSet case
@@ -143,12 +146,15 @@ crane transfer-pvc --source-context ctx --destination-context ctx \
 # 3. Generate manifests with renamed volumeClaimTemplates
 crane export --context ctx --namespace myapp --export-dir ./export
 crane transform --export-dir ./export --transform-dir ./transform \
-  --optional-flags '{"pvc-rename-map": "data=data-new"}'
+  --optional-flags '{"pvc-rename-map": "data:data-new"}'
 crane apply --export-dir ./export --transform-dir ./transform --output-dir ./output
 
 # 4. Delete old StatefulSet (preserve PVCs) and apply new manifest
 kubectl delete sts redis --cascade=orphan -n myapp
 kubectl apply -f ./output/output.yaml -n myapp
+
+# 5. Restore workload
+kubectl scale sts redis --replicas=<original-count> -n myapp
 ```
 
 ### Implementation Details
