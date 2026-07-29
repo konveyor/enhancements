@@ -106,6 +106,9 @@ A namespace-admin converts PVCs using `transfer-pvc` with same-cluster contexts.
 
 ```bash
 # 1. Quiesce workload
+# ⚠️  WARNING: Do NOT skip this step. rsync copies files sequentially — if the
+#    application is writing during transfer, the destination may contain a mix
+#    of old and new file versions, resulting in corrupted or inconsistent data.
 kubectl scale deploy webapp --replicas=0 -n myapp
 
 # 2. Transfer data to new PVC with new StorageClass
@@ -133,6 +136,9 @@ kubectl scale deploy webapp --replicas=<original-count> -n myapp
 
 ```bash
 # 1. Scale StatefulSet to 0
+# ⚠️  WARNING: Do NOT skip this step. rsync copies files sequentially — if the
+#    application is writing during transfer, the destination may contain a mix
+#    of old and new file versions, resulting in corrupted or inconsistent data.
 kubectl scale sts redis --replicas=0 -n myapp
 
 # 2. Transfer each PVC
@@ -150,6 +156,9 @@ crane transform --export-dir ./export --transform-dir ./transform \
 crane apply --export-dir ./export --transform-dir ./transform --output-dir ./output
 
 # 4. Delete old StatefulSet (preserve PVCs) and apply new manifest
+# ⚠️  WARNING: The --cascade=orphan flag is critical. Without it, kubectl delete sts
+#    will also delete all pods, causing unnecessary downtime. Always use --cascade=orphan
+#    to preserve running pods and PVCs while replacing the StatefulSet definition.
 kubectl delete sts redis --cascade=orphan -n myapp
 kubectl apply -f ./output/output.yaml -n myapp
 
