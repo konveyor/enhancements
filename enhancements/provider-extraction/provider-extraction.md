@@ -38,7 +38,7 @@ This enhancement proposes moving each provider into its own GitHub repository un
 ### Goals
 
 - **Independent versioning and releases:** Each provider can cut releases on its own schedule. A bug fix in the Java provider does not require a new analyzer-lsp release.
-- **Faster CI:** PRs to a provider only build and test that provider, not the entire monorepo. analyzer-lsp CI focuses on the engine and builtin provider.
+- **Faster CI:** PRs to a provider only build and test that provider, not the entire monorepo. analyzer-lsp CI focuses on the engine and built-in provider.
 - **Clearer ownership:** Each repository has its own OWNERS, issue tracker, and PR queue. Contributors know exactly where to go for a given provider.
 - **Smaller, focused container images:** Each provider's Dockerfile only includes what it needs, without pulling in the full monorepo as build context.
 - **Alignment with existing providers:** `c-sharp-analyzer-provider` and `java-analyzer-provider` (Rust) are already separate repositories. This makes the Go-based providers consistent with that pattern.
@@ -80,7 +80,7 @@ This is the existing pattern. The committed `go.mod` files already have versione
 
 Each provider repo follows a standard layout:
 
-```
+```text
 konveyor/<provider-name>/
   go.mod           # module github.com/konveyor/<provider-name>
                    # requires github.com/konveyor/analyzer-lsp
@@ -128,7 +128,7 @@ No new security concerns are introduced. The gRPC protocol, authentication (JWT)
 - Delete `external-providers/` directory.
 - Remove Makefile targets: `external-go-provider`, `external-python-provider`, `external-nodejs-provider`, `yq-external-provider`, `java-external-provider`, and the `run-external-providers-*` targets.
 - **`image-build.yaml`:** Remove provider matrix entries. Keep only `analyzer-lsp` and `analyzer-lsp-windows` image builds.
-- **`demo-testing.yml`:** Remove provider build/test phases (build-bases, build-all-providers, provider-tests, demo test). Analyzer-lsp PR testing focuses on the engine and builtin provider. The full integration test (all providers in a pod) moves to the CI repo.
+- **`demo-testing.yml`:** Remove provider build/test phases (build-bases, build-all-providers, provider-tests, demo test). Analyzer-lsp PR testing focuses on the engine and built-in provider. The full integration test (all providers in a pod) moves to the CI repo.
 - **`pr-testing.yml`:** Remove the java-external-provider test step.
 - **`java-provider-image-build.yaml`:** Delete (moves to the java-external-provider repo).
 
@@ -267,7 +267,7 @@ For integrators (kantra, operator, CI):
 
 ## Alternatives
 
-1. **Extract a separate "provider SDK" module.** Move shared interfaces, types, protobuf definitions, and utilities into a new `konveyor/provider-sdk` repo. Both analyzer-lsp and providers depend on it. This was considered and rejected: the dependency is already one-directional (providers → analyzer-lsp), so a separate SDK adds coordination overhead without technical necessity. Go only compiles what is imported, so providers do not actually pull in the engine code.
+1. **Extract a separate "provider SDK" module.** Move shared interfaces, types, protobuf definitions, and utilities into a new `konveyor/provider-sdk` repo. Both analyzer-lsp and providers depend on it. This was considered and rejected: the dependency is already one-directional (providers → analyzer-lsp), so a separate SDK adds coordination overhead without technical necessity. Providers do import several analyzer-lsp packages (`provider/`, `engine/`, `lsp/protocol/`, etc.), but these are the shared interfaces and types that define the provider contract -- extracting them into a third repo would not reduce coupling, only add a coordination layer.
 
 2. **Use a Go workspace (multi-module monorepo).** Keep all providers in analyzer-lsp but make each a fully independent Go module with workspace-level `go.work` for local development. This preserves monorepo benefits (atomic cross-cutting changes, shared CI) but does not achieve independent versioning, CI, or ownership. It also does not reduce the review queue or CI time.
 
