@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-07-21
-last-updated: 2026-07-21
+last-updated: 2026-10-09
 status: provisional
 see-also:
   - "/enhancements/crane-2.0/transfer-pvc-fixes"
@@ -29,6 +29,12 @@ superseded-by: []
 1. ~~Should the `--cloud-storage` flag accept non-S3 rclone remotes (GCS, Azure) in the first iteration, or limit to S3-compatible only?~~ **Decision:** Start with S3-compatible only, additional backends can be added in subsequent iterations.
 2. ~~Should crane automatically clean up data from cloud storage after a successful transfer, or leave that to the user?~~ **Decision:** Clean up by default after successful transfer. A `--keep-cloud-data` flag allows users to skip the cleanup.
 3. ~~Should `--bandwidth-limit` be included in the first release or deferred to a follow-up?~~ **Decision:** No additional rclone flags will be added for the 0.11 release unless directly requested or found critical during testing. Detailed flag evaluation is tracked in migtools/crane#689.
+4. How can an indirect transfer be split when the source and destination
+   clusters cannot be accessed from the same Crane invocation? **Decision:**
+   `--upload-only` performs the source phase. A follow-up `--download-only`
+   mode will perform the target phase. The caller supplies the same
+   `--cloud-storage` value to both commands; that value is the handoff
+   between them.
 
 ## Summary
 
@@ -108,6 +114,12 @@ rsync/stunnel flow with two sequential rclone operations:
    destination PVC read-write and uses rclone to sync the contents from
    cloud storage into the PVC.
 
+The default remains a single invocation that performs both phases. For
+workflows that must run separately, the phases can be split: upload the source
+PVC with `--upload-only`, then download the same cloud-storage path later with
+`--download-only`. No source-to-destination connectivity is required in either
+case.
+
 Note: `transfer-pvc` does not quiesce source workloads — ensuring
 filesystem consistency (e.g. scaling down the application before
 transfer) is the responsibility of the orchestration layer that invokes
@@ -171,6 +183,49 @@ crane transfer-pvc \
   --encrypt
 ```
 
+#### Story 3: Separate Upload and Download Workflows
+
+As an operator whose source and target clusters are operated at different
+times, I want to upload the source PVC first and download it later without
+giving either command access to the other cluster.
+
+The source workflow uploads only:
+
+```bash
+crane transfer-pvc \
+  --upload-only \
+  --source-context=source-cluster \
+  --pvc-name=postgres-data \
+  --pvc-namespace=myapp \
+  --cloud-storage=s3:migration-bucket/crane/myapp-migration \
+  --rclone-config-secret=s3-credentials
+```
+
+Crane uploads to a path derived from the provided cloud-storage value and the
+source PVC identity:
+
+```text
+s3:migration-bucket/crane/myapp-migration/myapp/postgres-data
+```
+
+Before the target workflow runs, the caller creates the destination PVC from
+the rendered migration manifest. The target workflow downloads only:
+
+```bash
+crane transfer-pvc \
+  --download-only \
+  --destination-context=target-cluster \
+  --pvc-name=postgres-data \
+  --pvc-namespace=myapp \
+  --cloud-storage=s3:migration-bucket/crane/myapp-migration \
+  --rclone-config-secret=s3-credentials
+```
+
+The identical `--cloud-storage` value connects the two operations. Operators
+should choose a distinct prefix for each migration, as shown above. After the
+download completes, they can apply or scale up the remaining rendered workload
+resources.
+
 ### Implementation Details/Notes/Constraints
 
 rclone will be compiled as a Go library into the existing `migtools/rsync-transfer`
@@ -189,6 +244,8 @@ New flags on `crane transfer-pvc`:
 | `--rclone-config-file` | string | Yes* | Path to rclone.conf on disk (crane creates temporary Secrets) |
 | `--encrypt` | bool | No | Enable client-side encryption via rclone crypt overlay |
 | `--keep-cloud-data` | bool | No | Skip cloud storage cleanup after successful transfer |
+| `--upload-only` | bool | No | Run only the source upload; does not contact the destination cluster |
+| `--download-only` | bool | No | Run only the target download; does not contact the source cluster. The destination PVC must already exist. |
 
 \* One of `--rclone-config-secret` or `--rclone-config-file` is required
 when `--cloud-storage` is set.
@@ -198,6 +255,12 @@ when `--cloud-storage` is set.
 - `--cloud-storage` without rclone config → error
 - Both `--rclone-config-secret` and `--rclone-config-file` at once → error
 - Referenced Secret does not exist in cluster → error before creating mover Pod
+- `--upload-only` requires `--source-context`; it leaves uploaded data in the
+  supplied cloud-storage location for a later download.
+- `--download-only` requires `--destination-context`; it reads the source PVC
+  namespace/name only to locate the cloud-storage path and does not contact the
+  source cluster.
+- `--upload-only` and `--download-only` are mutually exclusive.
 
 **Known limitation:** The same rclone config is used in both clusters.
 Asymmetric credential setups (e.g. IAM roles on source, static keys on
@@ -251,15 +314,42 @@ the target. Files in the target that are absent from the source will be
 deleted — any existing data on the cloud storage path or the destination
 PVC will be overwritten.
 
+#### Split Transfer Flow
+
+The split workflow reuses the same upload and download operations; it does not
+introduce another transfer format or state service.
+
+1. Run `transfer-pvc --upload-only` on the source. Crane reads the source PVC,
+   creates the source mover Pod, and syncs data to
+   `<cloud-storage>/<source-namespace>/<source-pvc-name>`.
+2. Create the destination PVC from the transformed output. This keeps the
+   target StorageClass, capacity, and other migration transformations under the
+   control of the rendered manifests.
+3. Run `transfer-pvc --download-only` on the target using the same
+   `--cloud-storage` value. Crane gets the existing destination PVC, creates a
+   target mover Pod, and syncs from the source-derived cloud path into that
+   PVC.
+4. After a successful download, cloud data is cleaned up unless
+   `--keep-cloud-data` is set. Temporary mover Pods and Secrets are cleaned up
+   in the cluster in which they were created.
+
+`--download-only` must not create or replace the destination PVC. In
+particular, it must not infer the PVC specification from the source because
+the source cluster may be unavailable and because the rendered manifest may
+contain intentional target-side changes.
+
 Filesystem metadata (mode bits, ownership, xattrs) is preserved using
 rclone's `--metadata` flag. Symlinks are handled via `--links` (stored
 as `.rclonelink` files during cloud transit and restored on download).
 
 #### Credential Management
 
-**Kubernetes Secret (production):** User creates a Secret containing
-`rclone.conf` in both the source and destination cluster namespaces. The
-mover Pod mounts the Secret at `/etc/rclone/rclone.conf`.
+**Kubernetes Secret (production):** For a single-command transfer, the user
+creates a Secret containing `rclone.conf` in both the source and destination
+cluster namespaces. In a split workflow, the upload command needs the Secret
+only in the source namespace and the download command needs it only in the
+destination namespace. The mover Pod mounts the Secret at
+`/etc/rclone/rclone.conf`.
 
 ```bash
 # Create rclone.conf
@@ -297,6 +387,11 @@ SecretBox (XSalsa20 + Poly1305) with 256-bit keys. Crane dynamically
 generates a crypt configuration wrapping the user's remote, so the mover
 Pod transparently encrypts/decrypts during transfer. The encryption
 password is sourced from the rclone config Secret.
+
+Crane-managed `--encrypt` is not part of the initial split workflow because
+the generated crypt configuration is ephemeral and cannot safely be handed to
+a later command. A split workflow that requires encryption must use a
+user-managed rclone crypt remote/config available to both phases.
 
 Encryption is opt-in. Without this flag, data transfers unencrypted.
 
@@ -357,6 +452,13 @@ Encryption is opt-in. Without this flag, data transfers unencrypted.
 - Run indirect transfer via MinIO
 - Verify destination PVC contents match source
 - Test with `--encrypt` flag
+- Test `--upload-only` with no destination context and verify that the expected
+  cloud-storage path is populated.
+- Test `--download-only` with no source context after creating the destination
+  PVC from rendered output; verify checksum integrity and that the same
+  `--cloud-storage` value is used for the handoff.
+- Test that `--download-only` fails clearly when the destination PVC does not
+  exist and does not create one.
 - Test symlink handling: relative symlinks, absolute symlinks, symlink loops
 - Test error cases: missing Secret, unreachable cloud storage, partial
   transfer recovery
@@ -390,6 +492,8 @@ fail with a clear error (rclone library not available in image).
 ## Implementation History
 
 - `2026-07-21`: Enhancement proposed as `provisional`
+- `2026-10-09`: Documented the implemented `--upload-only` source phase and
+  the proposed complementary `--download-only` target phase.
 
 ## Drawbacks
 
