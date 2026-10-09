@@ -201,15 +201,17 @@ crane transfer-pvc \
   --rclone-config-file=/path/to/rclone.conf
 ```
 
-Crane uploads to a path derived from the provided cloud-storage value and the
-source PVC identity:
+Crane uploads the PVC data to a path derived from the provided cloud-storage
+value and source PVC identity. It also stores a sanitized PVC template at a
+separate metadata path in the same cloud-storage location:
 
 ```text
 remote:migration-bucket/crane/myapp-migration/myapp/postgres-data
+remote:migration-bucket/crane/myapp-migration/.crane/metadata/myapp/postgres-data.yaml
 ```
 
-Before the target workflow runs, the caller creates the destination PVC from
-the rendered migration manifest. The target workflow downloads only:
+The target workflow retrieves the stored PVC template, creates the destination
+PVC, and then downloads the data:
 
 ```bash
 crane transfer-pvc \
@@ -240,12 +242,12 @@ New flags on `crane transfer-pvc`:
 | Flag | Type | Required | Description |
 |------|------|----------|-------------|
 | `--cloud-storage` | string | No | rclone remote path for S3-compatible storage (e.g. `remote:bucket/path`). Activates indirect mode. **Warning:** uses `rclone sync` which overwrites existing data at the target path |
-| `--rclone-config-secret` | string | Yes* | K8s Secret containing rclone.conf (must exist in both clusters) |
+| `--rclone-config-secret` | string | Yes* | K8s Secret containing rclone.conf (must exist in each cluster that runs a transfer phase) |
 | `--rclone-config-file` | string | Yes* | Path to rclone.conf on disk (crane creates temporary Secrets) |
 | `--encrypt` | bool | No | Enable client-side encryption via rclone crypt overlay |
 | `--keep-cloud-data` | bool | No | Skip cloud storage cleanup after successful transfer |
 | `--upload-only` | bool | No | Run only the source upload; does not contact the destination cluster |
-| `--download-only` | bool | No | Run only the target download; does not contact the source cluster. The destination PVC must already exist. |
+| `--download-only` | bool | No | Run only the target phase; retrieves PVC metadata and data from cloud storage, then creates and populates the destination PVC without contacting the source cluster. |
 
 \* One of `--rclone-config-secret` or `--rclone-config-file` is required
 when `--cloud-storage` is set.
@@ -262,10 +264,10 @@ when `--cloud-storage` is set.
   source cluster.
 - `--upload-only` and `--download-only` are mutually exclusive.
 
-**Known limitation:** The same rclone config is used in both clusters.
-Asymmetric credential setups (e.g. IAM roles on source, static keys on
-destination) are not supported in the first iteration and may be added
-later with per-cluster config flags.
+For a single-command transfer, the same rclone config is used in both
+clusters. In a split workflow, the upload and download invocations can use
+different credentials, provided both rclone configs define the same remote
+name and can access the same `--cloud-storage` value.
 
 #### rsync-transfer Image Changes
 
@@ -316,27 +318,31 @@ PVC will be overwritten.
 
 #### Split Transfer Flow
 
-The split workflow reuses the same upload and download operations; it does not
-introduce another transfer format or state service.
+The split workflow reuses the same data upload and download operations. It
+uses a small PVC metadata object in the same cloud-storage location so that
+the target phase can create the destination PVC without source-cluster access.
 
 1. Run `transfer-pvc --upload-only` on the source. Crane reads the source PVC,
    creates the source mover Pod, and syncs data to
-   `<cloud-storage>/<source-namespace>/<source-pvc-name>`.
-2. Create the destination PVC from the transformed output. This keeps the
-   target StorageClass, capacity, and other migration transformations under the
-   control of the rendered manifests.
-3. Run `transfer-pvc --download-only` on the target using the same
-   `--cloud-storage` value. Crane gets the existing destination PVC, creates a
-   target mover Pod, and syncs from the source-derived cloud path into that
-   PVC.
-4. After a successful download, cloud data is cleaned up unless
+   `<cloud-storage>/<source-namespace>/<source-pvc-name>`. It also writes a
+   sanitized PVC template to
+   `<cloud-storage>/.crane/metadata/<source-namespace>/<source-pvc-name>.yaml`.
+2. Run `transfer-pvc --download-only` on the target using the same
+   `--cloud-storage` value. Crane retrieves the PVC template, applies the
+   requested destination namespace/name and any `--dest-storage-class` or
+   `--dest-storage-requests` overrides, then creates the destination PVC using
+   the same safety checks as a normal transfer.
+3. Crane creates a target mover Pod and syncs data from the source-derived
+   cloud path into the destination PVC.
+4. After a successful download, cloud data, including the PVC metadata object,
+   is cleaned up unless
    `--keep-cloud-data` is set. Temporary mover Pods and Secrets are cleaned up
    in the cluster in which they were created.
 
-`--download-only` must not create or replace the destination PVC. In
-particular, it must not infer the PVC specification from the source because
-the source cluster may be unavailable and because the rendered manifest may
-contain intentional target-side changes.
+The stored template contains only the fields needed to construct a destination
+PVC. Server-managed metadata, bound-PV information, status, and source-specific
+identity are excluded. Destination name and namespace always come from the
+download command, not the stored template.
 
 Filesystem metadata (mode bits, ownership, xattrs) is preserved using
 rclone's `--metadata` flag. Symlinks are handled via `--links` (stored
@@ -453,12 +459,10 @@ Encryption is opt-in. Without this flag, data transfers unencrypted.
 - Verify destination PVC contents match source
 - Test with `--encrypt` flag
 - Test `--upload-only` with no destination context and verify that the expected
-  cloud-storage path is populated.
-- Test `--download-only` with no source context after creating the destination
-  PVC from rendered output; verify checksum integrity and that the same
-  `--cloud-storage` value is used for the handoff.
-- Test that `--download-only` fails clearly when the destination PVC does not
-  exist and does not create one.
+  cloud-storage data and PVC metadata paths are populated.
+- Test `--download-only` with no source context; verify it creates the
+  destination PVC from stored metadata, honors destination PVC overrides, and
+  restores checksum-identical data using the same `--cloud-storage` value.
 - Test symlink handling: relative symlinks, absolute symlinks, symlink loops
 - Test error cases: missing Secret, unreachable cloud storage, partial
   transfer recovery
