@@ -162,7 +162,7 @@ crane transfer-pvc \
   --destination-context=gcp-gke \
   --pvc-name=postgres-data \
   --pvc-namespace=myapp \
-  --cloud-storage=s3:migration-bucket/postgres-data \
+  --cloud-storage=remote:migration-bucket/postgres-data \
   --rclone-config-secret=s3-credentials
 ```
 
@@ -178,7 +178,7 @@ crane transfer-pvc \
   --destination-context=zone-b \
   --pvc-name=app-data \
   --pvc-namespace=production \
-  --cloud-storage=s3:internal-minio/migration/app-data \
+  --cloud-storage=remote:internal-minio/migration/app-data \
   --rclone-config-secret=minio-credentials \
   --encrypt
 ```
@@ -197,15 +197,15 @@ crane transfer-pvc \
   --source-context=source-cluster \
   --pvc-name=postgres-data \
   --pvc-namespace=myapp \
-  --cloud-storage=s3:migration-bucket/crane/myapp-migration \
-  --rclone-config-secret=s3-credentials
+  --cloud-storage=remote:migration-bucket/crane/myapp-migration \
+  --rclone-config-file=/path/to/rclone.conf
 ```
 
 Crane uploads to a path derived from the provided cloud-storage value and the
 source PVC identity:
 
 ```text
-s3:migration-bucket/crane/myapp-migration/myapp/postgres-data
+remote:migration-bucket/crane/myapp-migration/myapp/postgres-data
 ```
 
 Before the target workflow runs, the caller creates the destination PVC from
@@ -217,8 +217,8 @@ crane transfer-pvc \
   --destination-context=target-cluster \
   --pvc-name=postgres-data \
   --pvc-namespace=myapp \
-  --cloud-storage=s3:migration-bucket/crane/myapp-migration \
-  --rclone-config-secret=s3-credentials
+  --cloud-storage=remote:migration-bucket/crane/myapp-migration \
+  --rclone-config-file=/path/to/rclone.conf
 ```
 
 The identical `--cloud-storage` value connects the two operations. Operators
@@ -239,7 +239,7 @@ New flags on `crane transfer-pvc`:
 
 | Flag | Type | Required | Description |
 |------|------|----------|-------------|
-| `--cloud-storage` | string | No | S3-compatible target (e.g. `s3:bucket/path`). Activates indirect mode. **Warning:** uses `rclone sync` which overwrites existing data at the target path |
+| `--cloud-storage` | string | No | rclone remote path for S3-compatible storage (e.g. `remote:bucket/path`). Activates indirect mode. **Warning:** uses `rclone sync` which overwrites existing data at the target path |
 | `--rclone-config-secret` | string | Yes* | K8s Secret containing rclone.conf (must exist in both clusters) |
 | `--rclone-config-file` | string | Yes* | Path to rclone.conf on disk (crane creates temporary Secrets) |
 | `--encrypt` | bool | No | Enable client-side encryption via rclone crypt overlay |
@@ -354,7 +354,7 @@ destination namespace. The mover Pod mounts the Secret at
 ```bash
 # Create rclone.conf
 cat > rclone.conf <<EOF
-[s3]
+[remote]
 type = s3
 provider = AWS
 access_key_id = AKIAIOSFODNN7EXAMPLE
