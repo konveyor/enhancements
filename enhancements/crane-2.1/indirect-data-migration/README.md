@@ -32,9 +32,9 @@ superseded-by: []
 4. How can an indirect transfer be split when the source and destination
    clusters cannot be accessed from the same Crane invocation? **Decision:**
    `--upload-only` performs the source phase. A follow-up `--download-only`
-   mode will perform the target phase. The caller supplies the same
-   `--cloud-storage` value to both commands; that value is the handoff
-   between them.
+   mode will perform the target phase. The caller applies the PVC manifest
+   from the normal rendered output on the target before downloading. The same
+   `--cloud-storage` value is the data handoff between the two commands.
 
 ## Summary
 
@@ -116,9 +116,9 @@ rsync/stunnel flow with two sequential rclone operations:
 
 The default remains a single invocation that performs both phases. For
 workflows that must run separately, the phases can be split: upload the source
-PVC with `--upload-only`, then download the same cloud-storage path later with
-`--download-only`. No source-to-destination connectivity is required in either
-case.
+PVC with `--upload-only`, apply the rendered PVC manifest on the target, then
+download the same cloud-storage path with `--download-only`. No
+source-to-destination connectivity is required in either case.
 
 Note: `transfer-pvc` does not quiesce source workloads — ensuring
 filesystem consistency (e.g. scaling down the application before
@@ -202,17 +202,26 @@ crane transfer-pvc \
   --keep-cloud-data # Required: retain the upload for --download-only
 ```
 
-Crane uploads the PVC data to a path derived from the provided cloud-storage
-value and source PVC identity. It also stores a sanitized PVC template at a
-separate metadata path in the same cloud-storage location:
+Crane uploads PVC data to a path derived from the provided cloud-storage value
+and source PVC identity:
 
 ```text
 remote:migration-bucket/crane/myapp-migration/myapp/postgres-data
-remote:migration-bucket/crane/myapp-migration/.crane/metadata/myapp/postgres-data.yaml
 ```
 
-The target workflow retrieves the stored PVC template, creates the destination
-PVC, and then downloads the data:
+Before downloading, the operator applies only the rendered PVC manifest from
+the normal export/transform/apply output to the target cluster. This keeps the
+PVC manifest in Crane's established GitOps-friendly output rather than storing
+it in cloud storage. Do not apply the complete rendered application until the
+PVC data restore has finished.
+
+```bash
+kubectl apply \
+  -f <output-dir>/resources/myapp/PersistentVolumeClaim__v1_myapp_postgres-data.yaml \
+  --context=target-cluster
+```
+
+The target workflow then downloads the data into that existing PVC:
 
 ```bash
 crane transfer-pvc \
@@ -224,16 +233,16 @@ crane transfer-pvc \
   --rclone-config-file=/path/to/rclone.conf
 ```
 
-The identical `--cloud-storage` value connects the two operations. Operators
-should choose a distinct prefix for each migration, as shown above. After the
-download completes, they can apply or scale up the remaining rendered workload
-resources.
+The identical `--cloud-storage` value connects the upload and download
+operations. Operators should choose a distinct prefix for each migration, as
+shown above. After the download completes, they can apply or scale up the
+remaining rendered workload resources.
 
 Cloud data is cleaned up by default after every successful indirect phase. For
 this split workflow, `--keep-cloud-data` is required on the upload command so
-that the later download can read the uploaded data and PVC metadata. The
-download command normally omits `--keep-cloud-data`, which cleans the handoff
-data after a successful restore.
+that the later download can read the uploaded data. The download command
+normally omits `--keep-cloud-data`, which cleans the handoff data after a
+successful restore.
 
 ### Implementation Details/Notes/Constraints
 
@@ -254,7 +263,7 @@ New flags on `crane transfer-pvc`:
 | `--encrypt` | bool | No | Enable client-side encryption via rclone crypt overlay |
 | `--keep-cloud-data` | bool | No | Skip cloud storage cleanup after successful transfer |
 | `--upload-only` | bool | No | Run only the source upload; does not contact the destination cluster |
-| `--download-only` | bool | No | Run only the target phase; retrieves PVC metadata and data from cloud storage, then creates and populates the destination PVC without contacting the source cluster. |
+| `--download-only` | bool | No | Run only the target phase; downloads cloud data into an existing destination PVC without contacting the source cluster. |
 
 \* One of `--rclone-config-secret` or `--rclone-config-file` is required
 when `--cloud-storage` is set.
@@ -267,9 +276,9 @@ when `--cloud-storage` is set.
 - `--upload-only` requires `--source-context`; it leaves uploaded data in the
   supplied cloud-storage location only when `--keep-cloud-data` is set. This
   flag is required when a later `--download-only` command will use the upload.
-- `--download-only` requires `--destination-context`; it reads the source PVC
-  namespace/name only to locate the cloud-storage path and does not contact the
-  source cluster.
+- `--download-only` requires `--destination-context` and an existing,
+  safe-to-use destination PVC. It reads the source PVC namespace/name only to
+  locate the cloud-storage path and does not contact the source cluster.
 - `--upload-only` and `--download-only` are mutually exclusive.
 
 For a single-command transfer, the same rclone config is used in both
@@ -326,34 +335,25 @@ PVC will be overwritten.
 
 #### Split Transfer Flow
 
-The split workflow reuses the same data upload and download operations. It
-uses a small PVC metadata object in the same cloud-storage location so that
-the target phase can create the destination PVC without source-cluster access.
+The split workflow reuses the same data upload and download operations. The
+PVC manifest remains a rendered artifact, applied explicitly on the target;
+only PVC data is placed in cloud storage.
 
-1. Run `transfer-pvc --upload-only` on the source. Crane reads the source PVC,
-   creates the source mover Pod, and syncs data to
-   `<cloud-storage>/<source-namespace>/<source-pvc-name>`. It also writes a
-   sanitized PVC template to
-   `<cloud-storage>/.crane/metadata/<source-namespace>/<source-pvc-name>.yaml`.
-   The command must use `--keep-cloud-data`; otherwise its normal successful
-   cleanup removes both objects before a later download can use them.
-2. Run `transfer-pvc --download-only` on the target using the same
-   `--cloud-storage` value. Crane retrieves the PVC template, applies the
-   requested destination namespace/name and any `--dest-storage-class` or
-   `--dest-storage-requests` overrides, then creates the destination PVC using
-   the same safety checks as a normal transfer.
-3. Crane creates a target mover Pod and syncs data from the source-derived
-   cloud path into the destination PVC.
-4. After each successful phase, cloud data, including the PVC metadata object,
-   is cleaned up unless `--keep-cloud-data` is set. Therefore upload-only uses
-   the flag to preserve the handoff, while download-only normally omits it to
-   remove the handoff after restore. Temporary mover Pods and Secrets are
-   cleaned up in the cluster in which they were created.
-
-The stored template contains only the fields needed to construct a destination
-PVC. Server-managed metadata, bound-PV information, status, and source-specific
-identity are excluded. Destination name and namespace always come from the
-download command, not the stored template.
+1. Run `transfer-pvc --upload-only --keep-cloud-data` on the source. Crane
+   reads the source PVC, creates the source mover Pod, and syncs data to
+   `<cloud-storage>/<source-namespace>/<source-pvc-name>`. The keep flag is
+   required; otherwise successful cleanup removes the data before download.
+2. Apply the matching PVC manifest from the normal `output/` directory to the
+   target cluster. The operator is responsible for applying the target PVC
+   manifest with the desired namespace, name, storage class, and request size.
+3. Run `transfer-pvc --download-only` on the target using the same
+   `--cloud-storage` value. Crane verifies the destination PVC is safe to use,
+   then creates a target mover Pod and syncs cloud data into it.
+4. Cloud data is cleaned up after each successful phase unless
+   `--keep-cloud-data` is set. Thus upload-only preserves the handoff, while
+   download-only normally omits the flag to remove it after restore. Temporary
+   mover Pods and Secrets are cleaned up in the cluster in which they were
+   created.
 
 Filesystem metadata (mode bits, ownership, xattrs) is preserved using
 rclone's `--metadata` flag. Symlinks are handled via `--links` (stored
@@ -470,14 +470,12 @@ Encryption is opt-in. Without this flag, data transfers unencrypted.
 - Verify destination PVC contents match source
 - Test with `--encrypt` flag
 - Test `--upload-only` with no destination context and `--keep-cloud-data`;
-  verify that the expected cloud-storage data and PVC metadata paths are
-  populated.
+  verify that the expected cloud-storage data path is populated.
 - Test that upload-only without `--keep-cloud-data` cleans its cloud data after
   a successful upload.
-- Test `--download-only` with no source context; verify it creates the
-  destination PVC from stored metadata, honors destination PVC overrides, and
-  restores checksum-identical data using the same `--cloud-storage` value, then
-  cleans the cloud data by default.
+- Test `--download-only` with no source context after applying the rendered
+  PVC manifest on the target; verify it restores checksum-identical data using
+  the same `--cloud-storage` value, then cleans the cloud data by default.
 - Test symlink handling: relative symlinks, absolute symlinks, symlink loops
 - Test error cases: missing Secret, unreachable cloud storage, partial
   transfer recovery
@@ -512,7 +510,9 @@ fail with a clear error (rclone library not available in image).
 
 - `2026-07-21`: Enhancement proposed as `provisional`
 - `2026-10-09`: Documented the implemented `--upload-only` source phase and
-  the proposed complementary `--download-only` target phase.
+  the proposed complementary `--download-only` target phase. The target PVC
+  is applied from the normal rendered output before download; it is not stored
+  in cloud storage.
 
 ## Drawbacks
 
