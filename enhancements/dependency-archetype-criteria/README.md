@@ -383,6 +383,11 @@ In `konveyor/tackle2-addon-analyzer` today:
 
 A discovery run therefore produces tags and nothing else.
 
+Note that `Mode.Discovery` is not a profile setting. `Mode.With()` copies only
+`WithDeps` from the analysis profile, so the discovery flag arrives through the task
+data. Anything that needs to vary dependency collection by profile would have to extend
+`api.ApMode` first.
+
 **Proposed change.** Discovery mode calls `GetDependencies()` and reports an analysis
 containing the resolved dependencies with an empty insight set. The manifest is already
 shaped for it — `builder.Manifest{Analysis, Insights, Deps}` — with only `Deps`
@@ -535,8 +540,21 @@ filtered list costs proportionally less.
 
 **This does not scale past roughly 1000 applications**, and the endpoint under the most
 pressure is the primary application list rather than an occasional report, because
-`/applications` is not paginated. At ~400 dependencies per enterprise Java application,
-a 10k portfolio means fetching on the order of millions of rows per request.
+`/applications` is not paginated.
+
+The arithmetic behind that threshold, as estimates rather than measurements. An
+enterprise Java application reports on the order of 400 distinct dependencies — roughly
+120–250 for a modest WAR, 250–500 for a typical multi-module EAR, and up to 900 for an
+old EAR that bundles everything in `/lib`. So the latest-analysis dependency set is
+about 400k rows at 1000 applications and 4M at 10,000.
+
+Distinct `(name, version)` pairs behave very differently: an enterprise draws on a
+library universe of perhaps 2,000–5,000 artifact names with a handful of versions each
+in play, so distinct pairs are roughly 15k–30k at 1000 applications and only 40k–80k at
+10,000. The dedup ratio rises from about 25× to 50–100× as the portfolio grows, because
+the library universe saturates while row count does not. Any future optimization should
+exploit that: the costly work — version parsing and comparison — scales with distinct
+versions in use, not with applications × dependencies.
 
 Three levers exist and none is proposed here, because which one is needed should be
 settled by measurement rather than by argument:
