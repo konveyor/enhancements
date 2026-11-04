@@ -1,5 +1,5 @@
 ---
-title: dependency-based-archetype-criteria
+title: dependency-archetype-criteria
 authors:
   - "@jortel"
 reviewers:
@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-10-30
-last-updated: 2026-10-30
+last-updated: 2026-11-04
 status: provisional
 see-also:
   - "/enhancements/assessment-module/README.md"
@@ -29,7 +29,8 @@ Criteria Tags to determine archetype membership.
 
 - [ ] Enhancement is `implementable`
 - [ ] Design details are appropriately documented from clear requirements
-- [ ] Test plan is defined
+- [x] Test plan is defined
+- [ ] Membership-resolution benchmarks against the tag-only baseline
 - [ ] User-facing documentation is created
 
 ## Summary
@@ -46,14 +47,15 @@ org.springframework.boot:spring-boot@2
 The expression language has two parts. A **dependency reference** names a dependency —
 with wildcards permitted for name segments — and optionally constrains its version.
 A **boolean layer** composes references with `&&`, `||`, `!`, and parentheses. An
-application is a member of the archetype when its criteria tags match (as today) **and**
-the dependency expression is satisfied.
+application **matches** the archetype when its criteria tags match (as today) **and** the
+dependency expression is satisfied; which of the matching archetypes it is assigned to is
+decided by specificity, as today.
 
 The syntax is one language across all ecosystems rather than per-ecosystem dialects, and
 the user never declares which ecosystem an expression targets. Version *ordering* does
-genuinely differ between ecosystems, but every dependency row already carries its own
-`provider`, so the comparator is selected per candidate during matching. A single
-expression may therefore reference Java, Go, Python, and npm dependencies together.
+genuinely differ between ecosystems, but the comparator is selected per candidate from
+the provider already recorded on the dependency. A single expression may therefore
+reference Java, Go, Python, and npm dependencies together.
 
 ## Motivation
 
@@ -98,22 +100,26 @@ The cases users describe most often:
   Tags, without breaking existing clients.
 - Make dependency data available from discovery runs, so criteria work on a portfolio
   that has been onboarded but not fully analyzed.
-- Define membership semantics when dependency criteria are combined with Criteria Tags,
-  and how they interact with the existing archetype specificity rules.
-- Keep membership resolution within its current performance envelope for large
-  portfolios.
+- Define **matching and selection** semantics when dependency criteria are combined with
+  Criteria Tags, and how they interact with the existing archetype specificity rules.
+- Bound the cost of membership resolution: identify the scaling limit, the endpoint that
+  reaches it first, and the levers that lift it.
 
 ### Non-Goals
 
 - **A general-purpose query language.** This matches dependencies, not incidents, facts,
   or arbitrary application attributes.
 - **Native ecosystem range dialects.** Maven `[1.2,1.3)`, npm `^1.2`, and PEP 440
-  `>=1.2,<2.0` are explicitly not accepted. See [Alternatives](#alternatives).
-- **Dependency resolution.** The hub matches what analysis reported; it does not resolve
-  or walk a dependency graph.
+  `>=1.2,<2.0` are not accepted; see [Alternatives](#alternatives) for why.
+- **Dependency resolution in the hub.** The hub matches what the addon reported; it does
+  not resolve or walk a dependency graph. The addon continues to do the resolving —
+  including, under this proposal, in discovery mode.
 - **SBOM ingestion** as an alternative source of dependency data.
 - **Tag inference from dependencies.** Automatically tagging applications based on
   dependencies is a separate concern and is out of scope.
+- **Scaling beyond roughly 1000 applications.** The levers are identified in
+  [Resolving Membership](#resolving-membership) but none is implemented here; the
+  resulting limit is stated in [Drawbacks](#drawbacks).
 
 ## Proposal
 
@@ -154,16 +160,20 @@ Java, Go, Python, and npm dependencies, so that I learn one language rather than
 #### Boolean layer
 
 ```
-expr = ref | '(' expr ')' | '!' expr | expr '&&' expr | expr '||' expr
+expr    = or
+or      = and ( '||' and )*
+and     = unary ( '&&' unary )*
+unary   = '!' unary | primary
+primary = ref | '(' or ')'
 ```
 
-`&&` binds tighter than `||`. This mirrors the addon/extension selector already
-implemented in `internal/task/selector.go` and uses the same parser.
+The boolean layer is shared with the addon/extension selector: `internal/task/selector.go`
+is refactored so both use one implementation. See [Implementation](#implementation).
 
 #### Dependency reference
 
 ```
-ref        = name [ ('@' | ':') constraint ]
+ref        = name [ '@' constraint ]
 name       = segment (('.' | ':' | '/') segment)*
 segment    = text | '*' | '**'
 ```
@@ -185,14 +195,23 @@ group/artifact colon normalizes to the same thing as a dot, the common Java form
 `group:artifact` works without the hub needing to know whether the analyzer emitted a
 colon or a dot.
 
-Either `@` or `:` introduces the version constraint. `@` is unambiguous and idiomatic
-for Go and npm; a trailing `:` field is treated as a constraint only when it looks like
-a version (leading digit, `v` + digit).
+**`@` is the only constraint introducer.** `:` is a separator and nothing else, which is
+what lets the three separators be genuinely interchangeable: were `:` to also introduce a
+constraint, `spring-boot:2` and `spring-boot.2` would normalize to the same name and
+still parse differently. The cost is one character over Maven's `group:artifact:version`,
+and the parser rejects that form with *"use `group:artifact@1.2`"* rather than misparsing
+it. Dropping the `:` constraint form also removes the "looks like a version" heuristic
+and with it the misreading of digit-leading final segments such as `com.foo:3d-view`.
+
+A **leading** `@` is part of the name — npm scopes retain it (`@babel/core` → segments
+`@babel core`). Only a non-leading `@` introduces a constraint, so `@babel/core@7` is
+scope `@babel`, name `core`, constraint `7`.
 
 #### Version constraint
 
-A constraint is a comma-separated enumeration of terms; a version satisfying any term
-satisfies the constraint. Every term is built from a **version prefix**, and a prefix
+A constraint is a single term. Alternatives are expressed with `||`, which the boolean
+layer already provides — `jackson-core@2.12 || jackson-core@2.14` — so the constraint
+grammar does not repeat it. Every term is built from a **version prefix**, and a prefix
 denotes the entire version line beneath it:
 
 | term | meaning | matches | does not match |
@@ -211,6 +230,14 @@ an exact-endpoint reading would exclude.
 **Prereleases do not belong to their line; post-releases do.** `2.13` matches `2.13-sp`
 and `2.13.post1` but not `2.13.0-rc1` or `2.13-SNAPSHOT`. This matches the convention
 that `>=2.13.0` excludes prereleases of `2.13.0`.
+
+Which qualifiers are pre- and which are post- is the comparator's judgment, not the
+constraint's, and it comes from each ecosystem's published ordering: Maven's
+`ComparableVersion` qualifier order (alpha, beta, milestone, rc, snapshot, the empty
+qualifier, then sp), PEP 440's pre/post/dev classification, and semver §11. Unknown
+qualifiers follow each spec's own default — Maven orders them lexically after `sp`,
+semver treats any prerelease field as a prerelease. No qualifier list is defined by this
+proposal.
 
 #### Examples
 
@@ -271,15 +298,40 @@ type Archetype struct {
 ```
 
 There is no provider field, no list, and no child table. A list would be redundant with
-`&&`, which the expression language already has; the provider is already recorded on
-every `TechDependency` row and is read from there during matching.
+`&&`, which the expression language already has; the provider is read per candidate
+during matching (see [Implementation](#implementation)).
 
 `POST`/`PUT` of an archetype parses and validates the expression and returns `400` with
 the reason and offset when parsing fails. Validation covers the boolean syntax, each
-reference, and each constraint term, and rejects native-dialect syntax with a message
-naming the equivalent — `[1.2,1.3)` → *"use `1.2..1.3`"*, `^1.2` → *"use `1.2+`"*. Users
-will try the syntax of the ecosystem they know; the parser should teach rather than
-misparse.
+reference, and each constraint, and rejects foreign syntax with a message naming the
+equivalent:
+
+| rejected | message |
+|---|---|
+| `[1.2,1.3)` | use `1.2..1.3` |
+| `^1.2`, `~1.2` | use `1.2+` |
+| `>=1.2`, `<2.0` | use `1.2+`, `..2.0` |
+| `1.2,2.0` | use `foo@1.2 \|\| foo@2.0` |
+| `group:artifact:1.2` | use `group:artifact@1.2` |
+| `3.4.*` | use `3.4` |
+
+Users will try the syntax of the ecosystem they know; the parser should teach rather than
+misparse. The comma case matters most: PEP 440 reads `1.2,2.0` as conjunction and this
+syntax has no comma at all, so accepting it would silently mean the opposite of what a
+Python user intends.
+
+#### Membership preview
+
+`POST /archetypes/membership` accepts `{criteria, criteriaDeps}` and returns the
+application refs currently matching them, without persisting an archetype. Syntax errors
+return `400` with reason and offset, so the same endpoint serves as the validation
+endpoint the UI needs while the user types — there is no need for a separate
+`validate` route. For an existing archetype the UI diffs the result against current
+membership to show the delta before save (DAC005), which is what surfaces the upgrade
+hazard in [Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
+
+Preview is whole-portfolio in scope and therefore carries the same cost as
+`GET /archetypes/{id}/applications`; see [Resolving Membership](#resolving-membership).
 
 ### Matching Semantics
 
@@ -295,6 +347,13 @@ dependency.
 An archetype may have a dependency expression and no criteria tags, or tags and no
 expression. An archetype with neither matches every application, as today.
 
+**No dependency data.** When an application has no dependency data, a non-empty
+dependency expression is unsatisfied regardless of its structure. The guard is applied to
+the expression as a whole, not to its references: a reference resolving to false would
+make `!jakarta.servlet:jakarta.servlet-api` resolve to *true*, so an expression leading
+with a negation would match every unanalyzed application — the opposite of the intent.
+See [Source of Dependency Data](#source-of-dependency-data).
+
 **Step 2 — selection.** Of the archetypes that matched, which ones is the application
 assigned to? Not necessarily all of them; see **Specificity** below.
 
@@ -305,7 +364,7 @@ proves necessary. It is not in this proposal; adding a knob before anyone has as
 it is how this feature grows a configuration surface it does not need.
 
 **Specificity.** `MembershipResolver.Archetypes()`
-(`internal/assessment/membership.go:51`) assigns an application only to the *narrowest*
+(`internal/assessment/membership.go`) assigns an application only to the *narrowest*
 matching archetypes. An archetype is discarded when its criteria tags are a strict
 subset of another matching archetype's — more criteria tags wins. Archetypes whose tag
 sets are incomparable both survive, so multiple memberships are already normal.
@@ -321,9 +380,9 @@ also matches:
 | B — "Java" | `Language=Java` | — |
 
 An application tagged `Language=Java` running Boot 2 matches both, and A is discarded —
-backwards, since A is plainly the more specific classification. A dependency-only
-archetype would produce members only when nothing tagged also matched, which defeats
-half of the feature.
+wrong, since A's expression is a real constraint that the tag-subset rule cannot see. A
+dependency-only archetype would produce members only when nothing tagged also matched,
+which defeats half of the feature.
 
 Counting references in the expression is not a fix. Disjunction widens and conjunction
 narrows, so `a || b || c` has three references and is broader than `a` — reference count
@@ -345,6 +404,11 @@ strictly more constrained in at least one. For the expression dimension:
 | no tags, expr `E` | tags `{Java}`, no expr | incomparable, both assigned |
 | tags `{Java}`, expr `E1` | tags `{Java}`, expr `E2` | incomparable, both assigned |
 
+Note what this does and does not do for the A/B case above: the product order does not
+rank A above B, it declines to rank them, so both are assigned. Ranking a tag against an
+expression would require a common scale of specificity that does not exist. Not
+discarding A is the whole of the fix.
+
 When no archetype uses an expression the expression dimension is always equal, so this
 reduces exactly to the current tag-subset rule and no existing behavior changes. It also
 declines to rank two different expressions rather than inventing an order for them,
@@ -356,14 +420,18 @@ Criteria are evaluated against `TechDependency` rows belonging to the applicatio
 **most recent** analysis, which is the same scoping the analysis report endpoints already
 use. Dependencies from superseded analyses are never considered.
 
-**Applications with no analysis have no dependencies, so every reference evaluates to
-false** and the application is not a member. This is the correct default — absence of
-evidence is not evidence of a match — but it is a behavior change for an archetype that
-previously matched on tags alone and later gains a dependency expression. Extending
-discovery to report dependencies
-([Dependency Data from Discovery](#dependency-data-from-discovery)) is what keeps this
-from being a severe limitation in practice.
-It is called out in the UI and in [Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
+**An application with no analysis has no dependency data, so any non-empty dependency
+expression is unsatisfied** and the application does not match. Per the guard in
+[Matching Semantics](#matching-semantics) this holds for negated and purely negative
+expressions too, which would otherwise be satisfied by the absence of everything. This is
+the correct default — absence of evidence is not evidence of a match — but it is a
+behavior change for an archetype that previously matched on tags alone and later gains a
+dependency expression, so it is surfaced in the UI before save (DAC005) and in
+[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
+
+Extending discovery to report dependencies is what keeps this from being a severe
+limitation in practice; see
+[Dependency Data from Discovery](#dependency-data-from-discovery).
 
 ### Dependency Data from Discovery
 
@@ -395,11 +463,11 @@ populated.
 
 This makes dependency criteria usable on a portfolio that has been discovered but not
 analyzed, which is the common state during onboarding and precisely when archetype
-classification is most valuable. It also substantially softens the behavior noted in
-[Source of Dependency Data](#source-of-dependency-data), where applications without an
-analysis match nothing.
+classification is most valuable. It is what keeps "no analysis, no match" from being a
+severe practical limitation.
 
-This change spans two repositories: the addon change above, and the hub change below.
+The change is confined to the analyzer addon. It relies on existing hub behavior,
+described below.
 
 #### A discovery analysis replaces the previous report
 
@@ -407,8 +475,9 @@ This change spans two repositories: the addon change above, and the hub change b
 `MAX(ID) GROUP BY ApplicationID`, so a discovery run supersedes whatever preceded it,
 including a full analysis. That is the intended behavior and requires no change.
 
-Discovery is triggered by an edit to the application, and an edit can change what the
-application points at. The insights of the previous analysis then describe a codebase
+As noted in [Motivation](#motivation), discovery is triggered by an edit to the
+application, and an edit can change what the application points at. The insights of the
+previous analysis then describe a codebase
 the application no longer refers to, and continuing to report them asserts findings
 about the wrong thing. Replacing the report is the correct outcome — "latest analysis
 has dependencies and no insights" accurately states *we know what it depends on, we have
@@ -417,9 +486,9 @@ not evaluated rules against this version*.
 This also closes an existing gap: today an application can be edited and retain a stale
 analysis indefinitely, because nothing invalidates it.
 
-No discriminator is added to `Analysis`. Marking the producing mode on the report would
-exist only to defeat the superseding behavior described above, and it would make "the
-latest analysis" mean different things to different consumers.
+No **addon-mode** discriminator is added to `Analysis`. Marking the producing mode on the
+report would exist only to defeat the superseding behavior described above, and it would
+make "the latest analysis" mean different things to different consumers.
 
 **One ambiguity this leaves.** After a discovery run the UI shows zero insights, which
 is indistinguishable from a full analysis of a genuinely clean application. One means
@@ -435,8 +504,10 @@ transitive closure in source-only mode. `Mode.ToOption()` selects `FullAnalysisM
 only when `withDeps` is set, and `Scope.ToOptions()` notes that "if withDeps is false,
 we are only ever doing source analysis." If the dependency list is incomplete without
 full mode, discovery must either enable it — spending the time discovery exists to avoid
-— or mark the reported dependencies as partial, which would make `Indirect` unreliable
-and weaken transitive matching.
+— or add a `Partial` flag to the reported dependencies. That flag is a narrower
+discriminator than addon mode, describing the data rather than its producer, so it does
+not conflict with the position above; but it would make `Indirect` unreliable and weaken
+transitive matching.
 
 ### When Associations Are Evaluated
 
@@ -480,32 +551,42 @@ information the hub already has, and because the comparator is chosen per candid
 rather than per expression, one expression can span ecosystems and still order each
 dependency by its own ecosystem's rules.
 
-**Four constraint forms, one primitive.** `comparePrefix(version, prefix)` returns -1, 0,
-or 1, where 0 means "within the line". Every term is then a pair of optional bounds:
+**Four constraint forms, one primitive.** A prefix denotes a *line*, and a line has an
+infimum and a supremum under the provider's comparator. `lineStart(prefix)` is the lowest
+version belonging to the line and `lineEnd(prefix)` the highest. Every term is then a
+pair of optional bounds, and matching is `(lower == nil || v >= lower) && (upper == nil
+|| v <= upper)`:
 
 ```go
 type term struct {
-	lower *Version
-	upper *Version
+	lower *Version // lineStart of the lower prefix
+	upper *Version // lineEnd of the upper prefix
 }
 ```
 
 | term | lower | upper |
 |---|---|---|
-| `1.2` | `1.2` | `1.2` |
-| `1.2+` | `1.2` | nil |
-| `..1.5` | nil | `1.5` |
-| `1.2..1.5` | `1.2` | `1.5` |
+| `1.2` | `lineStart(1.2)` | `lineEnd(1.2)` |
+| `1.2+` | `lineStart(1.2)` | nil |
+| `..1.5` | nil | `lineEnd(1.5)` |
+| `1.2..1.5` | `lineStart(1.2)` | `lineEnd(1.5)` |
 
-**Boolean evaluation reuses the selector pattern.** `internal/task/selector.go` scans
+Expressing bounds as line endpoints rather than bare versions is what carries the
+prerelease rule with no special case. `1.2.0-rc1` sorts below `lineStart(1.2)`, so `1.2`
+and `1.2+` exclude it, while `..1.2` includes it — it is below the end of the `1.2` line.
+It still sorts above `lineEnd(1.1)`, so `..1.1` does not capture it either. The same
+endpoints give `..1.5` its inclusive reading of the whole `1.5` line.
+
+**Boolean evaluation is shared with the selector.** `internal/task/selector.go` scans
 references out of the expression with a regular expression, resolves each to a boolean,
-substitutes, and evaluates the result with `github.com/PaesslerAG/gval`. Dependency
-expressions use the same approach and the same `gval.Language`, so the two should share
-one implementation. Two refinements over the existing code: substitute generated
-identifiers and pass a parameter map rather than splicing in the literal text
-`true`/`false` (which removes the longest-match-first sort that currently guards against
-one reference clobbering another), and resolve references lazily so short-circuiting is
-real.
+substitutes, and evaluates the result with `github.com/PaesslerAG/gval`. It is refactored
+so that the boolean layer — scanner, `gval.Language`, evaluation — is one implementation
+with a pluggable reference resolver, and dependency criteria supply a second resolver
+alongside the existing `tag:category=name` one. Two refinements fall out of the refactor:
+substitute generated identifiers and pass a parameter map rather than splicing in the
+literal text `true`/`false` (which removes the longest-match-first sort that currently
+guards against one reference clobbering another), and resolve references lazily so
+short-circuiting is real.
 
 The reference scanner never needs to handle parentheses inside a version, because this
 syntax has none — a consequence of rejecting Maven's bracket ranges.
@@ -533,6 +614,7 @@ Scope is the set of applications whose membership the request actually needs:
 | `GET /applications` | all, narrowed by the request's existing filter |
 | `GET /archetypes/{id}/applications` | all |
 | `GET /archetypes` with member counts | all |
+| `POST /archetypes/membership` (preview) | all |
 
 `ApplicationHandler.List` already builds a `qf.Filter` over name, platform, and
 repository; the dependency fetch is constrained to the same application set, so a
@@ -595,20 +677,34 @@ from asserting antisymmetry and transitivity across the whole corpus, because it
 three versions drawn from two different spec tables to manifest — exactly the combination
 a hand-written table does not think to write.
 
-**Constraint matching.** Per-form cases for prefix, `+`, `..`, ranges, and enumerations,
-including the discriminating cases: `0.1` must not match `0.10.2`, `2` must not match
-`20.1`, and a pseudo-version must not match its own release line.
+**Constraint matching.** Per-form cases for prefix, `+`, `..`, and ranges, including the
+discriminating cases: `0.1` must not match `0.10.2`, `2` must not match `20.1`, and a
+pseudo-version must not match its own release line. Line endpoints get their own cases:
+`1.2` excludes `1.2.0-rc1` but includes `1.2-sp`, and `..1.2` includes `1.2.0-rc1` while
+`..1.1` excludes it.
 
 **Expression parsing.** Valid expressions across all four ecosystems; malformed
-expressions; and native-dialect syntax, asserting both rejection and the suggested
-equivalent.
+expressions; and every row of the foreign-syntax rejection table, asserting both
+rejection and the suggested equivalent. `1.2,2.0` and `group:artifact:1.2` are the two
+that must not be accepted under any reading.
 
 **Name matching.** Segment globbing across the separator forms, including
-`@jsonjoy.com/**` (a scope containing a dot) and Go major-version suffixes.
+`@jsonjoy.com/**` (a scope containing a dot), `@babel/core@7` (leading `@` is name, inner
+`@` is constraint), `com.foo:3d-view` (digit-leading final segment is a name, not a
+version), and Go major-version suffixes.
 
 **Membership integration.** API-level tests using `test/binding`: archetypes with
 dependency criteria only, with tags only, and with both; applications with no analysis;
 and applications whose latest analysis supersedes an earlier matching one.
+
+**No dependency data.** An application with no analysis must not match a negated
+reference (`!foo`) or a disjunction containing one. This is the case where evaluating
+references individually gives the wrong answer, so it is asserted directly rather than
+inferred from the tag-only cases.
+
+**Membership preview.** That `POST /archetypes/membership` returns the same set the
+archetype would produce if saved with those criteria, and that a malformed expression
+returns `400` with an offset.
 
 **Specificity.** Each row of the product-order table, plus the property that matters
 most for regression safety: with no archetype using an expression, selection produces
@@ -640,20 +736,21 @@ possible.
 
 The one upgrade hazard is behavioral rather than structural: **adding a dependency
 expression to an existing archetype will drop every application that has not been
-analyzed**, because such applications have no dependencies and so satisfy no reference.
-The UI should surface the resulting membership delta before the archetype is saved
-(DAC005).
+analyzed** (see [Source of Dependency Data](#source-of-dependency-data)). The UI
+surfaces the resulting membership delta before the archetype is saved, via
+`POST /archetypes/membership` (DAC005).
 
 ## Open Questions
 
-1. **More memberships per application.** Because two different expressions are
-   incomparable under the product order, applications will belong to more archetypes
-   once expressions are in use than they do today. Multiple membership is already
-   possible — incomparable tag sets produce it — but it becomes common rather than
-   occasional. The consumers of membership need review before this is settled:
-   assessment inheritance, inherited review and risk, and target profile selection.
-   Specifically, what should happen when an application inherits from a tag-based
-   archetype and a dependency-based archetype that disagree?
+1. **What should the consumers of membership do with more memberships?** *This one
+   blocks `implementable`.* Because two different expressions are incomparable under the
+   product order, applications will belong to more archetypes once expressions are in
+   use. Multiple membership is already possible — incomparable tag sets produce it — but
+   it becomes common rather than occasional, and the proposal defines matching and
+   selection without defining what the downstream consumers do with the result.
+   Assessment inheritance, inherited review and risk, and target profile selection each
+   need review. Specifically: what should happen when an application inherits from a
+   tag-based archetype and a dependency-based archetype that disagree?
 
 2. **Dashes are not segment separators.** `scikit-learn`, `django-rest-swagger`,
    `brace-expansion`, and `apache-airflow-providers-*` are single segments, so
@@ -663,10 +760,6 @@ The UI should surface the resulting membership delta before the archetype is sav
    within* a name. A per-provider name normalizer could resolve this; it is not in the
    current proposal.
 
-3. **Validation endpoint.** Should expression validation be available independently of
-   saving an archetype (`POST /archetypes/criteria/validate`), so the UI can validate as
-   the user types without a round-trip through a write?
-
 ## Drawbacks
 
 Dependency criteria make archetype membership depend on analysis having run, coupling
@@ -674,18 +767,16 @@ two subsystems that are currently independent. An archetype that looks correct c
 nothing simply because the portfolio has not been analyzed, and the failure is silent —
 an empty member list, not an error.
 
-It does not scale to large portfolios as proposed. Membership is resolved by fetching
-dependencies and matching in memory, and because `/applications` is unpaginated, the
-most frequently called endpoint in the product is also the one that resolves membership
-for every application. Past roughly 1000 applications this needs one of the levers
-described in [Resolving Membership](#resolving-membership). Adopting this feature on a
-large estate therefore means accepting a latency regression on the application list, or
-sequencing one of those changes first.
+It does not scale past roughly 1000 applications as proposed, and the endpoint under the
+most pressure is the unpaginated `/applications` rather than an occasional report. See
+[Resolving Membership](#resolving-membership) for the arithmetic and the levers.
+Adopting this feature on a large estate means accepting a latency regression on the
+application list, or sequencing one of those levers first.
 
-It also adds a second expression language to the hub. `internal/task/selector.go` already
-defines one for addon and extension selection, with a different reference syntax
-(`tag:category=name`). Sharing the boolean layer mitigates the implementation cost but
-not the user-facing cost: two syntaxes that look similar and are not interchangeable.
+It also adds a second *reference* syntax to the hub. `internal/task/selector.go` already
+defines one for addon and extension selection (`tag:category=name`). Sharing the boolean
+layer removes the implementation cost but not the user-facing one: two syntaxes that look
+similar and are not interchangeable.
 
 Finally, the version comparator is a correctness liability. It is small, but it encodes
 three published ordering specifications, and a subtle error produces wrong archetype
@@ -703,8 +794,8 @@ exactly where it was first requested — Maven version ranges are rare in real `
 files, so most Java users would be learning the native syntax too, and Maven's *soft*
 version semantics (bare `1.2` means "prefer 1.2, accept anything") would have to be
 redefined as a match anyway. The decision is reversible: `NewComparator(provider)` is
-already a per-provider factory, so a native scanner can be added later without affecting
-callers or existing expressions.
+specified here as a per-provider factory, so a native scanner can be added later without
+affecting callers or existing expressions.
 
 **Maven bracket ranges in the shared syntax.** Rejected because `(1.2,1.3)` collides with
 the grouping parentheses of the boolean layer, and because exclusive bounds are rarely
@@ -727,3 +818,8 @@ once depended on a library but no longer does should not be classified by it.
 ## Implementation History
 
 - 2026-10-30: Initial proposal.
+- 2026-11-04: `@` becomes the only constraint introducer; constraint enumeration dropped
+  in favor of `||`; expression-level guard added for applications with no dependency
+  data; membership preview endpoint added (absorbing the validation-endpoint question);
+  version bounds restated as line endpoints; scaling limit moved from Goals to
+  Non-Goals.
