@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-11-03
-last-updated: 2026-11-03
+last-updated: 2026-11-04
 status: provisional
 see-also:
   - "/enhancements/custom-migration-targets/README.md"
@@ -43,24 +43,29 @@ marking a ruleset for technology discovery.
 The change, in full:
 
 - **UI.** Pages to manage the rulesets a user owns, with the discovery opt-in and a
-  matching filter. For uploaded rules the opt-in ensures the `discovery` label is in
-  the uploaded content; for a source repository it declares the label on the ruleset.
-- **Hub.** A ruleset gains declared labels, used only when the hub holds no rules to
-  read labels from — that is, when the rules live in a repository. The ruleset
-  resource additionally reports whether it is user-created and which target owns it,
-  and refuses to delete one an owner still references.
+  matching filter. Taking the opt-in adds `discovery` to the ruleset's declared
+  labels, and that is all it does.
+- **Hub.** A ruleset gains declared labels. The ruleset resource additionally
+  reports whether it is user-created and which target owns it, and refuses to delete
+  one an owner still references.
 - **Analyzer add-on.** Ruleset selection considers a ruleset's declared labels as
   well as its rules'. That is the whole of it.
 
-Most of the weight is in the UI. Uploaded rules work through the selection the hub
-and add-on already perform, provided the rule content carries the label, which this
-design requires. The hub and add-on changes exist for
-repository-backed rulesets, which today cannot be selected at all: with no rules
-recorded in the hub, they have no labels to be matched on.
+The opt-in settles one question only: whether discovery *considers* the ruleset.
+Which of its rules then run is decided where it already is — by the labels in the
+rule files, against the task's selector. The UI does not inspect, generate, or
+modify rule content to make the two agree, and the hub takes no view on which rules
+in a ruleset are for what.
 
-The unit throughout is the ruleset. Marking one for discovery means all of it
-participates — every rule in the uploaded set, or everything in the repository. To
-narrow that, create another ruleset, or point this one at a subdirectory.
+That keeps a mixed ruleset working. One holding a rule labeled `discovery` and
+another labeled for EAP 8 contributes the first to discovery and the second to an
+EAP 8 analysis, and is selected by both. It also means the responsibility is the
+user's: mark a ruleset for discovery whose rules carry no such label and it is
+fetched and contributes nothing.
+
+Most of the weight is in the UI. Declared labels and the matching filter change
+exist for repository-backed rulesets, which cannot otherwise be selected; the other
+hub changes are what let the pages leave shipped and target-owned rulesets alone.
 
 Discovery is the motivating case but not the only one. A ruleset participates in
 whatever selects its labels, so one labeled for a migration target augments that
@@ -92,8 +97,9 @@ migration target, which creates a ruleset as a side effect and does not show it.
 
 - A user can create, view, update, and delete rulesets they own, and manage the rule
   files in them.
-- Marking a ruleset for technology discovery is a single act in the UI, for rules
-  that are uploaded and for rules kept in a repository.
+- Marking a ruleset for technology discovery is a single act in the UI, the same one
+  whether its rules are uploaded or kept in a repository.
+- A ruleset may serve more than one purpose, its rules divided by their own labels.
 - Repository-backed rulesets can participate in discovery.
 - A user can see what each ruleset participates in.
 - Shipped rulesets, and rulesets owned by a migration target, are not managed here
@@ -108,16 +114,16 @@ migration target, which creates a ruleset as a side effect and does not show it.
   disabling the shipped discovery rulesets.
 - Reclassifying applications that already exist; see
   [Reclassifying existing applications](#reclassifying-existing-applications).
-- Repository-backed rulesets augmenting an analysis target. Declared labels would
-  make that work, but nothing in this design exercises it and it is untested; see
-  [Open Questions](#open-questions).
+- Repository-backed rulesets augmenting an analysis target. Declaring a target label
+  on one would mechanically work, but no part of this design exercises that path end
+  to end.
 - Changing the label selector language, the order rules run in, or how results are
   reported.
 - A CLI surface. The hub's client bindings already expose ruleset CRUD.
 
 ## Proposal
 
-### Background: how rules are selected today
+### Background: how rules are selected and applied
 
 The operator defines a `tech-discovery` task, and that definition is where the term
 `discovery` is given its meaning:
@@ -190,11 +196,13 @@ by its rules. This is analyzer-lsp's own model, and it is the only one that deci
 
 **`Rule.Labels` in the hub.** Extracted from the rule files when the ruleset is
 created. Used for **selection** — deciding which rulesets the add-on fetches — and by
-the hub's ruleset label filter. Nothing else reads it.
+the hub's ruleset label filter. It has no part in deciding what runs.
 
 **`RuleSet.Labels` in the hub.** *Declared* by the caller rather than extracted from
-anything, because it exists for the one case where the hub has no rules to extract
-from: rules that live in a source repository. Also used for **selection** only.
+anything. Also used for **selection** only. It is strictly necessary for one case —
+rules that live in a source repository, where the hub has nothing to extract from —
+but the opt-in sets it on any ruleset, so that marking one for discovery is a single
+act whatever its rules are.
 
 A ruleset's selection labels are the union of `RuleSet.Labels` and the labels of its
 rules.
@@ -206,40 +214,45 @@ apart is what keeps the rest of this design small.
 
 ### Marking a ruleset for discovery
 
-Because what runs is decided against the files, a custom ruleset's content has to
-carry the `discovery` label. There are two shapes, and the UI handles each.
+The opt-in adds `discovery` to the ruleset's declared labels. Nothing else happens:
+no rule file is read to check it, none is generated, and none is modified.
 
-**Uploaded rule files.** The label belongs in the ruleset manifest, where every rule
-in the ruleset inherits it, or on the individual rules. When the user takes the
-discovery opt-in, the UI ensures it: if the upload contains no `ruleset.yaml`, the UI
-generates one carrying `labels: ["discovery"]` and uploads it alongside the rule
-files; if the upload does contain one, the UI validates it and says so when the label
-is missing, rather than modifying a file the user wrote.
+That is sufficient for the ruleset to be *selected*. What then runs is a separate
+question, answered by the labels in the rule files against the task's selector, and
+it differs by shape.
 
-The generated manifest is a real file in the ruleset — visible, downloadable, and
-committable next to the rules — not something fabricated at run time.
+**Uploaded rule files.** The rules carrying the `discovery` label run — whether they
+carry it individually or inherit it from a `ruleset.yaml` in the upload. Rules
+carrying other labels do not, which is what lets one ruleset serve more than one
+purpose; see [Mixed rulesets](#mixed-rulesets). If no rule carries the label, the
+ruleset is fetched and contributes nothing. Putting the label where it belongs is
+the user's job, and the documentation's.
 
-Nothing further is required. The hub records the label in `Rule.Labels` as it does
-today, and the add-on's existing selection matches the ruleset.
+**A source repository.** Everything in it runs, because rules fetched from a
+repository are force-included. Labeling them is unnecessary, though harmless and
+probably good practice. To take only part of a repository, point the ruleset at a
+subdirectory — a ruleset's repository reference carries a path, so a repository
+holding `discovery/` and `migration/` is served by two rulesets.
 
-**A source repository.** The hub never clones the repository, so there is nothing for
-it to extract. The opt-in instead sets `RuleSet.Labels` to `["discovery"]` — the
-caller declaring what the hub cannot see. Nothing in the repository needs labeling:
-rules fetched from a repository are force-included, so selecting the ruleset runs
-what the repository contains.
+A repository-backed ruleset with no declared labels is inert: nothing will ever
+select it. The form should say so rather than let a user create one and wonder.
 
-Both shapes therefore behave the same way — mark a ruleset for discovery and the
-whole ruleset participates — by different routes. An uploaded set participates
-because its manifest's label is inherited by every rule in it; a repository
-participates because its rules are force-included.
+#### Mixed rulesets
 
-To take only part of a repository, point the ruleset at a subdirectory. A ruleset's
-repository reference carries a path, so a repository holding `discovery/` and
-`migration/` is served by two rulesets rather than by labels. That fits how rules are
-usually organised better than filtering the whole tree would.
+A ruleset is not required to serve a single purpose. One holding a rule labeled
+`discovery` and another labeled `konveyor.io/target=eap8`, with the opt-in taken, is
+selected by discovery on its declared label and by an EAP 8 analysis on its rules' —
+and each run executes only the rules that match it.
 
-A repository-backed ruleset with no declared labels is inert: nothing will ever select
-it. The form should say so rather than let a user create one and wonder.
+This is why the opt-in stops at selection. Anything that made it guarantee execution
+— generating a manifest, or having the add-on inject the label — would push
+`discovery` onto every rule in the ruleset through manifest inheritance, and the EAP
+8 rule would start running during discovery. The UI would be silently changing what
+the user's rules mean, and the label fields would acquire a second job beyond
+selection, which [the label model](#the-label-model) exists to prevent.
+
+The shape works for uploaded rules. It does not work for a repository, where
+force-include takes everything; split by path instead.
 
 ### What a ruleset participates in
 
@@ -289,10 +302,10 @@ comes with it.
 
 #### Registering a rule for an internal framework
 
-An architect has written `acme-platform.yaml`, a rule detecting their in-house
-service framework and emitting `Internal Framework=Acme Platform`. They create a
-ruleset, upload the file, take the discovery opt-in, and save. The UI adds a manifest
-marking the ruleset for discovery.
+An architect has written `acme-platform.yaml`, a rule labeled `discovery` that
+detects their in-house service framework and emits
+`Internal Framework=Acme Platform`. They create a ruleset, upload the file, take the
+discovery opt-in, and save.
 
 The next time an application is created or edited, discovery runs, the rule matches,
 and the application is tagged. An Archetype with that criteria tag then associates
@@ -313,9 +326,9 @@ at the `discovery/` subdirectory.
 #### Extending a built-in target without forking it
 
 An architect wants their own checks to run whenever anyone analyzes for EAP 8. They
-upload rules carrying the EAP 8 target label, and take neither the discovery opt-in
-nor create a custom target. The rules join any analysis selecting that target, and
-the ruleset's detail says so.
+upload rules carrying the EAP 8 target label, without taking the discovery opt-in or
+creating a custom target. The rules join any analysis selecting that target, and the
+ruleset's detail says so.
 
 #### Retiring a rule
 
@@ -345,8 +358,7 @@ depends on it or precludes it.
 
 **Declared labels on the ruleset.** Stored and settable through the API, per
 [The label model](#the-label-model). This is the one change touching stored data, so
-it carries a migration; existing rulesets have none, which preserves every current
-behavior.
+it carries a migration.
 
 **Whether a ruleset is user-created.** The hub already knows this and acts on it but
 does not report it. The target resource exposes the distinction as `custom`; the
@@ -370,12 +382,8 @@ repository-backed rulesets.
 
 **Selection considers declared labels.** A ruleset's labels become the union of its
 declared labels and its rules', rather than its rules' alone. That is the only
-required change; force-include is untouched, and the design relies on it as it
-stands.
-
-**Optionally, report a selected ruleset that yields no matching rules.** Cheap
-activity logging, and the only signal available if a ruleset reaches the hub without
-a label its rules can match.
+change, and it is purely additive: rulesets with no declared labels behave as they do
+now. Force-include is untouched, and the design relies on it as it stands.
 
 ### Pages
 
@@ -412,13 +420,13 @@ happens, and where the rule-authoring documentation is.
 Needs a name, an optional description, a source of rules, and the discovery opt-in.
 
 The source is either uploaded files or a repository reference with optional
-credentials — the same choice the custom-target form offers. The opt-in means
-something different in each case, per
-[Marking a ruleset for discovery](#marking-a-ruleset-for-discovery): for uploaded
-files it ensures the label is in the content, generating a manifest when the upload
-has none and validating one the user supplied; for a repository it sets the
-ruleset's declared labels, and the form should say that the rules must be labeled in
-the repository.
+credentials — the same choice the custom-target form offers.
+
+The opt-in adds `discovery` to the ruleset's declared labels and does nothing else,
+for either source. What the form has to carry instead is the explanation, per
+[Marking a ruleset for discovery](#marking-a-ruleset-for-discovery): that the rules
+intended for discovery must be labeled as such, and that a repository participates
+whole, narrowed by pointing at a subdirectory.
 
 Name is required and must be unique across all rulesets, not only the listed ones,
 because ruleset names are globally unique and targets also create rulesets.
@@ -445,8 +453,8 @@ sections, since the API can produce one.
 
 Shows the ruleset's metadata, what it participates in, and its rules — for uploaded
 files, the rules in each file with their labels and emitted tags, fetched and parsed
-on demand rather than for every row in a list; for a repository, the reference and
-credentials, since the hub holds no rules for it. Offering the file for download
+on demand; for a repository, the reference and credentials, since the hub holds no
+rules for it. Offering the file for download
 closes the loop for a user auditing what is registered.
 
 ### RBAC
@@ -480,8 +488,9 @@ declared labels still runs its repository in full, which is what makes the opt-i
 sufficient without labeling anything in the repository — and which a future narrowing
 of force-include would break.
 
-**UI.** The opt-in generates a manifest when the upload has none, and validates
-rather than modifies one the user supplied. Shipped and target-owned rulesets
+**UI.** The opt-in adds the declared label and leaves uploaded content untouched,
+including an upload that carries no `discovery` label at all. Shipped
+and target-owned rulesets
 excluded from the list. Participation derived correctly for a discovery label, a
 target label, and both. Duplicate names caught; write affordances absent without
 permission; a repository-backed ruleset can be created and edited.
@@ -511,11 +520,9 @@ delete guard are safe to lose.
 
 ## Open Questions
 
-> 1. **When reclassification lands.** The trigger described in
->    [Reclassifying existing applications](#reclassifying-existing-applications) is a
->    follow-up, but shipping these pages without it means a user can register a rule
->    and see nothing happen to their existing portfolio. Whether it belongs in the
->    same release depends on sizing the fan-out cost.
+> 1. **When reclassification lands.** Whether the trigger described in
+>    [Reclassifying existing applications](#reclassifying-existing-applications)
+>    belongs in this release depends on sizing the fan-out cost.
 >
 > 2. **UX design.** These pages are specified functionally and have no approved
 >    design. Per the comment on the parent epic (MTA-8042, 2026-10-27), UXD work on
@@ -544,26 +551,18 @@ together. An older add-on against a newer hub ignores declared labels and silent
 fails to select a repository-backed ruleset — a quiet failure mode in a separately
 released component.
 
-The ruleset is the unit of participation, and it is a coarse one. Marking a ruleset
-for discovery runs all of it, so narrowing means splitting a ruleset or pointing it
-at a subdirectory rather than expressing the distinction where the rules are. That is
-the right trade for a first version — it is one rule to explain, and it avoids
-changing force-include — but a user with a single mixed repository will feel it.
+The opt-in can be taken on a ruleset whose rules carry no `discovery` label, and
+nothing will say so. The ruleset is fetched on every discovery run and contributes
+nothing. This is the deliberate cost of keeping labels to a single meaning — the UI
+would have to read, and in some cases rewrite, rule content to prevent it, which
+would break [mixed rulesets](#mixed-rulesets). It makes the documentation
+load-bearing in a way a validating form would not.
 
-The `discovery` label still has to be in uploaded content for the hub to select the
-ruleset, so a ruleset created through the API without it is accepted and never runs.
-The UI closes this by generating or validating the manifest; nothing closes it for a
-direct API caller.
+A repository is coarser still: it participates whole, so splitting discovery rules
+from others means separate rulesets or separate paths rather than labeling. A user
+with one mixed repository will feel that.
 
 ## Alternatives
-
-**Writing the ruleset's labels into the manifest the add-on generates.** Rather than
-requiring the label in uploaded content, the add-on could inject a ruleset's declared
-labels into the manifest it synthesizes, so rules inherit them. Rejected because it
-only covers the case where the add-on generates a manifest — a user who uploads their
-own `ruleset.yaml` would get nothing injected and silently no matches — and because
-having the UI write a real file the user can see and commit is better than having the
-add-on fabricate one at run time.
 
 **The hub's discovery trigger naming rulesets by ID.** The trigger could resolve the
 participating rulesets and list their IDs in the task data, needing no declared
