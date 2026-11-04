@@ -23,8 +23,9 @@ so what discovery is able to recognize is fixed.
 Extending it is nearly possible already. The discovery task selects what it runs by
 label across every ruleset in the hub, including ones a user created, so a ruleset
 whose rules are labeled `discovery` already participates. What is missing is a way to
-create one, and — for rules kept in a source repository — any way for the hub to know
-the ruleset exists for that purpose.
+create one — and, when the rules are kept in a source repository, anything for that
+selection to match: a ruleset's labels come from its rules, and a repository-backed
+ruleset has none recorded in the hub.
 
 ## Release Signoff Checklist
 
