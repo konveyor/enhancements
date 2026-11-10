@@ -52,10 +52,13 @@ dependency expression is satisfied; which of the matching archetypes it is assig
 decided by specificity, as today.
 
 The syntax is one language across all ecosystems rather than per-ecosystem dialects, and
-the user never declares which ecosystem an expression targets. Version *ordering* does
-genuinely differ between ecosystems, but the comparator is selected per candidate from
-the provider already recorded on the dependency. A single expression may therefore
-reference Java, Go, Python, and npm dependencies together.
+the user is never *required* to declare which ecosystem an expression targets. Version
+ordering and name normalization do genuinely differ between ecosystems, but both are
+selected per candidate from the provider already recorded on the dependency, using
+published per-ecosystem rules. A single expression may therefore reference Java, Go,
+Python, and npm dependencies together. A reference may alternatively be pasted as a
+Package URL, which does carry its ecosystem — the one case where an expression names
+one, because the user supplied it.
 
 ## Motivation
 
@@ -207,6 +210,44 @@ A **leading** `@` is part of the name — npm scopes retain it (`@babel/core` �
 `@babel core`). Only a non-leading `@` introduces a constraint, so `@babel/core@7` is
 scope `@babel`, name `core`, constraint `7`.
 
+**Normalization is per-provider, and its rules are not invented here.** Separator
+interchange does not by itself reach every ecosystem's naming conventions: PEP 503
+declares `-`, `_`, and `.` equivalent within a Python distribution name, and npm and
+golang names are case-folded. Each of these is a published rule, specified per package
+type in
+[purl-spec](https://github.com/package-url/purl-spec/blob/main/PURL-TYPES.rst), and the
+hub adopts those rules rather than defining its own. `NewNormalizer(provider)` is the
+name-side counterpart to `NewComparator(provider)` in
+[Implementation](#implementation): selected per candidate from
+`TechDependency.Provider`, and applied to the pattern and the stored name together, so
+both sides of a comparison are always normalized under the same ecosystem's rules. The
+user is not asked to name an ecosystem to get this, and one expression still spans
+several — the provider is read rather than declared.
+
+#### Package URLs as an input form
+
+A reference may also be written as a
+[Package URL](https://github.com/package-url/purl-spec), which the parser converts to
+the form above:
+
+```
+pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10
+  → com.fasterxml.jackson.core:jackson-databind@2.9.10   (provider: java)
+```
+
+This exists for one workflow. The motivating cases — a vulnerable Jackson, an EOL
+Struts — are read off an advisory or an SBOM, and those speak purl; pasting one and
+having it work is worth more than the conversion costs. The `type` is retained as a
+provider constraint on that reference, so `pkg:npm/foo` matches an npm `foo` and not a
+PyPI one. That is the one place an expression carries an ecosystem, and it is carried
+because the user pasted it rather than because the syntax demands it.
+
+It is an input form and not the canonical one. A purl identifies exactly one package and
+has no wildcard layer, so `com.sun.*:**` cannot be expressed as one and the two forms do
+not compose — a reference is written either way, not half each. Qualifiers and subpaths
+are rejected rather than ignored: they narrow what a purl identifies, and dropping them
+silently would make the reference match more than the identifier the user pasted.
+
 #### Version constraint
 
 A constraint is a single term. Alternatives are expressed with `||`, which the boolean
@@ -314,11 +355,14 @@ equivalent:
 | `1.2,2.0` | use `foo@1.2 \|\| foo@2.0` |
 | `group:artifact:1.2` | use `group:artifact@1.2` |
 | `3.4.*` | use `3.4` |
+| `vers:maven/>=1.2\|<2.0` | use `1.2..2.0` |
 
 Users will try the syntax of the ecosystem they know; the parser should teach rather than
 misparse. The comma case matters most: PEP 440 reads `1.2,2.0` as conjunction and this
 syntax has no comma at all, so accepting it would silently mean the opposite of what a
-Python user intends.
+Python user intends. A purl is the one pasted form that is translated rather than
+rejected ([Package URLs as an input form](#package-urls-as-an-input-form)); its
+companion vers is not, for the reasons in [Alternatives](#alternatives).
 
 #### Membership preview
 
@@ -545,11 +589,15 @@ must sort below `v1.0.1`. No single rule satisfies both. `NewComparator(provider
 therefore returns a comparator that differs in exactly one behavior — whether a numeric
 qualifier is a post release — and is otherwise shared.
 
-This is the only place the provider is used, and it is read from the candidate
-`TechDependency.Provider`, never from the expression. The user is not asked to supply
-information the hub already has, and because the comparator is chosen per candidate
-rather than per expression, one expression can span ecosystems and still order each
-dependency by its own ecosystem's rules.
+The provider is read from the candidate `TechDependency.Provider`, never from the
+expression — here and in `NewNormalizer(provider)`
+([Dependency reference](#dependency-reference)), which are the only two places it is
+used, and which are selected the same way for the same reason. The user is not asked to
+supply information the hub already has, and because both are chosen per candidate rather
+than per expression, one expression can span ecosystems and still order and normalize
+each dependency by its own ecosystem's rules. The single exception is a reference pasted
+as a purl, where the user has supplied the type explicitly and it narrows that reference
+to one provider.
 
 **Four constraint forms, one primitive.** A prefix denotes a *line*, and a line has an
 infimum and a supremum under the provider's comparator. `lineStart(prefix)` is the lowest
@@ -693,6 +741,19 @@ that must not be accepted under any reading.
 `@` is constraint), `com.foo:3d-view` (digit-leading final segment is a name, not a
 version), and Go major-version suffixes.
 
+**Per-provider normalization.** Cases drawn from purl-spec's published per-type rules
+rather than from the implementation, on the same principle as the comparator tests: PEP
+503 equivalence (`apache_airflow` and `apache.airflow` match `apache-airflow`) and npm
+and golang case folding. Each asserts that pattern and stored name are normalized
+together, and that a rule belonging to one provider does not leak into another — `-`
+must remain load-bearing in a Maven artifact id and a Go path element, and Maven
+coordinates must stay case-sensitive.
+
+**Package URL input.** That a pasted purl resolves to the same candidate set as the
+equivalent native reference; that its `type` constrains the provider, so `pkg:npm/foo`
+does not match a PyPI `foo`; and that qualifiers and subpaths are rejected with a
+message rather than ignored.
+
 **Membership integration.** API-level tests using `test/binding`: archetypes with
 dependency criteria only, with tags only, and with both; applications with no analysis;
 and applications whose latest analysis supersedes an earlier matching one.
@@ -752,13 +813,20 @@ surfaces the resulting membership delta before the archetype is saved, via
    need review. Specifically: what should happen when an application inherits from a
    tag-based archetype and a dependency-based archetype that disagree?
 
-2. **Dashes are not segment separators.** `scikit-learn`, `django-rest-swagger`,
-   `brace-expansion`, and `apache-airflow-providers-*` are single segments, so
-   `google-cloud-*` cannot be wildcarded — and the dash is the dominant naming convention
-   in exactly the Python and npm ecosystems. Adding `-` as a fourth separator would fix
-   wildcarding but collides with PEP 503, which declares `-`, `_`, and `.` *equivalent
-   within* a name. A per-provider name normalizer could resolve this; it is not in the
-   current proposal.
+2. **Dash segmentation outside Python.** `-` is not a segment separator, so
+   `google-cloud-*` does not wildcard `google-cloud-storage`, and the dash is the
+   dominant naming convention in exactly the Python and npm ecosystems. Per-provider
+   normalization ([Dependency reference](#dependency-reference)) settles the Python
+   half: PEP 503 declares `-`, `_`, and `.` equivalent within a distribution name, so
+   folding them is a published rule rather than a product decision, and
+   `apache-airflow-providers-*` follows from it. It does not settle npm, where `.` and
+   `-` are distinct characters in distinct package names — `lodash.merge` and
+   `lodash-merge` could both exist, and segmenting on `-` conflates them with each other
+   and with the separator forms. The choice there is between leaving npm names
+   single-segment, which is the current behavior and costs wildcarding within a name,
+   and accepting the conflation. Java and Go are unaffected: `-` is load-bearing inside
+   a Maven artifact id and a Go path element, and neither ecosystem declares it
+   equivalent to anything.
 
 ## Drawbacks
 
@@ -783,6 +851,49 @@ three published ordering specifications, and a subtle error produces wrong arche
 membership rather than a visible failure. The test strategy is weighted accordingly.
 
 ## Alternatives
+
+**Cross-ecosystem identifier standards (PURL and VERS).** Package URL names a package
+across ecosystems and VERS, its companion, expresses a version range. Both are widely
+emitted by SBOM and advisory tooling — SPDX, CycloneDX, OSV, GitHub advisories — and
+both carry the ecosystem explicitly, which is the opposite of the decision taken here.
+They sit between this proposal and the native dialects below, and they were evaluated
+as the reference and version forms. The outcome is partial adoption: purl is accepted
+as an input form ([Package URLs as an input form](#package-urls-as-an-input-form)) and
+purl-spec's per-type normalization rules are adopted wholesale
+([Dependency reference](#dependency-reference)), but neither becomes the authoring
+syntax.
+
+*PURL is an identifier, not a pattern.* `pkg:maven/org.springframework.boot/spring-boot@2.7.0`
+names one package. This feature needs `com.sun.*:**` and `weblogic:**`, and purl-spec
+defines no wildcard layer, so adopting purl for the reference form means inventing a
+glob over it. A purl pattern is not a purl and no tool consumes one, so the interop
+argument — the real attraction — does not survive the construct that would have to be
+built to make it usable here.
+
+*VERS re-declares the ecosystem per constraint and saves nothing on the hard part.*
+`vers:maven/>=1.2|<2.0` names its versioning scheme in every term, which is the
+declaration this syntax exists to avoid, and its `|` separator and comparator tokens sit
+badly inside a grammar whose `||` and parentheses are already taken — the same collision
+that rejects Maven bracket ranges below. It also leaves the actual correctness liability
+untouched: VERS delegates ordering to each native scheme, so the Maven, PEP 440, and
+semver comparators in [Implementation](#implementation) are owed either way, across more
+named schemes rather than fewer.
+
+*The interop is not free at the boundary.* Dependency data reaches the hub from the
+analyzer as `(name, version, provider)`, and SBOM ingestion is a non-goal. Rendering a
+stored dependency *as* a purl means deciding where the group ends and the artifact
+begins in `com.fasterxml.jackson.core.jackson-core` — the ambiguity interchangeable
+separators were chosen to sidestep. Reading a purl the user pasted is the direction that
+is lossless, which is why that is the direction adopted.
+
+The two remaining standards are weaker still: OSV is an advisory schema rather than an
+expression language, and CPE identifies vendor and product rather than build
+coordinates, with well-documented matching problems for exactly this purpose.
+
+The decision is reversible in the direction that matters. If SBOM or advisory ingestion
+lands, the hub holds purl-typed data with the type already resolved, the group/artifact
+objection disappears, and adopting vers for the constraint grammar becomes worth
+reopening.
 
 **Per-ecosystem expression grammars.** A factory returning a concrete selector per
 language, each accepting its ecosystem's native range syntax — Maven `[1.2,1.3)`, npm
@@ -823,3 +934,7 @@ once depended on a library but no longer does should not be classified by it.
   data; membership preview endpoint added (absorbing the validation-endpoint question);
   version bounds restated as line endpoints; scaling limit moved from Goals to
   Non-Goals.
+- 2026-11-10: PURL and VERS evaluated in Alternatives following review. Purl accepted as
+  an input form for references and purl-spec's per-type normalization adopted via
+  `NewNormalizer(provider)`; vers rejected as the constraint grammar. Open question on
+  dashes narrowed to npm.
