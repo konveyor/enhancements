@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-10-30
-last-updated: 2026-11-04
+last-updated: 2026-11-17
 status: provisional
 see-also:
   - "/enhancements/assessment-module/README.md"
@@ -39,26 +39,48 @@ An archetype gains an optional dependency expression, matched against the depend
 reported by the application's most recent analysis:
 
 ```
-org.springframework.boot:spring-boot@2
+[maven](
+  org.springframework.boot:spring-boot@>=2|<3
   && (javax.servlet:javax.servlet-api || javax.persistence:javax.persistence-api)
   && !jakarta.servlet:jakarta.servlet-api
+)
 ```
 
-The expression language has two parts. A **dependency reference** names a dependency —
-with wildcards permitted for name segments — and optionally constrains its version.
-A **boolean layer** composes references with `&&`, `||`, `!`, and parentheses. An
-application **matches** the archetype when its criteria tags match (as today) **and** the
-dependency expression is satisfied; which of the matching archetypes it is assigned to is
-decided by specificity, as today.
+The expression language has three parts. A **boolean layer** composes references with
+`&&`, `||`, `!`, and parentheses. An **ecosystem block** — `[maven](…)` — declares which
+ecosystem the references inside it name, once rather than per reference. A **dependency
+reference** names one package:
 
-The syntax is one language across all ecosystems rather than per-ecosystem dialects, and
-the user is never *required* to declare which ecosystem an expression targets. Version
-ordering and name normalization do genuinely differ between ecosystems, but both are
-selected per candidate from the provider already recorded on the dependency, using
-published per-ecosystem rules. A single expression may therefore reference Java, Go,
-Python, and npm dependencies together. A reference may alternatively be pasted as a
-Package URL, which does carry its ecosystem — the one case where an expression names
-one, because the user supplied it.
+```
+<coordinates> [ '@' <constraint> ]
+```
+
+The two halves come from different places:
+
+| half | form | varies by ecosystem? |
+|---|---|---|
+| `<coordinates>` | that ecosystem's own coordinate form — `group:artifact`, `@scope/name`, a module path | **yes** |
+| `<constraint>` | [VERS](https://github.com/package-url/vers-spec) comparators — `>=`, `<=`, `>`, `<`, `=`, `!=`, separated by `\|` | **no** |
+
+Coordinates are ecosystem-specific because that is what users have in hand — a line
+copied from a `pom.xml`, a `package.json`, or an advisory. Constraints are uniform
+because every ecosystem's *range* dialect is a separate published spec with its own
+operators and its own pitfalls, and nothing is gained by implementing four of them. So a
+Java clause and an npm clause differ in their package names and in nothing else.
+
+An application **matches** the archetype when its criteria tags match (as today) **and**
+the dependency expression is satisfied; which of the matching archetypes it is assigned
+to is decided by specificity.
+
+Blocks compose, so one expression still spans several ecosystems:
+
+```
+[maven](org.springframework.boot:spring-boot@>=2|<3) && [npm](react@>=16|<17)
+```
+
+Where a published specification already exists, the design uses an implementation of it
+rather than its own — version ordering, boolean evaluation, and name normalization are
+all delegated. See [Implementation](#implementation).
 
 ## Motivation
 
@@ -94,11 +116,12 @@ The cases users describe most often:
 
 ### Goals
 
-- Define a dependency expression syntax that is readable, validatable, and
-  **language-agnostic** — usable for Java, Go, Python, and npm dependencies without
-  per-ecosystem dialects.
-- Define version constraint semantics, including ranges and wildcards, that behave
-  correctly against the version strings each ecosystem actually produces.
+- Define a dependency expression syntax whose references are `<coordinates>@<constraint>`:
+  coordinates written the way the ecosystem's own build files write them, and a single
+  constraint grammar — VERS — shared by every ecosystem.
+- Define version constraint semantics that behave correctly against the version strings
+  each ecosystem actually produces, by delegating ordering to a maintained implementation
+  of each ecosystem's rules rather than reimplementing them.
 - Extend the Archetype model and API to store dependency criteria alongside Criteria
   Tags, without breaking existing clients.
 - Make dependency data available from discovery runs, so criteria work on a portfolio
@@ -112,12 +135,20 @@ The cases users describe most often:
 
 - **A general-purpose query language.** This matches dependencies, not incidents, facts,
   or arbitrary application attributes.
-- **Native ecosystem range dialects.** Maven `[1.2,1.3)`, npm `^1.2`, and PEP 440
-  `>=1.2,<2.0` are not accepted; see [Alternatives](#alternatives) for why.
+- **Ecosystem-native version syntax.** A reference is `<coordinates>@<constraint>`. The
+  coordinates are ecosystem-native; the constraint is VERS and is identical in every
+  ecosystem. Maven `[1.2,1.3)`, npm `^1.2`/`~1.2`, PEP 440 `>=1.2,<2.0`, and Ruby `~> 2.1`
+  are therefore rejected — with a message naming the VERS equivalent, not silently. This
+  is a deliberate asymmetry, not an oversight: see
+  [Alternatives](#alternatives) for why the native half stops at the `@`.
+- **Full VERS constraint lists.** A constraint is one interval; see
+  [Version constraint](#version-constraint).
 - **Dependency resolution in the hub.** The hub matches what the addon reported; it does
   not resolve or walk a dependency graph. The addon continues to do the resolving —
   including, under this proposal, in discovery mode.
-- **SBOM ingestion** as an alternative source of dependency data.
+- **SBOM ingestion** as an alternative source of dependency data. Package URLs are
+  accepted as a paste-in authoring form, but no SBOM is parsed and no dependency is ever
+  rendered *as* a purl; see [Package URLs](#package-urls-as-an-input-form).
 - **Tag inference from dependencies.** Automatically tagging applications based on
   dependencies is a separate concern and is out of scope.
 - **Scaling beyond roughly 1000 applications.** The levers are identified in
@@ -145,8 +176,8 @@ so that I can separate applications on Spring Boot 2 from those already on 3.*
 
 #### DAC004
 
-*As an Architect, I want to use wildcards in dependency names, so that I can match a
-whole package namespace without enumerating artifacts.*
+*As an Architect, I want to match a whole package namespace without enumerating
+artifacts, so that I can express "anything importing WebLogic".*
 
 #### DAC005
 
@@ -155,35 +186,97 @@ match before I save it, so that I can tell whether the expression says what I me
 
 #### DAC006
 
-*As an Architect working on a polyglot portfolio, I want the same expression syntax for
-Java, Go, Python, and npm dependencies, so that I learn one language rather than four.*
+*As an Architect, I want to write package names in the form my build files already use,
+so that I can paste a coordinate out of a `pom.xml`, a `package.json`, or a security
+advisory instead of translating it.*
+
+#### DAC007
+
+*As an Architect working on a polyglot portfolio, I want one expression language and one
+version grammar across ecosystems, so that only the package names differ between a Java
+clause and an npm clause.*
 
 ### Expression Syntax
 
 #### Boolean layer
 
+There are two levels. The outer one composes ecosystem blocks; the inner one composes
+references within a block.
+
 ```
-expr    = or
-or      = and ( '||' and )*
-and     = unary ( '&&' unary )*
-unary   = '!' unary | primary
-primary = ref | '(' or ')'
+expr     = or
+or       = and ( '||' and )*
+and      = unary ( '&&' unary )*
+unary    = '!' unary | block | '(' or ')'
+block    = '[' ecosystem ']' '(' refExpr ')'
+
+refExpr  = refOr
+refOr    = refAnd ( '||' refAnd )*
+refAnd   = refUnary ( '&&' refUnary )*
+refUnary = '!' refUnary | ref | '(' refOr ')'
 ```
 
-The boolean layer is shared with the addon/extension selector: `internal/task/selector.go`
-is refactored so both use one implementation. See [Implementation](#implementation).
+**Blocks do not nest, and a reference appears only inside one.** The separation is what
+makes the ecosystem of every reference unambiguous from its enclosing block alone, with
+no scoping rule to resolve.
+
+The boolean layer is shared with the addon/extension selector, which defines its own
+reference syntax (`tag:category=name`) over the same operators. Both use one
+implementation; see [Implementation](#implementation).
+
+#### Ecosystem blocks
+
+A block declares the ecosystem of every reference inside it:
+
+```
+[maven]( org.springframework:spring-core@>=6|<7 && !com.sun.xml.bind )
+```
+
+The ecosystem name is a Package URL type — `maven`, `npm`, `pypi`, `golang`. Blocks
+compose with the boolean layer like any other term, so an expression may contain several,
+and a block may appear under a negation.
+
+Declaring the ecosystem rather than inferring it is what lets references be written in
+native coordinate form: `org.springframework:spring-core` and `@babel/core` are parsed by
+rules that already know which ecosystem they belong to. It also determines, at parse
+time, which version comparator applies and which name normalization rules apply — neither
+of which has to be rediscovered per candidate.
+
+It has a second effect that matters for cost. A block can only ever match dependencies
+whose `Provider` corresponds to its type, so every block is a partition of the candidate
+set before any name or version work happens. See
+[Resolving Membership](#resolving-membership).
+
+**An unrecognized ecosystem is a parse error**, not an expression that matches nothing.
+The mapping is a literal table, because none of the three names agree:
+
+| block | provider | comparator ecosystem |
+|---|---|---|
+| `maven` | `java` | `Maven` |
+| `npm` | `nodejs` | `npm` |
+| `pypi` | `python` | `PyPI` |
+| `golang` | `go` | `Go` |
+
+These four are the ecosystems for which both halves exist: a provider the analyzer emits
+and an ordering the comparator implements. Dependencies reported under any other provider
+cannot be matched and are simply never candidates — a limitation worth stating plainly,
+since it is invisible in an expression. Adding an ecosystem is a row in this table
+plus a coordinate plugin.
+
+There is no default ecosystem. An expression that does not say which ecosystem it means
+cannot be evaluated correctly, and guessing is worse than refusing.
 
 #### Dependency reference
 
 ```
-ref        = name [ '@' constraint ]
-name       = segment (('.' | ':' | '/') segment)*
-segment    = text | '*' | '**'
+ref         = coordinates [ '@' constraint ]
+coordinates = segment (('.' | ':' | '/') segment)*
+segment     = text | '*'
 ```
 
-The name is a sequence of **segments**. `.`, `:`, and `/` are all segment separators,
-which is what makes one syntax work across ecosystems — the hub normalizes both the
-pattern and the stored dependency name the same way:
+Coordinates are a sequence of **segments**, matched against the reported dependency name.
+`.`, `:`, and `/` are all segment separators, so the common Java form `group:artifact`
+works whether the analyzer emitted a colon or a dot:
 
 | provider | reported name | segments |
 |---|---|---|
@@ -193,125 +286,281 @@ pattern and the stored dependency name the same way:
 | python | `zope.interface` | `zope interface` |
 | npm | `@babel/core` | `@babel core` |
 
-`*` matches exactly one segment; `**` matches zero or more. Because Maven's
-group/artifact colon normalizes to the same thing as a dot, the common Java form
-`group:artifact` works without the hub needing to know whether the analyzer emitted a
-colon or a dot.
+**Names match by segment prefix.** A reference matches a dependency when the reference's
+segments are a leading subsequence of the dependency's segments. `com.sun` matches
+`com.sun.xml.bind` and `com.sun.jersey:jersey-core`; it does not match `com.sunflower`,
+because `sun` and `sunflower` are different segments. A reference that names every
+segment matches only that dependency.
+
+This is what makes `weblogic` express "anything importing WebLogic" with no wildcard
+syntax at all, and it is also what makes a reference tolerate a dependency name that
+carries more coordinate components than the reference does — see
+[Coordinate depth](#coordinate-depth).
+
+`*` matches exactly one segment. It is only meaningful in a non-trailing position
+(`com.*.internal`), since trailing segments are already open. There is no `**`: it would
+mean the same thing as omitting it.
 
 **`@` is the only constraint introducer.** `:` is a separator and nothing else, which is
-what lets the three separators be genuinely interchangeable: were `:` to also introduce a
-constraint, `spring-boot:2` and `spring-boot.2` would normalize to the same name and
-still parse differently. The cost is one character over Maven's `group:artifact:version`,
-and the parser rejects that form with *"use `group:artifact@1.2`"* rather than misparsing
-it. Dropping the `:` constraint form also removes the "looks like a version" heuristic
-and with it the misreading of digit-leading final segments such as `com.foo:3d-view`.
+what lets the three separators be interchangeable. It also removes the arity ambiguity in
+Maven's own colon form — `G:A:V`, `G:A:P:V`, and `G:A:P:C:V` cannot be told apart
+without counting, so `io.netty:netty-transport-native-epoll:jar` would silently parse
+`jar` as a version. The parser rejects `group:artifact:1.2` with *"use
+`group:artifact@1.2`"* rather than misreading it.
 
 A **leading** `@` is part of the name — npm scopes retain it (`@babel/core` → segments
 `@babel core`). Only a non-leading `@` introduces a constraint, so `@babel/core@7` is
 scope `@babel`, name `core`, constraint `7`.
 
-**Normalization is per-provider, and its rules are not invented here.** Separator
-interchange does not by itself reach every ecosystem's naming conventions: PEP 503
-declares `-`, `_`, and `.` equivalent within a Python distribution name, and npm and
-golang names are case-folded. Each of these is a published rule, specified per package
-type in
+**Normalization is per-ecosystem, and its rules are not invented here.** Separator
+interchange does not reach every ecosystem's naming conventions: PEP 503 declares `-`,
+`_`, and `.` equivalent within a Python distribution name, and npm and golang names are
+case-folded. Each is a published rule, specified per package type in
 [purl-spec](https://github.com/package-url/purl-spec/blob/main/PURL-TYPES.rst), and the
-hub adopts those rules rather than defining its own. `NewNormalizer(provider)` is the
-name-side counterpart to `NewComparator(provider)` in
-[Implementation](#implementation): selected per candidate from
-`TechDependency.Provider`, and applied to the pattern and the stored name together, so
-both sides of a comparison are always normalized under the same ecosystem's rules. The
-user is not asked to name an ecosystem to get this, and one expression still spans
-several — the provider is read rather than declared.
+hub adopts those rules rather than defining its own. Because the block declares the
+ecosystem, the reference is normalized once at parse time, and the stored name is
+normalized under the same rules at match time.
 
-#### Package URLs as an input form
-
-A reference may also be written as a
-[Package URL](https://github.com/package-url/purl-spec), which the parser converts to
-the form above:
-
-```
-pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10
-  → com.fasterxml.jackson.core:jackson-databind@2.9.10   (provider: java)
-```
-
-This exists for one workflow. The motivating cases — a vulnerable Jackson, an EOL
-Struts — are read off an advisory or an SBOM, and those speak purl; pasting one and
-having it work is worth more than the conversion costs. The `type` is retained as a
-provider constraint on that reference, so `pkg:npm/foo` matches an npm `foo` and not a
-PyPI one. That is the one place an expression carries an ecosystem, and it is carried
-because the user pasted it rather than because the syntax demands it.
-
-It is an input form and not the canonical one. A purl identifies exactly one package and
-has no wildcard layer, so `com.sun.*:**` cannot be expressed as one and the two forms do
-not compose — a reference is written either way, not half each. Qualifiers and subpaths
-are rejected rather than ignored: they narrow what a purl identifies, and dropping them
-silently would make the reference match more than the identifier the user pasted.
+Note that the rules are adopted, not the parser. A reference containing `*` is not a
+purl and cannot be round-tripped through one; see
+[Implementation](#implementation).
 
 #### Version constraint
 
-A constraint is a single term. Alternatives are expressed with `||`, which the boolean
-layer already provides — `jackson-core@2.12 || jackson-core@2.14` — so the constraint
-grammar does not repeat it. Every term is built from a **version prefix**, and a prefix
-denotes the entire version line beneath it:
+The block selects which comparator orders the versions; it does not change how the
+constraint is written. A constraint is a list of comparisons separated by `|`, in the
+comparator syntax of [VERS](https://github.com/package-url/vers-spec):
 
-| term | meaning | matches | does not match |
-|---|---|---|---|
-| `2` | the 2 line | `2.0.0`, `2.7.18` | `1.9.9`, `3.0`, `20.1` |
-| `2.13` | the 2.13 line | `2.13`, `2.13.7` | `2.12.9`, `2.14.0` |
-| `1.2+` | that line or greater | `1.2.0`, `9.0` | `1.1.9` |
-| `..2.12` | that line or lower | `2.12.7`, `1.0` | `2.13.0` |
-| `2.9..2.13` | both ends inclusive of the line | `2.9.0`, `2.13.5` | `2.8.9`, `2.14` |
-| *omitted* | any version | everything | — |
+```
+constraint = comparison ( '|' comparison )*
+comparison = [ '>=' | '<=' | '>' | '<' | '=' | '!=' ] version
+```
 
-Prefix semantics is the reason `3.4.*` from the originating issue is written `3.4` here.
-It also makes range endpoints behave as users read them: `..2.12` covers `2.12.7`, which
-an exact-endpoint reading would exclude.
+| constraint | meaning |
+|---|---|
+| `@6.0.4` | exactly 6.0.4 — a bare version is `=` |
+| `@>=2\|<3` | the 2 line |
+| `@>=2.9\|<2.14` | the 2.9 through 2.13 lines |
+| `@<5.4` | anything below 5.4 |
+| `@>=2.0-beta9\|!=2.12.2\|<2.15.0` | a range with a hole |
+| *omitted* | any version |
 
-**Prereleases do not belong to their line; post-releases do.** `2.13` matches `2.13-sp`
-and `2.13.post1` but not `2.13.0-rc1` or `2.13-SNAPSHOT`. This matches the convention
-that `>=2.13.0` excludes prereleases of `2.13.0`.
+**A bare version is exact, not a prefix.** `@2` matches a dependency whose version string
+is literally `2`, which almost nothing is. The 2 line is `@>=2|<3`. This is more verbose
+than a prefix form, and deliberately so: a prefix form has to invent a rule for what the
+line beneath `2.0-beta9` is, and it reads `@2.13` as matching `2.13.7`, which is correct
+but has to be learned. Comparisons say what they do.
 
-Which qualifiers are pre- and which are post- is the comparator's judgment, not the
-constraint's, and it comes from each ecosystem's published ordering: Maven's
-`ComparableVersion` qualifier order (alpha, beta, milestone, rc, snapshot, the empty
-qualifier, then sp), PEP 440's pre/post/dev classification, and semver §11. Unknown
-qualifiers follow each spec's own default — Maven orders them lexically after `sp`,
-semver treats any prerelease field as a prerelease. No qualifier list is defined by this
-proposal.
+**A constraint is one interval.** At most one lower bound, at most one upper bound, and
+any number of `!=`. VERS itself permits several intervals in one list —
+`>=1|<2|>=3|<4` is `[1,2) ∪ [3,4)` — but the boolean layer already expresses that, more
+legibly and without a second place for disjunction to live:
+
+```
+foo@>=1|<2 || foo@>=3|<4
+```
+
+Restricting to one interval also makes `|` read one way (*and also*) instead of reading
+as conjunction at two constraints and disjunction at four, and it collapses the VERS
+validity rules — sorted by version, unique versions, no redundant contiguous
+comparators — to a trivial check.
+
+What is accepted remains a strict subset of valid VERS, so a constraint can be emitted as
+a canonical `vers:` string without changing the language. The restriction is relaxable
+later; it would not be tightenable.
+
+**Prereleases sort below their release, in every ecosystem.** `>=2.13` excludes
+`2.13.0-rc1`, `2.13-SNAPSHOT`, and `2.13rc1`; it includes `2.13-sp` and `2.13.post1`.
+This is not a rule this proposal defines — it falls out of each ecosystem's published
+ordering. It has one severe consequence, in Go; see
+[Go major versions](#go-major-versions).
+
+#### Coordinate depth
+
+The analyzer reports a dependency name at whatever coordinate depth it has. Segment
+prefix matching means a reference does not have to match that depth: if a Java dependency
+is reported as `io.netty:netty-transport-native-epoll:jar:linux-x86_64`, the reference
+`io.netty:netty-transport-native-epoll` still matches it, and so does
+`io.netty:netty-transport-native-epoll:jar`.
+
+This matters beyond convenience. If the analyzer later begins reporting more
+fully-qualified names, old and new analyses coexist in the same portfolio for as long as
+the old ones survive, and references written against either depth keep working. No
+migration of stored expressions is required.
+
+#### Go major versions
+
+In Go the major version appears in the module path (`github.com/golang-jwt/jwt/v4`), so
+segment prefix matching alone cannot separate majors — `github.com/golang-jwt/jwt`
+matches `/v4` and `/v5` both. Constrain the version instead, which is equivalent because
+a module's version major always agrees with its path:
+
+```
+[golang]( github.com/golang-jwt/jwt@>=v4|<v5 )
+```
+
+A leading `v` is accepted on either side and is not significant: `@>=v4` and `@>=4` are
+the same constraint, and both compare correctly against a stored `v4.5.0`.
+
+Constraining the version is strictly better than matching the path, because it also
+covers the two cases the path cannot express: v0 and v1 share the unversioned path, and
+`+incompatible` modules carry a major in the version with no path suffix at all.
+
+**The v0 trap.** An untagged Go module has a pseudo-version — `v0.0.0-20210101120000-abcdef123456`
+— which is a *prerelease* of `0.0.0` under semver and therefore sorts **below** `v0`. So
+`@>=v0|<v1` matches almost no v0 module. Write `@<v1`, or `@>=v0.0.0-0|<v1` if a lower
+bound is wanted. This is the prerelease rule behaving exactly as specified; it simply
+happens to be severe in the one ecosystem whose dominant version form is a prerelease.
+
+#### Package URLs as an input form
+
+A reference may be pasted as a
+[Package URL](https://github.com/package-url/purl-spec), which carries its own ecosystem
+and therefore needs no enclosing block:
+
+```
+pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10
+  ≡  [maven]( com.fasterxml.jackson.core:jackson-databind@2.9.10 )
+```
+
+This exists for one workflow. The motivating cases — a vulnerable Jackson, an EOL
+Struts — are read off an advisory, and advisories speak purl. A purl's `@version` is a
+single concrete version, which is exactly what a bare version means here, so the two
+forms agree without a special rule.
+
+It is an input form and not the canonical one. A purl identifies one package and has no
+wildcard layer, so `com.sun` cannot be written as one, and the two forms do not compose —
+a reference is written either way, not half each. Qualifiers and subpaths are rejected
+rather than ignored: they narrow what a purl identifies, and dropping them silently would
+make the reference match more than the identifier the user pasted.
+
+Nothing is ever rendered *as* a purl. Doing so would require deciding where the group
+ends and the artifact begins in `com.fasterxml.jackson.core.jackson-core`, which is the
+ambiguity interchangeable separators exist to sidestep; see
+[Alternatives](#alternatives).
+
+#### Evaluating a reference
+
+A reference and a candidate dependency reduce to the same shape before anything is
+compared. The block supplies the ecosystem for both halves; the coordinates and the
+constraint are then matched independently.
+
+```
+REFERENCE   [maven]( com.redhat.fuse:fuse-core@>=7.9|<7.12 )
+
+CANDIDATE   provider  java
+            name      com.redhat.fuse.fuse-core
+            version   7.11.1
+
+ecosystem   maven  (from the block)
+            java   (from the candidate)      -> agree, via the mapping table
+
+coordinates com.redhat.fuse:fuse-core
+            split on . : /                   -> [com, redhat, fuse, fuse-core]
+            normalize per purl-spec, maven   -> unchanged
+name        com.redhat.fuse.fuse-core
+            split on . : /                   -> [com, redhat, fuse, fuse-core]
+            normalize per purl-spec, maven   -> unchanged
+                                             -> segment match: true
+
+constraint  >=7.9|<7.12
+            parse comparators                -> lower 7.9 incl, upper 7.12 excl
+            equivalently                     == vers:maven/>=7.9|<7.12
+version     7.11.1
+            validate as a Maven version      -> ok
+            compare under ecosystem "Maven"  -> in range: true
+```
+
+Note what the analyzer reported: the name arrived **dot-joined**, with nothing marking
+where the group ends and the artifact begins. Separator interchange makes that
+irrelevant to matching — and makes rendering the same name *as* a purl impossible, which
+is the same fact seen from the other side.
+
+**Segment matching.** The reference matches when it has no more segments than the
+candidate and every one of its segments equals the candidate's in position, with `*`
+equal to any single segment. Trailing candidate segments are unconstrained:
+
+| reference | candidate | match |
+|---|---|---|
+| `com.redhat:fuse-core` | `com.redhat.fuse-core` | yes — equal, separators interchangeable |
+| `com.redhat` | `com.redhat.fuse-core` | yes — trailing segments open |
+| `com.*.fuse-core` | `com.redhat.fuse-core` | yes — `*` is exactly one segment |
+| `com.*` | `com.redhat.fuse-core` | yes — `*` matches `redhat`, rest is trailing |
+| `com.redhat:fuse` | `com.redhat.fuse-core` | no — `fuse` and `fuse-core` are different segments; `-` does not separate |
+| `com.redhat:fuse-core:jar` | `com.redhat.fuse-core` | no — reference is deeper than the candidate |
+
+**Both sides reduce to `(type, segments, version)`.** That shape is purl-shaped and
+deliberately not a purl: the reference half may be a prefix or carry `*`, neither of
+which a purl can express, and the candidate half has no recoverable namespace boundary.
+The constraint half, by contrast, *is* VERS, and can be serialized as such without loss.
 
 #### Examples
 
 ```
 # Spring Boot 2 → 3 migration cohort
-org.springframework.boot:spring-boot@2
-  && org.springframework.boot:spring-boot-starter-web@2.0..2.7
-  && com.fasterxml.jackson.core:jackson-databind@2.9..2.13
+[maven](
+  org.springframework.boot:spring-boot@>=2|<3
+  && org.springframework.boot:spring-boot-starter-web@>=2.0|<2.8
+  && com.fasterxml.jackson.core:jackson-databind@>=2.9|<2.14
   && (javax.servlet:javax.servlet-api || javax.persistence:javax.persistence-api)
   && !jakarta.servlet:jakarta.servlet-api
+)
 ```
 
 ```
-# Legacy application server coupling
-weblogic:** || com.ibm.websphere:** || org.jboss.as:** || com.sun.*:**
+# Legacy application server coupling — segment prefix, no wildcards needed
+[maven]( weblogic || com.ibm.websphere || org.jboss.as || com.sun )
 ```
 
 ```
-# Stranded on an old major — in Go the major version is part of the module path
-(github.com/golang-jwt/jwt/v4 && !github.com/golang-jwt/jwt/v5)
-  || (github.com/go-chi/chi && !github.com/go-chi/chi/v5)
+# Log4Shell exposure: affected range with the fixed 2.12.2 carved out
+[maven]( org.apache.logging.log4j:log4j-core@>=2.0-beta9|!=2.12.2|<2.15.0 )
+```
+
+```
+# Stranded on an old Go major; note <v1 rather than >=v0|<v1
+[golang](
+  github.com/golang-jwt/jwt@>=v4|<v5
+  || github.com/go-chi/chi@<v5
+  || github.com/jortel/go-utils@<v1
+)
 ```
 
 ```
 # Vulnerable pins
-pyyaml@..5.3 || jinja2@..2.11 || urllib3@..1.26 || cryptography@..3.3
+[pypi](
+  pyyaml@<5.4 || jinja2@<2.11.3 || urllib3@<1.26.5 || cryptography@<3.3.2
+)
 ```
 
 ```
-# Polyglot: a Java service with a legacy React front end.
-# One expression spans both ecosystems; no provider is declared.
-org.springframework.boot:spring-boot@2 && react@16
+# Polyglot: a Spring Boot 2 service with a legacy front end, where both halves
+# have to move together. Each block carries its own boolean structure.
+[maven](
+  org.springframework.boot:spring-boot@>=2|<3
+  && (javax.servlet:javax.servlet-api || javax.persistence:javax.persistence-api)
+  && !jakarta.servlet
+)
+&& [npm](
+  react@>=16|<17
+  && (webpack@>=4|<5 || grunt || gulp)
+)
 ```
+
+The two blocks are evaluated independently against their own ecosystem's dependencies
+and combined by the outer `&&`, so an application matches only if both halves hold. A
+reference is confined to its block: the npm `react` can never match a Maven artifact that
+happens to be named `react`, and `!jakarta.servlet` excludes Java packages only.
+
+Blocks are terms like any other, so a block may be negated:
+
+```
+[maven]( org.springframework.boot:spring-boot@>=2|<3 ) && ![npm]( react )
+```
+
+This reads *Spring Boot 2, with a front end that is not React* — not *with no front
+end*. An application whose analysis never covered npm is excluded rather than matched,
+per the per-block guard in [Matching Semantics](#matching-semantics).
 
 ### Model and API Changes
 
@@ -339,43 +588,60 @@ type Archetype struct {
 ```
 
 There is no provider field, no list, and no child table. A list would be redundant with
-`&&`, which the expression language already has; the provider is read per candidate
-during matching (see [Implementation](#implementation)).
+`&&`, which the expression language already has; the ecosystem is declared by the block.
 
 `POST`/`PUT` of an archetype parses and validates the expression and returns `400` with
-the reason and offset when parsing fails. Validation covers the boolean syntax, each
-reference, and each constraint, and rejects foreign syntax with a message naming the
-equivalent:
+the reason and offset when parsing fails. Validation covers the boolean syntax, the block
+ecosystem, each reference, and each constraint, and rejects foreign syntax with a message
+naming the equivalent:
 
 | rejected | message |
-|---|---|
-| `[1.2,1.3)` | use `1.2..1.3` |
-| `^1.2`, `~1.2` | use `1.2+` |
-| `>=1.2`, `<2.0` | use `1.2+`, `..2.0` |
-| `1.2,2.0` | use `foo@1.2 \|\| foo@2.0` |
+| --- | --- |
+| `[1.2,1.3)` | use `@>=1.2\|<1.3` |
+| `^1.2` | use `@>=1.2\|<2` |
+| `~1.2` | use `@>=1.2\|<1.3` |
+| `1.2,2.0` | use `@>=1.2\|<2.0` — `,` is not a separator |
 | `group:artifact:1.2` | use `group:artifact@1.2` |
-| `3.4.*` | use `3.4` |
-| `vers:maven/>=1.2\|<2.0` | use `1.2..2.0` |
+| `3.4.*` | use `@>=3.4\|<3.5` |
+| `com.sun:**` | trailing segments are already open; use `com.sun` |
+| `@>=1\|<2\|>=3\|<4` | one interval per constraint; use `foo@>=1\|<2 \|\| foo@>=3\|<4` |
+| `vers:maven/>=1.2\|<2.0` | use `@>=1.2\|<2.0` |
+| reference outside a block | wrap in an ecosystem block, e.g. `[maven](…)` |
+| `[java](…)`, `[Maven](…)` | unknown ecosystem; use `[maven]` |
 
 Users will try the syntax of the ecosystem they know; the parser should teach rather than
 misparse. The comma case matters most: PEP 440 reads `1.2,2.0` as conjunction and this
 syntax has no comma at all, so accepting it would silently mean the opposite of what a
-Python user intends. A purl is the one pasted form that is translated rather than
-rejected ([Package URLs as an input form](#package-urls-as-an-input-form)); its
-companion vers is not, for the reasons in [Alternatives](#alternatives).
+Python user intends.
+
+The ecosystem name is a purl type and is case-sensitive, which means `[Maven]` and
+`[java]` are both errors. This is worth a specific message rather than a generic one,
+because `java` is the provider value stored on the dependency and will be the first
+guess of anyone who has looked at the data.
 
 #### Membership preview
 
-`POST /archetypes/membership` accepts `{criteria, criteriaDeps}` and returns the
-application refs currently matching them, without persisting an archetype. Syntax errors
-return `400` with reason and offset, so the same endpoint serves as the validation
-endpoint the UI needs while the user types — there is no need for a separate
-`validate` route. For an existing archetype the UI diffs the result against current
-membership to show the delta before save (DAC005), which is what surfaces the upgrade
-hazard in [Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
+`POST /archetypes/membership` accepts `{criteria, criteriaDeps}` and returns the matching
+application refs and their count, without persisting an archetype. For an existing
+archetype the UI diffs the result against current membership to show the delta before
+save (DAC005), which is what surfaces the upgrade hazard in
+[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
 
-Preview is whole-portfolio in scope and therefore carries the same cost as
-`GET /archetypes/{id}/applications`; see [Resolving Membership](#resolving-membership).
+The count matters as much as the list. Because names match by segment prefix, the
+characteristic authoring error is an expression that matches *more* than intended — a
+reference truncated by one segment widens silently, where under an exact-match rule it
+would have failed visibly.
+
+**Preview resolves membership across the whole portfolio and costs accordingly** — the
+same as `GET /archetypes/{id}/applications`; see
+[Resolving Membership](#resolving-membership). It is therefore an explicit action, not a
+keystroke-driven one.
+
+Syntax validation is separable and is not: a malformed expression returns `400` with the
+reason and offset without any membership resolution, because parsing fails before the
+dependency set is fetched. The same endpoint can be called on every keystroke for
+validation alone and on demand for membership, which is why no separate `validate` route
+is needed.
 
 ### Matching Semantics
 
@@ -398,14 +664,33 @@ make `!jakarta.servlet:jakarta.servlet-api` resolve to *true*, so an expression 
 with a negation would match every unanalyzed application — the opposite of the intent.
 See [Source of Dependency Data](#source-of-dependency-data).
 
+**The same guard applies per block.** A block whose ecosystem contributed no
+dependencies at all to the application's latest analysis is unsatisfied regardless of
+its structure, so a negated block is false rather than true. Without this, `![npm](react)`
+would be satisfied by every application whose analysis never ran an npm provider —
+asserting the absence of a React dependency on evidence that was never collected. The
+reasoning is identical to the expression-level case one level down, and the hub cannot
+distinguish "has no npm dependencies" from "npm was not analyzed" from the reported data
+alone.
+
+The consequence is worth stating: **a negated block only ever means something for an
+ecosystem the analysis actually covered.** `![npm](react)` selects applications known to
+have npm dependencies, none of them React — not applications with no front end.
+
+**Unparseable versions.** A candidate dependency whose version string does not parse
+under its ecosystem's rules does not satisfy any constraint, including a negated one. The
+comparator does not reject such strings on its own; the hub must, and the reason is in
+[Implementation](#implementation).
+
 **Step 2 — selection.** Of the archetypes that matched, which ones is the application
 assigned to? Not necessarily all of them; see **Specificity** below.
 
 **Direct vs. transitive.** A reference matches both direct and transitive dependencies.
 The motivating cases — vulnerable and EOL libraries — usually arrive transitively, and
-`TechDependency.Indirect` is available if a future `direct:` modifier on a reference
-proves necessary. It is not in this proposal; adding a knob before anyone has asked for
-it is how this feature grows a configuration surface it does not need.
+the analyzer already reports whether a dependency was reached indirectly, so a future
+`direct:` modifier is available if one proves necessary. It is not in this proposal;
+adding a knob before anyone has asked for it is how this feature grows a configuration
+surface it does not need.
 
 **Specificity.** `MembershipResolver.Archetypes()`
 (`internal/assessment/membership.go`) assigns an application only to the *narrowest*
@@ -420,7 +705,7 @@ also matches:
 
 | archetype | criteria tags | expression |
 |---|---|---|
-| A — "Spring Boot 2" | — | `org.springframework.boot:spring-boot@2` |
+| A — "Spring Boot 2" | — | `[maven](org.springframework.boot:spring-boot@>=2\|<3)` |
 | B — "Java" | `Language=Java` | — |
 
 An application tagged `Language=Java` running Boot 2 matches both, and A is discarded —
@@ -448,33 +733,35 @@ strictly more constrained in at least one. For the expression dimension:
 | no tags, expr `E` | tags `{Java}`, no expr | incomparable, both assigned |
 | tags `{Java}`, expr `E1` | tags `{Java}`, expr `E2` | incomparable, both assigned |
 
-Note what this does and does not do for the A/B case above: the product order does not
-rank A above B, it declines to rank them, so both are assigned. Ranking a tag against an
-expression would require a common scale of specificity that does not exist. Not
-discarding A is the whole of the fix.
+For the A/B case above the product order does not rank A above B — it declines to rank
+them, so both are assigned. Ranking a tag against an expression would need a common scale
+of specificity that does not exist, and declining to invent one is consistent with how
+the algorithm already treats incomparable tag sets. Not discarding A is the whole of the
+fix.
 
 When no archetype uses an expression the expression dimension is always equal, so this
-reduces exactly to the current tag-subset rule and no existing behavior changes. It also
-declines to rank two different expressions rather than inventing an order for them,
-which is consistent with how the algorithm already treats incomparable tag sets.
+reduces exactly to the current tag-subset rule and no existing behavior changes.
 
 ### Source of Dependency Data
 
-Criteria are evaluated against `TechDependency` rows belonging to the application's
-**most recent** analysis, which is the same scoping the analysis report endpoints already
-use. Dependencies from superseded analyses are never considered.
+Criteria are evaluated against the dependencies of the application's **most recent**
+analysis, which is the same scoping the analysis report endpoints already use.
+Dependencies from superseded analyses are never considered.
 
-**An application with no analysis has no dependency data, so any non-empty dependency
-expression is unsatisfied** and the application does not match. Per the guard in
-[Matching Semantics](#matching-semantics) this holds for negated and purely negative
-expressions too, which would otherwise be satisfied by the absence of everything. This is
-the correct default — absence of evidence is not evidence of a match — but it is a
-behavior change for an archetype that previously matched on tags alone and later gains a
-dependency expression, so it is surfaced in the UI before save (DAC005) and in
-[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
+A reported dependency carries a provider, a name, a version, and whether it was reached
+indirectly. All of it is passthrough from analyzer-lsp, and the hub does not interpret
+any of it today. This proposal interprets provider, name, and version, which is the
+extent of the coupling it introduces.
 
-Extending discovery to report dependencies is what keeps this from being a severe
-limitation in practice; see
+**An application with no analysis has no dependency data, so no dependency expression is
+satisfied** and the application does not match — including for negated expressions, per
+the guard in [Matching Semantics](#matching-semantics).
+
+The consequence is a behavior change for an archetype that previously matched on tags
+alone and later gains a dependency expression: every unanalyzed member drops. It is
+surfaced before save (DAC005) and in
+[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy). Extending discovery to
+report dependencies is what keeps it from being a severe limitation in practice; see
 [Dependency Data from Discovery](#dependency-data-from-discovery).
 
 ### Dependency Data from Discovery
@@ -484,48 +771,38 @@ produced only by a full analysis, which is expensive and is not routinely run ac
 whole portfolio. Discovery is — it is the cheap pass that tags applications during
 onboarding — but it currently discards dependency information entirely.
 
-In `konveyor/tackle2-addon-analyzer` today:
+Two things in `konveyor/tackle2-addon-analyzer` produce that today: `Analyzer.Run()`
+skips dependency resolution when the mode is discovery, and `updateApplication()` returns
+after tagging without creating an analysis — so dependencies would not be reported even
+if they had been collected.
 
-- `Analyzer.Run()` skips dependency resolution in discovery mode —
-  `if !r.Data.Mode.Discovery { analyzer.GetDependencies(depOutput, false) }` in
-  `cmd/analyzer.go`.
-- `updateApplication()` returns immediately after tagging when `d.Mode.Discovery` is
-  set, in `cmd/main.go`, so no analysis is created and dependencies would not be
-  reported even if they had been collected.
+Note that discovery mode is not a profile setting; it arrives through the task data.
+Varying dependency collection *by profile* would require extending the analysis profile
+mode first, and is not proposed.
 
-A discovery run therefore produces tags and nothing else.
-
-Note that `Mode.Discovery` is not a profile setting. `Mode.With()` copies only
-`WithDeps` from the analysis profile, so the discovery flag arrives through the task
-data. Anything that needs to vary dependency collection by profile would have to extend
-`api.ApMode` first.
-
-**Proposed change.** Discovery mode calls `GetDependencies()` and reports an analysis
-containing the resolved dependencies with an empty insight set. The manifest is already
-shaped for it — `builder.Manifest{Analysis, Insights, Deps}` — with only `Deps`
-populated.
+**Proposed change.** Discovery resolves dependencies and reports an analysis containing
+them with an empty insight set. The upload manifest already carries analysis, insights,
+and dependencies as separate parts, so this populates only the last.
 
 This makes dependency criteria usable on a portfolio that has been discovered but not
-analyzed, which is the common state during onboarding and precisely when archetype
+analyzed — the common state during onboarding, and precisely when archetype
 classification is most valuable. It is what keeps "no analysis, no match" from being a
 severe practical limitation.
 
-The change is confined to the analyzer addon. It relies on existing hub behavior,
-described below.
+The change is confined to the addon; it relies on existing hub behavior, described below.
 
 #### A discovery analysis replaces the previous report
 
-`AnalysisHandler.analysisIDs()` selects the latest analysis per application with
-`MAX(ID) GROUP BY ApplicationID`, so a discovery run supersedes whatever preceded it,
-including a full analysis. That is the intended behavior and requires no change.
+The hub already treats the newest analysis per application as the current one, so a
+discovery run supersedes whatever preceded it, including a full analysis. That is the
+intended behavior and requires no change.
 
 As noted in [Motivation](#motivation), discovery is triggered by an edit to the
 application, and an edit can change what the application points at. The insights of the
-previous analysis then describe a codebase
-the application no longer refers to, and continuing to report them asserts findings
-about the wrong thing. Replacing the report is the correct outcome — "latest analysis
-has dependencies and no insights" accurately states *we know what it depends on, we have
-not evaluated rules against this version*.
+previous analysis then describe a codebase the application no longer refers to, and
+continuing to report them asserts findings about the wrong thing. Replacing the report is
+the correct outcome — "latest analysis has dependencies and no insights" accurately
+states *we know what it depends on, we have not evaluated rules against this version*.
 
 This also closes an existing gap: today an application can be edited and retain a stale
 analysis indefinitely, because nothing invalidates it.
@@ -543,15 +820,14 @@ already available outside the analysis record, in the application's task history
 distinguishes an `analyzer` run from a `tech-discovery` run. That is where the UI should
 resolve it rather than denormalizing addon mode onto the report.
 
-**To confirm during implementation.** Whether `GetDependencies()` returns a complete
-transitive closure in source-only mode. `Mode.ToOption()` selects `FullAnalysisMode`
-only when `withDeps` is set, and `Scope.ToOptions()` notes that "if withDeps is false,
-we are only ever doing source analysis." If the dependency list is incomplete without
-full mode, discovery must either enable it — spending the time discovery exists to avoid
-— or add a `Partial` flag to the reported dependencies. That flag is a narrower
-discriminator than addon mode, describing the data rather than its producer, so it does
-not conflict with the position above; but it would make `Indirect` unreliable and weaken
-transitive matching.
+**To confirm during implementation.** Whether dependency resolution returns a complete
+transitive closure in source-only mode. Full analysis mode is selected only when
+dependencies are requested, and without it the addon is doing source analysis alone. If
+the dependency list is incomplete in that mode, discovery must either enable full mode —
+spending the time discovery exists to avoid — or mark the reported dependencies partial.
+Marking the data is a narrower discriminator than marking the producing mode, so it does
+not conflict with the position above, but it would make the direct/transitive
+distinction unreliable and weaken transitive matching.
 
 ### When Associations Are Evaluated
 
@@ -571,88 +847,92 @@ Preserving that property is the main performance constraint. See
 Expression parsing and matching are self-contained, depending on neither the API nor
 the assessment packages, so they can be exercised in isolation.
 
-**Version parsing is shared; ordering is not.** A single tokenizer handles every
-ecosystem: strip a leading `v`, discard build metadata, split a PEP 440 epoch, split at
-the first `-`, then tokenize on `.`/`-`/`_` and digit↔alpha boundaries. This correctly
-parses Maven qualifiers, semver prereleases, PEP 440's separator-less `1.2.3a1`, Go
-pseudo-versions, and `+incompatible`.
+The design principle is to own nothing that is already a published specification with a
+maintained implementation. Three dependencies and three in-house components:
 
-Ordering cannot be shared, and the reason is concrete rather than theoretical. Given
-`1.0-1`:
+| concern | owner |
+|---|---|
+| boolean evaluation, block scoping | `github.com/PaesslerAG/gval` (already a hub dependency) |
+| version ordering, per ecosystem | `github.com/google/osv-scalibr/semantic` |
+| name normalization rules | purl-spec, adopted as rules |
+| coordinate parsing, name matching | in-house, per-ecosystem plugin |
+| version syntax validation | in-house |
+| the `\|`-separated constraint and its interval | in-house |
 
-- Maven reads it as release `1.0` with numeric qualifier `1` — sorts **after** `1.0`.
-- PEP 440 reads it as an implicit post release — sorts **after** `1.0`.
-- Semver reads it as a prerelease — sorts **before** `1.0`.
+#### Boolean layer and blocks
 
-And Go pseudo-versions *require* the semver reading: `v1.0.1-0.20181226105442-5d4384ee4fb2`
-must sort below `v1.0.1`. No single rule satisfies both. `NewComparator(provider)`
-therefore returns a comparator that differs in exactly one behavior — whether a numeric
-qualifier is a post release — and is otherwise shared.
+`internal/task/selector.go` already evaluates boolean expressions over `gval`'s
+propositional-logic language, resolving each reference to a boolean. It is refactored so
+the boolean layer is one implementation with a pluggable reference resolver, and
+dependency criteria supply a second resolver alongside the existing one.
 
-The provider is read from the candidate `TechDependency.Provider`, never from the
-expression — here and in `NewNormalizer(provider)`
-([Dependency reference](#dependency-reference)), which are the only two places it is
-used, and which are selected the same way for the same reason. The user is not asked to
-supply information the hub already has, and because both are chosen per candidate rather
-than per expression, one expression can span ecosystems and still order and normalize
-each dependency by its own ecosystem's rules. The single exception is a reference pasted
-as a purl, where the user has supplied the type explicitly and it narrows that reference
-to one provider.
+`gval` extends to `[ecosystem](…)` through its prefix-extension hook: `[` carries no
+meaning in the propositional-logic language, so claiming it displaces nothing. The
+extension reads the ecosystem, parses the parenthesized sub-expression, and compiles each
+reference against that ecosystem.
 
-**Four constraint forms, one primitive.** A prefix denotes a *line*, and a line has an
-infimum and a supremum under the provider's comparator. `lineStart(prefix)` is the lowest
-version belonging to the line and `lineEnd(prefix)` the highest. Every term is then a
-pair of optional bounds, and matching is `(lower == nil || v >= lower) && (upper == nil
-|| v <= upper)`:
+#### Coordinate plugin
 
-```go
-type term struct {
-	lower *Version // lineStart of the lower prefix
-	upper *Version // lineEnd of the upper prefix
-}
-```
+Per-ecosystem behavior is reached through a plugin selected at parse time from the block
+header. It owns the ecosystem's coordinate structure and its normalization rule; segment
+splitting and prefix/`*` matching are shared across all of them, so there is one matcher
+rather than one per ecosystem.
 
-| term | lower | upper |
-|---|---|---|
-| `1.2` | `lineStart(1.2)` | `lineEnd(1.2)` |
-| `1.2+` | `lineStart(1.2)` | nil |
-| `..1.5` | nil | `lineEnd(1.5)` |
-| `1.2..1.5` | `lineStart(1.2)` | `lineEnd(1.5)` |
+The plugin is the counterpart to the `semantic` ecosystem key: both are chosen by the
+block, and both exist because the rule they encode is published per ecosystem and differs
+between them. Its interface is an implementation detail and is not specified here.
 
-Expressing bounds as line endpoints rather than bare versions is what carries the
-prerelease rule with no special case. `1.2.0-rc1` sorts below `lineStart(1.2)`, so `1.2`
-and `1.2+` exclude it, while `..1.2` includes it — it is below the end of the `1.2` line.
-It still sorts above `lineEnd(1.1)`, so `..1.1` does not capture it either. The same
-endpoints give `..1.5` its inclusive reading of the whole `1.5` line.
+**A pattern is not a purl.** `packageurl-go` and `osv-scalibr/purl` have no wildcard
+layer, and normalizing a struct whose name field contains `*` is undefined. Normalization
+is therefore a plugin method applying purl-spec's per-type rules to segments, not a
+round-trip through a purl parser. This also avoids constructing a purl from stored data,
+which would require splitting `com.fasterxml.jackson.core.jackson-core` into namespace and
+name — a boundary the stored form does not carry.
 
-**Boolean evaluation is shared with the selector.** `internal/task/selector.go` scans
-references out of the expression with a regular expression, resolves each to a boolean,
-substitutes, and evaluates the result with `github.com/PaesslerAG/gval`. It is refactored
-so that the boolean layer — scanner, `gval.Language`, evaluation — is one implementation
-with a pluggable reference resolver, and dependency criteria supply a second resolver
-alongside the existing `tag:category=name` one. Two refinements fall out of the refactor:
-substitute generated identifiers and pass a parameter map rather than splicing in the
-literal text `true`/`false` (which removes the longest-match-first sort that currently
-guards against one reference clobbering another), and resolve references lazily so
-short-circuiting is real.
+#### Version comparison
 
-The reference scanner never needs to handle parentheses inside a version, because this
-syntax has none — a consequence of rejecting Maven's bracket ranges.
+Ordering is delegated to `osv-scalibr/semantic`, which implements each ecosystem's
+published rules. Its ecosystem keys are OSV names and are case-sensitive, which is why
+the mapping in [Ecosystem blocks](#ecosystem-blocks) is a literal table rather than a
+transformation.
 
-**Why `..` and not `-` for ranges.** `-` is load-bearing inside versions in every
-ecosystem. `1.2-1.5` is ambiguous, and the case that breaks is the Go pseudo-version
-`v0.0.0-20210101120000-abcdef123456`, where both sides of the first `-` are numeric. A
-"range only if both sides are numeric" heuristic does not save it; it silently matches
-the wrong thing. `..` requires no disambiguation rule at all.
+This retires what would otherwise be the largest correctness liability in the proposal.
+Behavior was verified against v0.5.3 rather than assumed — Maven qualifier ordering
+including the `ga`/`final`/`release` aliases, PEP 440 pre/post/epoch handling, and Go
+pseudo-versions and `+incompatible`. Three results drive decisions elsewhere in this
+document:
+
+- `2.13.5` is **greater** than `2.13`, which is why a line is written `@>=2.13|<2.14`
+  and not `@<=2.13`.
+- A leading `v` is stripped, so `@>=v4` and `@>=4` are one constraint.
+- Go is ordered as plain semver with no Go-specific handling, which gives the correct
+  pseudo-version and `+incompatible` results and also produces the v0 trap in
+  [Go major versions](#go-major-versions).
+
+**The library does not validate, and the hub must.** It returns no error for a malformed
+version, despite documenting that it does. Verified: `banana`, `${project.version}`,
+`LATEST`, and the empty string all parse in Maven, npm, Go, PyPI, Debian, and Alpine, and
+sort *below* real versions in most ecosystems but *above* them in Debian. An unresolved
+Maven property in analyzer output would therefore satisfy any `<X` constraint silently.
+
+The hub validates candidate version strings per ecosystem before comparison and treats a
+failure as "this dependency does not satisfy this reference", per
+[Matching Semantics](#matching-semantics). This is a thin wrapper, but it cannot be
+skipped and no library supplies it.
+
+**Constraint evaluation.** A parsed constraint is an optional lower bound, an optional
+upper bound, and a set of exclusions. A version satisfies it when it falls within
+whichever bounds are present and equals none of the exclusions, with every comparison
+going through the ecosystem's comparator.
 
 ### Resolving Membership
 
 Membership is resolved from an in-memory dataset. The distinct
-`(applicationID, name, version, provider)` tuples of the latest analysis are fetched for
+`(application, provider, name, version)` tuples of the latest analysis are fetched for
 the applications in scope, each archetype expression is parsed once, and the expressions
-are evaluated against each application's dependency set. `DISTINCT` is required because
-the dependency unique index includes `SHA`, so one `(name, version)` can appear more
-than once in an analysis.
+are evaluated against each application's dependency set. Distinctness has to be requested
+explicitly: dependencies are keyed by artifact hash as well, so one name and version can
+appear more than once in a single analysis.
 
 Scope is the set of applications whose membership the request actually needs:
 
@@ -664,9 +944,19 @@ Scope is the set of applications whose membership the request actually needs:
 | `GET /archetypes` with member counts | all |
 | `POST /archetypes/membership` (preview) | all |
 
-`ApplicationHandler.List` already builds a `qf.Filter` over name, platform, and
-repository; the dependency fetch is constrained to the same application set, so a
-filtered list costs proportionally less.
+The application list endpoint already filters on name, platform, and repository; the
+dependency fetch is constrained to the same application set, so a filtered list costs
+proportionally less.
+
+**Ecosystem blocks partition the candidate set.** A `[maven]` block can only match
+dependencies whose provider is `java`, which is known at parse time. Provider is the
+leading column of the dependency table's composite index, so the filter is index-supported
+and is unaffected by the `case_sensitive_like` problem that limits a name pre-filter. The
+existing dependency report already groups by provider and name, so this is a dimension
+the schema and its queries treat as primary.
+
+On a polyglot portfolio this is a large constant-factor reduction: a Java-only expression
+never parses an npm version. It does not change the asymptotics.
 
 **This does not scale past roughly 1000 applications**, and the endpoint under the most
 pressure is the primary application list rather than an occasional report, because
@@ -689,16 +979,16 @@ versions in use, not with applications × dependencies.
 Three levers exist and none is proposed here, because which one is needed should be
 settled by measurement rather than by argument:
 
-- **Paginating `/applications`** would bound the fetch at `MaxPage` applications
-  automatically. The machinery already exists in `internal/api/base.go`; the endpoint
-  simply does not use it. This is the cleanest bound, but it changes the behavior of an
-  existing endpoint and belongs in its own proposal.
+- **Paginating `/applications`** would bound the fetch at one page of applications
+  automatically. The pagination machinery already exists; this endpoint simply does not
+  use it. The cleanest bound, but it changes the behavior of an existing endpoint and
+  belongs in its own proposal.
 - **A name pre-filter in SQL**, deriving a prefix from each reference's literal leading
   segments. Two non-obvious constraints apply: SQLite will not use an index for `LIKE`
   under the hub's default `case_sensitive_like` setting, so explicit range predicates
   are needed instead; and because `.`, `:`, and `/` are interchangeable separators, a
-  prefix is only selective against a *normalized* name column, not against `Name` as
-  stored.
+  prefix is only selective against a *normalized* name column, not the name as stored.
+  This composes with the provider partition above, on the same index.
 - **Caching the matched set**, invalidated on archetype write and analysis completion.
 
 For context on the baseline: `MembershipResolver` already loads the entire
@@ -711,48 +1001,60 @@ off `provisional`.
 
 ### Test Plan
 
-**Version comparator.** Table-driven tests seeded from each ecosystem's *published*
-orderings — semver.org §11, PEP 440, and Maven's `ComparableVersion` qualifier table —
-rather than from the implementation's behavior. These are the authoritative oracle: if
-the comparator reproduces the specs, it is correct by construction. Supplemented with
-real version strings drawn from dependency corpora (`go.sum`, `package-lock.json`),
-which is where the pseudo-version and `+incompatible` cases come from.
+The test budget follows the ownership split in [Implementation](#implementation). The
+version comparator is a maintained library tested against its own specs, so it is
+*verified* rather than *tested*; the components with no library and no second
+implementation get the weight.
 
-**A total-order property test is required, not optional.** A prototype of this
-comparator passed 253 example-based cases while containing a transitivity violation
-(`1.0.0-alpha < 1.0.0 < 1.0-1`, yet `1.0.0-alpha` ranked above `1.0-1`). It surfaced only
-from asserting antisymmetry and transitivity across the whole corpus, because it requires
-three versions drawn from two different spec tables to manifest — exactly the combination
-a hand-written table does not think to write.
+**Comparator conformance.** A table asserting the ordering behavior this proposal relies
+on, run against `osv-scalibr/semantic` as a contract test rather than as a test of our
+own code. The cases are those in [Implementation](#implementation), plus `2.13.5 > 2.13`,
+which the documented `@>=2.9|<2.14` idiom depends on. Its purpose is to fail loudly if a
+library upgrade changes ordering, not to validate the specs.
 
-**Constraint matching.** Per-form cases for prefix, `+`, `..`, and ranges, including the
-discriminating cases: `0.1` must not match `0.10.2`, `2` must not match `20.1`, and a
-pseudo-version must not match its own release line. Line endpoints get their own cases:
-`1.2` excludes `1.2.0-rc1` but includes `1.2-sp`, and `..1.2` includes `1.2.0-rc1` while
-`..1.1` excludes it.
+**Version validation.** The gap the library leaves, so this is ours and is asserted
+directly: `banana`, `${project.version}`, `LATEST`, `""`, and a Maven property
+placeholder must each be rejected by the hub's validator, and a dependency carrying one
+must not satisfy any reference, **including a negated one**. Debian's inverted sort order
+for garbage is the case that shows why relying on "unparseable sorts low" is not a
+substitute for validating.
 
-**Expression parsing.** Valid expressions across all four ecosystems; malformed
-expressions; and every row of the foreign-syntax rejection table, asserting both
-rejection and the suggested equivalent. `1.2,2.0` and `group:artifact:1.2` are the two
-that must not be accepted under any reading.
+**Name matching.** The component with no library and no oracle, so it carries the
+heaviest table. Segment prefix matching across the separator forms; `com.sun` matching
+`com.sun.xml.bind` but not `com.sunflower`; a reference matching a dependency reported at
+greater coordinate depth; `@jsonjoy.com/util` (a scope containing a dot, which must not
+split into two name segments); `@babel/core@7` (leading `@` is name, inner `@` is
+constraint); `com.foo:3d-view`
+(digit-leading final segment is a name, not a version); Go major-version path suffixes;
+and `*` in non-trailing position.
 
-**Name matching.** Segment globbing across the separator forms, including
-`@jsonjoy.com/**` (a scope containing a dot), `@babel/core@7` (leading `@` is name, inner
-`@` is constraint), `com.foo:3d-view` (digit-leading final segment is a name, not a
-version), and Go major-version suffixes.
+**Per-ecosystem normalization.** Cases drawn from purl-spec's published per-type rules
+rather than from the implementation: PEP 503 equivalence (`apache_airflow` and
+`apache.airflow` match `apache-airflow`) and npm and golang case folding. Each asserts
+that pattern and stored name are normalized together, and that a rule belonging to one
+ecosystem does not leak into another — `-` must remain load-bearing in a Maven artifact
+id and a Go path element, and Maven coordinates must stay case-sensitive.
 
-**Per-provider normalization.** Cases drawn from purl-spec's published per-type rules
-rather than from the implementation, on the same principle as the comparator tests: PEP
-503 equivalence (`apache_airflow` and `apache.airflow` match `apache-airflow`) and npm
-and golang case folding. Each asserts that pattern and stored name are normalized
-together, and that a rule belonging to one provider does not leak into another — `-`
-must remain load-bearing in a Maven artifact id and a Go path element, and Maven
-coordinates must stay case-sensitive.
+**Expression parsing.** Valid expressions across all four ecosystems; nested and
+negated blocks; malformed expressions; and every row of the rejection table, asserting
+both rejection and the suggested equivalent. `1.2,2.0` and `group:artifact:1.2` must not
+be accepted under any reading, and a reference outside a block must be a parse error
+rather than a default-ecosystem guess.
+
+**Constraint semantics.** Per-form cases for each comparator and for `|`; that a bare
+version is exact and `@2` does not match `2.7.18`; that `@>=2|<3` does; that a second
+interval (`@>=1|<2|>=3|<4`) is rejected with the `||` equivalent; and the prerelease
+boundary — `>=2.13` excludes `2.13.0-rc1` and `2.13-SNAPSHOT` but includes `2.13-sp`.
+
+**Go version idioms.** That `@>=v4|<v5` selects a module on `/v4` and not `/v5`; that
+`@>=v0|<v1` fails to match a pseudo-version while `@<v1` matches it — asserted
+explicitly, because it is the documented trap and a regression here would be silent; and
+that `v2.0.0+incompatible` behaves as `v2.0.0`.
 
 **Package URL input.** That a pasted purl resolves to the same candidate set as the
-equivalent native reference; that its `type` constrains the provider, so `pkg:npm/foo`
-does not match a PyPI `foo`; and that qualifiers and subpaths are rejected with a
-message rather than ignored.
+equivalent block-and-reference form; that its type constrains the ecosystem, so
+`pkg:npm/foo` does not match a PyPI `foo`; and that qualifiers and subpaths are rejected
+with a message rather than ignored.
 
 **Membership integration.** API-level tests using `test/binding`: archetypes with
 dependency criteria only, with tags only, and with both; applications with no analysis;
@@ -776,9 +1078,7 @@ wrong, so it needs an assertion of its own.
 **Discovery analyses.** That a discovery run reports dependencies and an empty insight
 set; that a discovery run following a full analysis supersedes it entirely, so insight
 reporting returns nothing and dependency matching uses the newly reported set; and that
-a full analysis following a discovery run likewise supersedes it. The superseding
-behavior is what keeps a stale analysis from outliving an edit to the application, so it
-needs an explicit assertion rather than being left to the membership tests.
+a full analysis following a discovery run likewise supersedes it.
 
 ### Upgrade / Downgrade Strategy
 
@@ -803,30 +1103,25 @@ surfaces the resulting membership delta before the archetype is saved, via
 
 ## Open Questions
 
-1. **What should the consumers of membership do with more memberships?** *This one
-   blocks `implementable`.* Because two different expressions are incomparable under the
-   product order, applications will belong to more archetypes once expressions are in
-   use. Multiple membership is already possible — incomparable tag sets produce it — but
-   it becomes common rather than occasional, and the proposal defines matching and
-   selection without defining what the downstream consumers do with the result.
-   Assessment inheritance, inherited review and risk, and target profile selection each
-   need review. Specifically: what should happen when an application inherits from a
-   tag-based archetype and a dependency-based archetype that disagree?
+1. **How do the consumers of membership handle conflicting archetypes?** *This blocks
+   `implementable`.* Because two different expressions are incomparable under the product
+   order, applications will belong to more archetypes once expressions are in use.
+   Multiple membership is not new — incomparable tag sets already produce it — so this is
+   a pre-existing gap in assessment inheritance, inherited review and risk, and target
+   profile selection, which this feature makes routine rather than rare. It is listed as
+   blocking because shipping dependency criteria without it converts an edge case into
+   the normal path. Resolving it is work in the assessment module, not here.
 
-2. **Dash segmentation outside Python.** `-` is not a segment separator, so
-   `google-cloud-*` does not wildcard `google-cloud-storage`, and the dash is the
-   dominant naming convention in exactly the Python and npm ecosystems. Per-provider
-   normalization ([Dependency reference](#dependency-reference)) settles the Python
-   half: PEP 503 declares `-`, `_`, and `.` equivalent within a distribution name, so
-   folding them is a published rule rather than a product decision, and
-   `apache-airflow-providers-*` follows from it. It does not settle npm, where `.` and
-   `-` are distinct characters in distinct package names — `lodash.merge` and
+2. **Dash segmentation in npm.** `-` is not a segment separator, so there is no
+   wildcarding within an npm package name. Per-ecosystem normalization settles Python:
+   PEP 503 declares `-`, `_`, and `.` equivalent within a distribution name, so folding
+   them is a published rule rather than a product decision. It does not settle npm, where
+   `.` and `-` are distinct characters in distinct package names — `lodash.merge` and
    `lodash-merge` could both exist, and segmenting on `-` conflates them with each other
-   and with the separator forms. The choice there is between leaving npm names
-   single-segment, which is the current behavior and costs wildcarding within a name,
-   and accepting the conflation. Java and Go are unaffected: `-` is load-bearing inside
-   a Maven artifact id and a Go path element, and neither ecosystem declares it
-   equivalent to anything.
+   and with the separator forms. The choice is between leaving npm names single-segment,
+   which costs wildcarding within a name, and accepting the conflation. Java and Go are
+   unaffected: `-` is load-bearing in a Maven artifact id and a Go path element, and
+   neither ecosystem declares it equivalent to anything.
 
 ## Drawbacks
 
@@ -835,92 +1130,163 @@ two subsystems that are currently independent. An archetype that looks correct c
 nothing simply because the portfolio has not been analyzed, and the failure is silent —
 an empty member list, not an error.
 
-It does not scale past roughly 1000 applications as proposed, and the endpoint under the
-most pressure is the unpaginated `/applications` rather than an occasional report. See
-[Resolving Membership](#resolving-membership) for the arithmetic and the levers.
-Adopting this feature on a large estate means accepting a latency regression on the
-application list, or sequencing one of those levers first.
+**Segment prefix matching makes the characteristic failure over-matching rather than
+under-matching.** A reference truncated by one segment silently widens, and an archetype
+that captures too many applications looks plausible where an empty one does not. The
+match count in the preview exposes it after the fact; completing references against the
+coordinates the portfolio actually reports would prevent most of it, since the hub
+already holds every name every analysis has produced.
 
-It also adds a second *reference* syntax to the hub. `internal/task/selector.go` already
-defines one for addon and extension selection (`tag:category=name`). Sharing the boolean
-layer removes the implementation cost but not the user-facing one: two syntaxes that look
-similar and are not interchangeable.
+It does not scale past roughly 1000 applications as proposed, with the unpaginated
+application list under the most pressure. Adopting this on a large estate means
+accepting a latency regression there, or sequencing one of the levers in
+[Resolving Membership](#resolving-membership) first.
 
-Finally, the version comparator is a correctness liability. It is small, but it encodes
-three published ordering specifications, and a subtle error produces wrong archetype
-membership rather than a visible failure. The test strategy is weighted accordingly.
+It adds a second *reference* syntax to the hub, alongside the `tag:category=name` form
+used for addon and extension selection. Sharing the boolean layer removes the
+implementation cost but not the user-facing one: two syntaxes that look similar and are
+not interchangeable.
+
+Delegating version ordering removes the largest correctness liability but creates a
+dependency on `osv-scalibr`'s per-ecosystem implementations, including for ecosystems
+Konveyor cares about more than `osv-scalibr`'s primary users do. The conformance table in
+the test plan is what makes a behavior change on upgrade visible rather than silent.
+
+Finally, the library's silent handling of malformed versions is a liability the hub
+inherits by using it. The validation wrapper is small, but the failure it guards against
+— a dependency with an unresolved version placeholder satisfying every `<X` constraint —
+produces wrong membership with no error anywhere, which is the same class of failure a
+hand-rolled comparator would have produced.
 
 ## Alternatives
 
-**Cross-ecosystem identifier standards (PURL and VERS).** Package URL names a package
-across ecosystems and VERS, its companion, expresses a version range. Both are widely
-emitted by SBOM and advisory tooling — SPDX, CycloneDX, OSV, GitHub advisories — and
-both carry the ecosystem explicitly, which is the opposite of the decision taken here.
-They sit between this proposal and the native dialects below, and they were evaluated
-as the reference and version forms. The outcome is partial adoption: purl is accepted
-as an input form ([Package URLs as an input form](#package-urls-as-an-input-form)) and
-purl-spec's per-type normalization rules are adopted wholesale
-([Dependency reference](#dependency-reference)), but neither becomes the authoring
-syntax.
+**Structured criteria instead of an expression language.** A list of
+`{ecosystem, coordinates, constraint}` objects on the archetype resource, ANDed together,
+rather than a parsed DSL. This is the conventional shape for an API of this kind: no
+grammar, no parser, no error offsets, no new syntax in the hub, and criteria that clients
+generating YAML can construct field by field.
 
-*PURL is an identifier, not a pattern.* `pkg:maven/org.springframework.boot/spring-boot@2.7.0`
-names one package. This feature needs `com.sun.*:**` and `weblogic:**`, and purl-spec
-defines no wildcard layer, so adopting purl for the reference form means inventing a
-glob over it. A purl pattern is not a purl and no tool consumes one, so the interop
-argument — the real attraction — does not survive the construct that would have to be
-built to make it usable here.
+Rejected because the criteria that motivate the feature are not conjunctions. The Spring
+Boot cohort needs a disjunction nested inside a conjunction, with a negation alongside it:
 
-*VERS re-declares the ecosystem per constraint and saves nothing on the hard part.*
-`vers:maven/>=1.2|<2.0` names its versioning scheme in every term, which is the
-declaration this syntax exists to avoid, and its `|` separator and comparator tokens sit
-badly inside a grammar whose `||` and parentheses are already taken — the same collision
-that rejects Maven bracket ranges below. It also leaves the actual correctness liability
-untouched: VERS delegates ordering to each native scheme, so the Maven, PEP 440, and
-semver comparators in [Implementation](#implementation) are owed either way, across more
-named schemes rather than fewer.
+```
+(javax.servlet:javax.servlet-api || javax.persistence:javax.persistence-api)
+&& !jakarta.servlet:jakarta.servlet-api
+```
 
-*The interop is not free at the boundary.* Dependency data reaches the hub from the
-analyzer as `(name, version, provider)`, and SBOM ingestion is a non-goal. Rendering a
-stored dependency *as* a purl means deciding where the group ends and the artifact
-begins in `com.fasterxml.jackson.core.jackson-core` — the ambiguity interchangeable
-separators were chosen to sidestep. Reading a purl the user pasted is the direction that
-is lossless, which is why that is the direction adopted.
+Representing that structurally means encoding an expression tree as data — `allOf`,
+`anyOf`, `not` nodes — which is the same language with more punctuation and less
+readability. Flattening it to a conjunctive list instead would drop exactly the cases the
+feature exists for; negation is the sharpest, since `!jakarta.servlet` has no structured
+form that is not a tree node.
 
-The two remaining standards are weaker still: OSV is an advisory schema rather than an
-expression language, and CPE identifies vendor and product rather than build
-coordinates, with well-documented matching problems for exactly this purpose.
+The simple case remains simple: an expression of `&&`-joined references *is* a
+conjunctive list, and a UI may present it as one without the stored form changing.
 
-The decision is reversible in the direction that matters. If SBOM or advisory ingestion
-lands, the hub holds purl-typed data with the type already resolved, the group/artifact
-objection disappears, and adopting vers for the constraint grammar becomes worth
-reopening.
+**Native version ranges.** Accepting each ecosystem's own range dialect inside its block —
+Maven `[1.2,1.3)`, npm `^1.2`/`~1.2`, PEP 440 `>=1.2,<2.0`, Ruby `~> 2.1` — so that the
+whole reference, and not only the coordinates, reads as the build file writes it.
 
-**Per-ecosystem expression grammars.** A factory returning a concrete selector per
-language, each accepting its ecosystem's native range syntax — Maven `[1.2,1.3)`, npm
-`^1.2`, PEP 440 `>=1.2,<2.0`. This is architecturally clean and removes any tokenizer
-ambiguity, since each scanner has full local context. It was rejected on cost/benefit:
-each named dialect is a published spec one is then obliged to implement faithfully, and
-a partial implementation fails silently rather than loudly. The benefit is also weakest
-exactly where it was first requested — Maven version ranges are rare in real `pom.xml`
-files, so most Java users would be learning the native syntax too, and Maven's *soft*
-version semantics (bare `1.2` means "prefer 1.2, accept anything") would have to be
-redefined as a match anyway. The decision is reversible: `NewComparator(provider)` is
-specified here as a per-provider factory, so a native scanner can be added later without
-affecting callers or existing expressions.
+Rejected on four grounds.
 
-**Maven bracket ranges in the shared syntax.** Rejected because `(1.2,1.3)` collides with
-the grouping parentheses of the boolean layer, and because exclusive bounds are rarely
-a distinction anyone needs to draw over discrete version numbers.
+Each dialect is a published specification one is then obliged to implement faithfully,
+and a partial implementation fails silently rather than loudly. For Maven ranges no Go
+library of adequate maturity exists.
 
-**Exact version semantics with `3.4.*` for wildcards.** The form suggested in the
-originating issue. Prefix semantics supersedes it: it removes a construct, gives `*` a
-single meaning across the whole language (one name segment), and fixes range endpoints,
-which under exact semantics exclude the last line of the range.
+Maven's *soft* version semantics make its most common form unusable as a predicate: bare
+`1.2` means "prefer 1.2, accept anything", so a faithful reading matches every version
+and the only usable reading is a redefinition — leaving users with Maven syntax and
+non-Maven meaning on the form they write most often.
+
+Two dialects collide with the boolean layer. Maven's `(1.2,1.3)` is ambiguous against
+grouping parentheses, and npm ranges contain their own `||`, so `foo@^1.2 || ^2.0` cannot
+be resolved into one term or two without a disambiguation rule.
+
+And the benefit is weakest for Java, where it would be most expected: version ranges are
+rare in real `pom.xml` files, so most Java users would be learning the native syntax too.
+
+The native half therefore stops at the `@`. Coordinates are what users have in hand and
+what they get wrong when forced to translate; ranges are four specifications of uneven
+familiarity that collide with the grammar and, in Maven's case, do not mean as a predicate
+what they mean in a build file.
+
+**PURL and VERS as the authoring syntax and internal model.** References written as
+Package URLs and constraints as `vers:` URIs, stored and matched in that form:
+
+```
+pkg:maven/org.springframework/spring-core?vers=vers:maven%2F%3E%3D6.0.0%7C%3C6.1.0
+```
+
+This is what an SBOM-oriented tool would do. Both standards are widely emitted — SPDX,
+CycloneDX, OSV, GitHub advisories — both carry the ecosystem explicitly, and adopting
+them wholesale would make advisory data directly usable as criteria.
+
+Rejected as the model, and adopted in part.
+
+*A purl is an identifier, not a pattern.* purl-spec defines no wildcard layer, so
+`com.sun` and `weblogic` cannot be written as purls and `packageurl-go`'s `PackageURL`
+cannot carry one. Adopting purl for references means inventing a glob over it — and a
+purl pattern is not a purl, so the interop that motivates the choice does not survive the
+construct required to make it usable.
+
+*The interop runs one way only.* Dependency data reaches the hub as
+`(provider, name, version)`, so matching purl against purl means rendering stored
+dependencies as purls, which means deciding where the group ends and the artifact begins
+in `com.fasterxml.jackson.core.jackson-core`. That boundary is not recoverable from the
+stored form. Reading a pasted purl is lossless; writing one is not.
+
+*Raw purl+vers is not writable by hand.* Percent-encoded query parameters are a machine
+interchange format, and the authoring surface is the half of this feature users touch.
+
+What is adopted: VERS comparator syntax for constraints, purl types as block names,
+purl-spec's per-type normalization rules, and purl as a paste-in form for a single
+reference. What is not: multi-interval VERS containment
+([Version constraint](#version-constraint)), and purl as the internal representation.
+
+Two weaker standards in the same space: OSV is an advisory schema rather than an
+expression language, and CPE identifies vendor and product rather than build coordinates,
+with well-documented matching problems for this purpose.
+
+This is worth reopening if SBOM or advisory ingestion lands, since the hub would then
+hold purl-typed data with the type already resolved and the group/artifact objection
+would disappear.
+
+**Ecosystem-agnostic references.** No blocks: one neutral coordinate grammar, with
+normalization and version ordering selected per candidate from the dependency's recorded
+provider at match time. Terser, and it never asks the user for something the hub already
+knows.
+
+Rejected because the ecosystem is needed before any candidate is in hand. Native
+coordinate forms cannot be parsed without it — `@babel/core` and `group:artifact` are
+different shapes — so an agnostic syntax must also be a neutral one, and users translate
+rather than paste. Declaring it also buys the candidate partition in
+[Resolving Membership](#resolving-membership), which reading the provider per candidate
+cannot: the filter is only known once the candidate has been loaded.
+
+**Prefix version semantics.** `@2` meaning the whole 2 line, with range endpoints as line
+infima and suprema, so that `2.9..2.13` includes `2.13.5`. Terser for the most common
+query, and it carries the prerelease rule with no special case.
+
+Rejected because comparators say what they do. Prefix semantics needs an invented rule
+for the line beneath a qualified version such as `2.0-beta9`, and it reads `@2.13` as
+matching `2.13.7` by a convention that has to be learned, where `>=` and `<` are
+understood on sight. The cost is accepted: "all Spring Boot 2" is `@>=2|<3`, and a user
+who writes `@<=2.13` meaning the 2.13 line gets something narrower.
+
+**Explicit wildcards rather than implicit prefix matching.** Names match exactly unless a
+wildcard is written — `com.sun.**` to reach a namespace, `com.sun` to match only a
+dependency of that exact name.
+
+Rejected because the exact reading is rarely what is wanted: a coordinate reported at
+greater depth would not match its own shorter form, and every namespace query would carry
+a `**`. The trade is real and is recorded in [Drawbacks](#drawbacks) — implicit prefix
+matching makes over-matching the default failure, where explicit wildcards would make
+under-matching the default.
 
 **Materialized archetype membership.** Storing membership in an association table
 maintained on analysis completion and archetype edit would make reads trivially cheap.
-Rejected for now because membership is currently derived and keeping it derived avoids
-an entire class of staleness bug. It remains the escape hatch if the cheaper levers in
+Rejected because membership is currently derived, and keeping it derived avoids an entire
+class of staleness bug. It remains the escape hatch if the cheaper levers in
 [Resolving Membership](#resolving-membership) prove insufficient at scale.
 
 **Matching against all analyses rather than the latest.** Rejected: an application that
@@ -935,6 +1301,17 @@ once depended on a library but no longer does should not be classified by it.
   version bounds restated as line endpoints; scaling limit moved from Goals to
   Non-Goals.
 - 2026-11-10: PURL and VERS evaluated in Alternatives following review. Purl accepted as
-  an input form for references and purl-spec's per-type normalization adopted via
-  `NewNormalizer(provider)`; vers rejected as the constraint grammar. Open question on
-  dashes narrowed to npm.
+  an input form for references and purl-spec's per-type normalization adopted; vers
+  rejected as the constraint grammar. Open question on dashes narrowed to npm.
+- 2026-11-17: Ecosystem-agnostic authoring replaced by `[ecosystem](…)` blocks with
+  native coordinates. Prefix version semantics replaced by VERS comparators, restricted
+  to one interval. Explicit `**` dropped in favor of segment prefix matching. Version
+  ordering delegated to `osv-scalibr/semantic`, with behavior verified against v0.5.3 and
+  a validation wrapper added for the malformed-version gap it leaves. Candidate partition
+  by provider added to the scaling analysis. Test plan reweighted toward name matching
+  and validation.
+- 2026-11-17: Editorial pass. Implementation-level citation reduced throughout; blocks
+  made non-nestable in the grammar; ecosystem coverage and the unmatchable-provider
+  consequence stated; preview separated into validation (cheap, per keystroke) and
+  membership (whole-portfolio, on demand); open question on the single-interval
+  restriction folded into [Version constraint](#version-constraint).
