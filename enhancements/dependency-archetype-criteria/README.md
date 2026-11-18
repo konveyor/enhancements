@@ -20,9 +20,15 @@ Archetypes classify applications by criteria tags alone, which works when the po
 has been curated but cannot express the most objective fact analysis already discovers:
 what an application depends on.
 
-This enhancement adds **dependency criteria** — a boolean expression over the
+This enhancement adds **dependency criteria** — a boolean condition over the
 dependencies reported by analysis and tech-discovery — usable alone or alongside
 criteria tags.
+
+Two designs for expressing that condition are specified and the choice is open: an
+**expression language**, which the body of this document describes, and
+[**structured criteria**](#structured-criteria-an-alternative-to-the-expression-language),
+an And/Any/Not rule set following the existing `RoleMapper` pattern. Everything below the
+boolean layer is identical between them.
 
 ## Release Signoff Checklist
 
@@ -612,8 +618,10 @@ type Archetype struct {
 }
 ```
 
-No provider field, no list, no child table. A list would be redundant with `&&`, and the
-ecosystem is declared by the block.
+`CriteriaDeps` is a string because the expression language stores one. Under
+[Structured Criteria](#structured-criteria-an-alternative-to-the-expression-language) it
+would be a JSON column holding a rule set; the column is the only part of the model that
+differs between the two designs, and neither needs a provider field or a child table.
 
 `POST`/`PUT` parses and validates the expression, returning `400` with the reason and
 offset on failure. Validation covers boolean syntax, block ecosystem, each reference, and
@@ -961,7 +969,20 @@ possible.
 
 ## Open Questions
 
-1. **What does membership resolution actually cost?** *This blocks `implementable`.* The
+1. **Expression language or structured criteria?** *This blocks `implementable`.* Two
+   candidate designs are specified: the expression language described throughout this
+   document, and the And/Any/Not rule set in
+   [Structured Criteria](#structured-criteria-an-alternative-to-the-expression-language).
+   The structured form expresses every example in this document, follows an existing hub
+   pattern, and is simpler for a UI to build; the expression language is terser, keeps
+   nesting available without a schema change, and has fewer degenerate states to guard.
+   Nothing below the boolean layer differs between them. The whole of what the
+   structured form cannot express is tabulated in
+   [The gap, in full](#the-gap-in-full) — it is the first thing to read when weighing
+   the two. The rest of this document is written against the expression language because
+   it is the more detailed of the two, not because the choice is settled.
+
+2. **What does membership resolution actually cost?** *This blocks `implementable`.* The
    20× figure in [Resolving Membership](#resolving-membership) is arithmetic, not
    measurement, and the ~1000-application threshold derived from it is a guess.
    Benchmarks against current tag-only resolution are owed, and which of the three levers
@@ -1009,15 +1030,10 @@ small, but what it guards against is wrong membership with no error anywhere.
 
 ## Alternatives
 
-**Structured criteria instead of an expression language** — a list of
-`{ecosystem, coordinates, constraint}` objects, ANDed. The conventional API shape: no
-grammar, no parser, no error offsets. It fails because the motivating criteria are not
-conjunctions — the Spring Boot cohort needs a disjunction nested inside a conjunction with
-a negation alongside it, so representing it structurally means encoding an expression tree
-as `allOf`/`anyOf`/`not` nodes, which is the same language with more punctuation.
-Flattening to a conjunctive list drops exactly the cases the feature exists for. The
-simple case stays simple either way: an expression of `&&`-joined references *is* a
-conjunctive list, and a UI may present it as one.
+**Structured criteria instead of an expression language** — not rejected. It is a live
+alternative to the expression language and is specified in
+[Structured Criteria](#structured-criteria-an-alternative-to-the-expression-language),
+below.
 
 **Native version ranges** — each ecosystem's own dialect inside its block, so the whole
 reference reads as the build file writes it. Each dialect is a published spec one is then
@@ -1091,6 +1107,180 @@ remains the escape hatch if the cheaper levers prove insufficient.
 **Matching against all reports rather than the latest** — an application that once
 depended on a library but no longer does should not be classified by it.
 
+## Structured Criteria: an Alternative to the Expression Language
+
+A live alternative to the expression language, not a rejected one. See
+[Open Questions](#open-questions).
+
+Criteria are a list of rules rather than a parsed expression. The schema follows
+`RoleMapper` in `internal/auth/ldap.go`, which already maps LDAP groups to roles with
+`And`/`Any` pattern lists, extended with `Not`:
+
+```go
+type Rule struct {
+	Ecosystem string   // maven, npm, pypi, golang
+	And       []string // every reference must match
+	Any       []string // at least one must match
+	Not       []string // none may match
+}
+
+// on the archetype
+CriteriaDeps []Rule   // every rule must be satisfied
+```
+
+**Rules are ANDed.** This is the one divergence from `RoleMapper`, which ORs its rule
+set, and it is forced rather than chosen: a rule holds one `Any` list, and the polyglot
+case below needs two — one per ecosystem — so they have to conjoin. Someone who knows
+`RoleMapper` will assume OR and read every multi-rule archetype backwards, so the
+divergence has to be stated wherever the schema is documented.
+
+A reference is written exactly as it is in the expression language —
+`<coordinates>@<constraint>`, ecosystem-native coordinates and a VERS constraint. Only
+the boolean layer differs.
+
+### Worked examples
+
+The Spring Boot cohort, which needs a disjunction nested inside a conjunction with a
+negation alongside it:
+
+```yaml
+criteriaDeps:
+  - ecosystem: maven
+    and:
+      - org.springframework.boot:spring-boot@>=2|<3
+      - org.springframework.boot:spring-boot-starter-web@>=2.0|<2.8
+      - com.fasterxml.jackson.core:jackson-databind@>=2.9|<2.14
+    any:
+      - javax.servlet:javax.servlet-api
+      - javax.persistence:javax.persistence-api
+    not:
+      - jakarta.servlet:jakarta.servlet-api
+```
+
+The polyglot case, which is what forces rules to conjoin:
+
+```yaml
+criteriaDeps:
+  - ecosystem: maven
+    and: [org.springframework.boot:spring-boot@>=2|<3]
+    any: [javax.servlet:javax.servlet-api, javax.persistence:javax.persistence-api]
+    not: [jakarta.servlet]
+  - ecosystem: npm
+    and: [react@>=16|<17]
+    any: [webpack@>=4|<5, grunt, gulp]
+```
+
+A negated block is a rule with only `Not`. `![npm](react)` is
+`{ecosystem: npm, not: [react]}`, and the per-block guard gives it the same meaning it
+has in the expression language: the application has npm dependencies, none of them React.
+
+### The gap, in full
+
+Every gap is the same thing in different clothing: a disjunction anywhere other than
+inside a single `Any` list. **None of them appears in the six worked examples in this
+document.**
+
+| not expressible directly | example | CNF rescues it? | realism |
+|---|---|---|---|
+| disjunction of conjunctions that do not factor | `(a && b) \|\| (c && d)`, sharing nothing | yes, as four `Any` pairs | low — see below |
+| negation of a compound | `!(a && b)` — i.e. `!a \|\| !b` | no | very low |
+| disjunction mixing positive and negated terms | `a \|\| !b` | no | very low |
+| disjunction across ecosystems | `[maven](a) \|\| [npm](b)` | no | low — polyglot cases are conjunctive |
+| nesting generally | `a && (b \|\| (c && d))` | yes, as CNF | low |
+
+CNF "rescue" is technical, not practical. `(a && b) || (c && d)` becomes:
+
+```
+any: [a, c]    any: [a, d]    any: [b, c]    any: [b, d]
+```
+
+Nobody writes that by hand, and nobody reads the intent back out of it. The accurate
+claim is that the structured form expresses what the examples need *directly*, and the
+rest only after a transformation users will not perform.
+
+**Why the first row is rare.** `(a && b) || (a && c)` factors to `a && (b || c)`, which
+is `And` plus `Any`. In practice the conjunctive part is shared — "an old app server
+**and** `javax.servlet`" varies only in the server — so it factors. The gap opens only
+when the disjuncts share nothing: *(Spring Boot 2 + Hibernate 5) or (Quarkus 2 +
+Panache)*. But an archetype asserts that its members take the same assessment and the
+same target profile, and two stacks sharing no markers generally do not. Disjunction of
+disjoint conjunctions is a signal of two archetypes, and multi-membership from
+incomparable criteria is already normal.
+
+### What looks like a gap and is not
+
+- **Several disjunctions in one ecosystem** — `(a || b) && (c || d)` is two rules with
+  the same ecosystem, conjoined.
+- **Several ranges on one coordinate** — two `Any` entries naming the same package with
+  different constraints, which is how a vulnerability spanning two release lines is
+  written.
+- **A negated block** — `![npm](react)` is `{ecosystem: npm, not: [react]}`, and the
+  per-block guard gives it the same meaning.
+- **Tags combined with dependencies** — unchanged; criteria tags AND with dependency
+  criteria under either design.
+
+### What does not change
+
+Dialects, reference syntax, VERS constraints, segment matching, version validation, the
+comparator, the candidate partition by provider, the scaling analysis, and every
+[Matching Semantics](#matching-semantics) rule are identical. A reference still has to be
+parsed into coordinates and a constraint whether it arrives inside an expression or as a
+string in a YAML list.
+
+What disappears is the boolean parser and the `gval` extension — roughly the
+[Boolean layer](#boolean-layer) grammar and
+[Boolean layer and blocks](#boolean-layer-and-blocks). That is a real saving but a
+narrower one than "no grammar, no parser" suggests.
+
+### Semantics already decided
+
+These apply if this design is chosen:
+
+- **Ecosystem sits on the rule**, mirroring the block, which keeps the candidate
+  partition available at parse time.
+- **An empty rule — no `And`, no `Any`, no `Not` — matches nothing**, and is also
+  rejected by validation on `POST`/`PUT`. Both: validation covers the API, and
+  matching-nothing covers seeded, imported, or downgraded data that never passed through
+  it. Note the discontinuity this creates — an absent or empty `criteriaDeps` means *no
+  dependency criteria* and matches on tags alone, while a list containing one empty rule
+  matches nothing. In YAML the difference is one nearly-blank element, and a UI that
+  appends a rule row when an ecosystem is picked can produce it by accident.
+- **A `Not`-only rule is valid and is not empty.** `MappingRule.Empty()` sums
+  `len(And) + len(Any)`; porting it with a `Not` field added but not counted would
+  classify `{npm, not: [react]}` as empty, so the user's negation would evaluate to the
+  opposite of what they wrote, silently. `RoleMapper.and()` and `any()` already return
+  true on empty pattern lists, so the rule evaluates correctly once it is past that
+  check.
+
+### The trade
+
+| | structured | expression |
+|---|---|---|
+| precedent | an existing hub pattern | a second reference syntax in the hub |
+| UI cost | form controls over three lists; per-field validation and per-reference typeahead come free | a text editor with live parsing and error-offset display, or a builder producing the same controls *plus* a serializer |
+| what the author learns | which list a reference belongs in | a grammar — operators, precedence, blocks, `@` |
+| clients | constructed field by field | string assembly |
+| errors | per-field, located by construction | parse errors carrying an offset the UI must map back to a cursor |
+| nesting | CNF only, not writable by hand | direct, and available without a schema change |
+| degenerate states | empty rule, `Not`-only rule — each needs a guard | `[maven]()` is a parse error; unrepresentable |
+| storage | JSON column | one string column |
+
+The strongest argument for structured is the UI: most archetypes will be authored by
+clicking rather than typing, and a form over three lists is both cheaper to build and
+easier to use than an editor for a grammar. It is also the argument that compounds —
+typeahead against the coordinates the portfolio actually reports, per-field validation,
+and a readable diff of what changed all fall out of the structure, where each would be
+separate work against a string.
+
+The counter is that the form degrades as rules multiply. A polyglot archetype is two
+rule blocks of three lists; the equivalent expression is six lines a reader takes in at
+once. For a user who knows the grammar, typing is faster than filling a form — but that
+user is the minority of the people who will touch this.
+
+The case for the expression language is terseness, headroom for nesting without a schema
+change, and fewer degenerate states to guard. Every example in this document is
+expressible either way.
+
 ## Implementation History
 
 - 2026-10-30: Initial proposal.
@@ -1111,3 +1301,8 @@ depended on a library but no longer does should not be classified by it.
   dialect. Open question on conflicting archetypes removed — multiple membership is
   produced by incomparable tag sets today. Rationale for each is recorded in
   [Alternatives](#alternatives) and [Drawbacks](#drawbacks).
+- 2026-11-18: Structured criteria reframed from a rejected alternative to a live design
+  choice and specified in full. The previous rejection was wrong: it claimed the Spring
+  Boot cohort could not be expressed as structured criteria, which an And/Any/Not rule
+  set does directly. The choice between the two designs is now an open question blocking
+  `implementable`.
