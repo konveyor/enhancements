@@ -158,8 +158,10 @@ The cases users describe most often:
   [Version constraint](#version-constraint).
 - **Dependency resolution in the hub.** The hub matches what the addon reported. The
   addon keeps doing the resolving, including during tech-discovery.
-- **SBOM ingestion.** Package URLs are accepted as a paste-in authoring form, but no
-  SBOM is parsed and no dependency is rendered *as* a purl.
+- **SBOM or advisory ingestion.** No SBOM is parsed, no Package URL is accepted as an
+  authoring form, and no dependency is rendered *as* a purl. Generating an expression
+  from an advisory is a worthwhile feature and is deliberately left out; see
+  [Advisory-driven criteria](#advisory-driven-criteria).
 - **Tag inference from dependencies.** A separate concern.
 - **Scaling beyond roughly 1000 applications.** Levers are identified in
   [Resolving Membership](#resolving-membership); none is implemented here.
@@ -265,7 +267,7 @@ mapping is a literal table, because none of the three names agree:
 These four are the ecosystems where both halves exist: a provider the analyzer emits and
 an ordering the comparator implements. Dependencies reported under any other provider
 can never be candidates — a limitation worth stating because it is invisible in an
-expression. Adding an ecosystem is a row in this table plus a coordinate plugin.
+expression. Adding an ecosystem is a row in this table plus a [dialect](#dialects).
 
 There is no default ecosystem. An expression that does not declare one cannot be
 evaluated correctly.
@@ -274,21 +276,33 @@ evaluated correctly.
 
 ```
 ref         = coordinates [ '@' constraint ]
-coordinates = segment (('.' | ':' | '/') segment)*
+coordinates = segment ( separator segment )*
 segment     = text | '*'
+separator   = per ecosystem — see below
 ```
 
 Coordinates are a sequence of **segments** matched against the reported dependency name.
-`.`, `:`, and `/` are all segment separators, so the common Java form `group:artifact`
-works whether the analyzer emitted a colon or a dot:
+Both sides are reduced to segments by the same ecosystem-specific rules, so a reference
+and a stored name are always compared in the same terms.
+
+**Separators are per-ecosystem, not universal.** Each ecosystem names its packages under
+its own conventions, and a character that separates coordinates in one is an ordinary
+character in another:
+
+| ecosystem | separators | why |
+|---|---|---|
+| maven | `.` `:` | the analyzer may emit `group:artifact` or `group.artifact`; both must segment identically |
+| golang | `/` `.` | module paths are `/`-delimited and the host is dotted |
+| npm | `/` only | a scope may contain a dot — `@jsonjoy.com/util` is two segments, not three |
+| pypi | none | PEP 503 makes the whole distribution name one token |
 
 | provider | reported name | segments |
 |---|---|---|
 | java | `com.fasterxml.jackson.core:jackson-core` | `com fasterxml jackson core jackson-core` |
 | java | `com.fasterxml.jackson.core.jackson-core` | *identical* |
 | go | `github.com/jortel/go-utils/v2` | `github com jortel go-utils v2` |
-| python | `zope.interface` | `zope interface` |
 | npm | `@babel/core` | `@babel core` |
+| python | `zope.interface` | `zope-interface` *(single segment, per PEP 503)* |
 
 **Names match by segment prefix.** A reference matches when its segments are a leading
 subsequence of the dependency's segments. `com.sun` matches `com.sun.xml.bind` and
@@ -303,8 +317,13 @@ the reference does — see [Coordinate depth](#coordinate-depth).
 `*` matches exactly one segment. It is only meaningful in a non-trailing position
 (`com.*.internal`), since trailing segments are already open. There is no `**`.
 
+Because segment count is ecosystem-specific, so is the reach of a prefix. Maven and
+golang names are multi-segment and prefix-match freely; npm reaches only the scope
+boundary; a pypi name is atomic and matches whole or not at all. Nowhere does a prefix
+reach *inside* a segment — `-` is never a separator, in any ecosystem.
+
 **`@` is the only constraint introducer.** `:` is a separator and nothing else, which is
-what lets the three separators be interchangeable. It also removes the arity ambiguity in
+what lets Maven's `.` and `:` be interchangeable. It also removes the arity ambiguity in
 Maven's colon form — `G:A:V`, `G:A:P:V`, and `G:A:P:C:V` cannot be told apart without
 counting, so `io.netty:netty-transport-native-epoll:jar` would silently parse `jar` as a
 version. The parser rejects `group:artifact:1.2` with *"use `group:artifact@1.2`"*.
@@ -314,15 +333,15 @@ A **leading** `@` is part of the name — npm scopes retain it (`@babel/core` �
 scope `@babel`, name `core`, constraint `7`.
 
 **Normalization is per-ecosystem, and the rules are adopted rather than invented.**
-Separator interchange does not cover every naming convention: PEP 503 declares `-`, `_`,
-and `.` equivalent within a Python distribution name, and npm and golang names are
-case-folded. Each is specified per package type in
+Splitting alone does not cover every convention: PEP 503 declares `-`, `_`, and `.`
+equivalent within a Python distribution name, and npm and golang names are case-folded.
+Each rule is specified per package type in
 [purl-spec](https://github.com/package-url/purl-spec/blob/main/PURL-TYPES.rst), and the
-hub adopts those rules. Because the block declares the ecosystem, the reference is
-normalized once at parse time and the stored name under the same rules at match time.
+hub adopts them. Because the block declares the ecosystem, the reference is reduced once
+at parse time and the stored name under the same rules at match time.
 
-The rules are adopted, not the parser. A reference containing `*` is not a purl and
-cannot round-trip through one; see [Implementation](#implementation).
+The rules are adopted, not an implementation of them; see
+[Dialects](#dialects).
 
 #### Version constraint
 
@@ -407,30 +426,40 @@ and therefore sorts **below** `v0`. So `@>=v0|<v1` matches almost no v0 module. 
 behaving as specified; it is severe here because Go's dominant version form is a
 prerelease.
 
-#### Package URLs as an input form
+#### Advisory-driven criteria
 
-A reference may be pasted as a
-[Package URL](https://github.com/package-url/purl-spec), which carries its own ecosystem
-and needs no enclosing block:
+Two of the four motivating cases — a vulnerable Jackson, an EOL Struts — begin with an
+advisory, so it is worth stating what this proposal does *not* do about that and why.
 
-```
-pkg:maven/com.fasterxml.jackson.core/jackson-databind@2.9.10
-  ≡  [maven]( com.fasterxml.jackson.core:jackson-databind@2.9.10 )
-```
+Advisories state affected ranges as half-open intervals with explicit bounds, which is
+the model this syntax already uses:
 
-This exists for one workflow: the motivating cases — a vulnerable Jackson, an EOL Struts
-— are read off an advisory, and advisories speak purl. A purl's `@version` is a single
-concrete version, which is what a bare version means here, so the forms agree without a
-special rule.
+| source | affected range | equivalent |
+|---|---|---|
+| OSV | `events: [{introduced: "2.0.0"}, {fixed: "2.15.0"}]` | `@>=2.0.0\|<2.15.0` |
+| GitHub / GHSA | `vulnerable_version_range: ">= 2.0.0, < 2.15.0"` | the same, after `,` → `\|` |
+| NVD / CVE | `versionStartIncluding` / `versionEndExcluding` | the same |
 
-It is an input form, not the canonical one. A purl identifies one package and has no
-wildcard layer, so `com.sun` cannot be written as one, and the two forms do not compose
-within a single reference. Qualifiers and subpaths are rejected rather than ignored:
-they narrow what a purl identifies, so dropping them silently would make the reference
-match more than the identifier the user pasted.
+OSV's `introduced`/`fixed` is semantically half-open, so the translation is exact rather
+than approximate. An OSV record also carries the coordinates in two forms — a purl, and
+an `ecosystem` plus a `name` that for Maven is already `group:artifact`, the native form
+this syntax takes verbatim.
 
-Nothing is ever rendered *as* a purl, because that requires deciding where the group ends
-and the artifact begins in `com.fasterxml.jackson.core.jackson-core`.
+So every field needed to write the expression is present and machine-readable, which is
+an argument against an authoring shortcut and for a generator. Nobody hand-copies three
+fields out of a JSON record; given a CVE or GHSA identifier the UI could fetch the OSV
+entry and emit
+`[maven]( com.fasterxml.jackson.core:jackson-databind@>=2.0.0|<2.15.0 )` directly.
+
+That is a separate feature and is out of scope here. It is named because the obvious
+alternative — accepting Package URLs as a paste-in reference form — was evaluated and
+dropped: a purl carries coordinates but cannot carry a range, so it addresses the half
+of the advisory workflow that was never the hard half. See
+[Alternatives](#alternatives).
+
+One wrinkle for whoever builds the generator: an advisory may report a fix on several
+branches — Log4Shell was patched at both 2.12.2 and 2.15.0 — which needs either an `!=`
+carve-out or a disjunction, and the choice is not mechanical.
 
 #### Evaluating a reference
 
@@ -449,11 +478,11 @@ ecosystem   maven  (from the block)
             java   (from the candidate)      -> agree, via the mapping table
 
 coordinates com.redhat.fuse:fuse-core
-            split on . : /                   -> [com, redhat, fuse, fuse-core]
-            normalize per purl-spec, maven   -> unchanged
+            maven dialect: split on . :      -> [com, redhat, fuse, fuse-core]
+            maven dialect: normalize         -> unchanged (case-sensitive)
 name        com.redhat.fuse.fuse-core
-            split on . : /                   -> [com, redhat, fuse, fuse-core]
-            normalize per purl-spec, maven   -> unchanged
+            maven dialect: split on . :      -> [com, redhat, fuse, fuse-core]
+            maven dialect: normalize         -> unchanged (case-sensitive)
                                              -> segment match: true
 
 constraint  >=7.9|<7.12
@@ -465,8 +494,9 @@ version     7.11.1
 ```
 
 Note that the analyzer reported the name dot-joined, with nothing marking where the
-group ends and the artifact begins. Separator interchange makes that irrelevant to
-matching — and makes rendering the same name as a purl impossible.
+group ends and the artifact begins. Both sides go through the same dialect, so the
+boundary never has to be recovered — which is also why the stored name cannot be
+rendered as a purl.
 
 **Segment matching.** The reference matches when it has no more segments than the
 candidate and every one of its segments equals the candidate's in position, with `*`
@@ -474,16 +504,17 @@ equal to any single segment. Trailing candidate segments are unconstrained:
 
 | reference | candidate | match |
 |---|---|---|
-| `com.redhat:fuse-core` | `com.redhat.fuse-core` | yes — equal, separators interchangeable |
+| `com.redhat:fuse-core` | `com.redhat.fuse-core` | yes — maven treats `.` and `:` alike |
 | `com.redhat` | `com.redhat.fuse-core` | yes — trailing segments open |
 | `com.*.fuse-core` | `com.redhat.fuse-core` | yes — `*` is exactly one segment |
 | `com.*` | `com.redhat.fuse-core` | yes — `*` matches `redhat`, rest is trailing |
 | `com.redhat:fuse` | `com.redhat.fuse-core` | no — different segments; `-` does not separate |
 | `com.redhat:fuse-core:jar` | `com.redhat.fuse-core` | no — reference is deeper than the candidate |
 
-Both sides reduce to `(type, segments, version)`, which is purl-shaped and deliberately
-not a purl: the reference half may be a prefix or carry `*`, and the candidate half has
-no recoverable namespace boundary. The constraint half *is* VERS and serializes as such.
+Both sides reduce to `(type, segments, constraint)`. That shape resembles a purl and
+deliberately is not one: the reference half may be a prefix or carry `*`, neither of
+which a purl can express, and the candidate half has no recoverable namespace boundary.
+The constraint half *is* VERS and serializes as such.
 
 #### Examples
 
@@ -596,6 +627,7 @@ each constraint, and rejects foreign syntax with a message naming the equivalent
 | `@>=1\|<2\|>=3\|<4` | one interval per constraint; use `foo@>=1\|<2 \|\| foo@>=3\|<4` |
 | `vers:maven/>=1.2\|<2.0` | use `@>=1.2\|<2.0` |
 | reference outside a block | wrap in an ecosystem block, e.g. `[maven](…)` |
+| `pkg:maven/g/a` | Package URLs are not accepted; use `[maven]( g:a )` |
 | `[java](…)`, `[Maven](…)` | unknown ecosystem; use `[maven]` |
 
 Users will try the syntax of the ecosystem they know. The comma case matters most: PEP
@@ -785,17 +817,26 @@ dependencies partial, which would weaken transitive matching.
 ### Implementation
 
 Expression parsing and matching depend on neither the API nor the assessment packages, so
-they can be exercised in isolation. The principle is to own nothing that is already a
-published specification with a maintained implementation:
+they can be exercised in isolation.
 
-| concern | owner |
-|---|---|
-| boolean evaluation, block scoping | `github.com/PaesslerAG/gval` (already a hub dependency) |
-| version ordering, per ecosystem | `github.com/google/osv-scalibr/semantic` |
-| name normalization rules | purl-spec, adopted as rules |
-| coordinate parsing, name matching | in-house, per-ecosystem plugin |
-| version syntax validation | in-house |
-| the `\|`-separated constraint and its interval | in-house |
+The principle is to delegate wherever a published specification has a maintained Go
+implementation, and to implement the published rule ourselves where it does not. Two of
+the three published specs this design leans on have no usable library:
+
+| concern | owner | published spec? |
+|---|---|---|
+| boolean evaluation, block scoping | `github.com/PaesslerAG/gval` — already a hub dependency | — |
+| version ordering, per ecosystem | `github.com/google/osv-scalibr/semantic` | yes, and implemented |
+| name splitting and normalization | in-house, per-ecosystem dialect | yes — purl-spec, as oracle only |
+| the `\|`-separated constraint and its interval | in-house | yes — VERS, as oracle only |
+| version syntax validation | in-house | no |
+| segment prefix / `*` matching | in-house | no |
+
+The delegation is narrower than it looks, and that is the right trade: the one concern
+that would have been both large and silently wrong — ordering Maven qualifiers, PEP 440
+epochs, and Go pseudo-versions — is the one with a maintained implementation. What
+remains in-house is small and testable, and two parts of it have a citable oracle even
+though no library exposes it. See [Dialects](#dialects).
 
 #### Boolean layer and blocks
 
@@ -809,17 +850,42 @@ meaning in the propositional-logic language, so claiming it displaces nothing. T
 extension reads the ecosystem, parses the parenthesized sub-expression, and compiles each
 reference against that ecosystem.
 
-#### Coordinate plugin
+#### Dialects
 
-Per-ecosystem behavior is reached through a plugin selected at parse time from the block
-header. It owns the ecosystem's coordinate structure and normalization rule; segment
-splitting and prefix/`*` matching are shared, so there is one matcher rather than one per
-ecosystem. Its interface is an implementation detail and is not specified here.
+Everything that differs between ecosystems is reached through a **dialect**, selected at
+parse time from the block header. Its shape is an implementation detail; what it must
+provide is not:
 
-A pattern is not a purl: `packageurl-go` and `osv-scalibr/purl` have no wildcard layer,
-and normalizing a struct whose name field contains `*` is undefined. Normalization is
-therefore a plugin method applying purl-spec's per-type rules to segments, not a
-round-trip through a purl parser.
+- **The purl type** — `maven`, `npm`, `pypi`, `golang` — which names the dialect and is
+  what an expression writes.
+- **The provider** the analyzer emits for this ecosystem, used to partition candidates
+  before any matching work. See [Resolving Membership](#resolving-membership).
+- **The comparator ecosystem key** — the `osv-scalibr/semantic` name, which is neither
+  of the above and is why the mapping is a literal table.
+- **Reduction of a name to segments**, covering both splitting and normalization, applied
+  identically to a reference at parse time and to a stored name at match time.
+- **Validation of a version string** under this ecosystem's rules, which the comparator
+  does not do; see [Version comparison](#version-comparison).
+
+Splitting and normalization belong together rather than as separate steps. They are
+always applied in sequence to both sides, and separating them invites applying one
+without the other — which would silently make the two sides incomparable. Keeping them a
+single reduction makes that error unrepresentable.
+
+What stays shared across dialects is the matcher: comparing two segment lists by prefix,
+with `*` matching one segment. There is one of those, not four.
+
+**Normalization is implemented, not imported.** purl-spec specifies the rules per package
+type, but no Go library exposes them at the component level — `osv-scalibr/purl` exports
+only `FromString`, `String`, and `QualifiersFromMap`, and `packageurl-go` normalizes only
+as a side effect of parsing a whole `PackageURL`. Reaching the rules through a library
+therefore means round-tripping a purl string, which cannot represent a reference carrying
+`*` or a bare namespace prefix, and cannot represent a candidate at all, since a stored
+name has no recoverable group/artifact boundary. The rules are small — lowercase for npm
+and golang, PEP 503 collapse for pypi, nothing for maven — so each dialect implements
+them against purl-spec as the specification, with the test plan citing it as the oracle.
+
+Adding an ecosystem is a dialect plus a row in the mapping table.
 
 #### Version comparison
 
@@ -894,8 +960,8 @@ by measurement:
 - **A name pre-filter in SQL**, deriving a prefix from each reference's literal leading
   segments. Two constraints apply: SQLite will not use an index for `LIKE` under the hub's
   default `case_sensitive_like` setting, so explicit range predicates are needed; and
-  because separators are interchangeable, a prefix is only selective against a
-  *normalized* name column.
+  because splitting and normalization are per-ecosystem, a prefix is only selective
+  against a *normalized* name column, and the normalization differs by provider.
 - **Caching the matched set**, invalidated on archetype write and on a new report.
 
 For baseline: `MembershipResolver` already loads the entire application-tag join on every
@@ -925,7 +991,7 @@ selection must produce exactly the current result.
 | expression parsing | all four ecosystems; nested and negated blocks; every row of the rejection table, asserting the suggested equivalent; `1.2,2.0` and `group:artifact:1.2` rejected under any reading; a reference outside a block is a parse error |
 | constraint semantics | each comparator and `\|`; `@2` does not match `2.7.18` but `@>=2\|<3` does; a second interval rejected with the `\|\|` equivalent; `>=2.13` excludes `2.13.0-rc1` and `2.13-SNAPSHOT`, includes `2.13-sp` |
 | Go idioms | `@>=v4\|<v5` selects `/v4` not `/v5`; the v0 pseudo-version case above; `v2.0.0+incompatible` behaves as `v2.0.0` |
-| purl input | a pasted purl resolves to the same candidate set as the block form; `pkg:npm/foo` does not match a PyPI `foo`; qualifiers and subpaths rejected, not ignored |
+| per-ecosystem splitting | the separator table: `com.foo:bar` and `com.foo.bar` segment identically in maven; `@jsonjoy.com/util` is two npm segments, not three; `zope.interface` is one pypi segment; `-` never separates anywhere |
 | membership (`test/binding`) | dependency criteria only, tags only, both; no dependency data; a latest report superseding an earlier matching one |
 | no dependency data | neither analysis nor tech-discovery must not match `!foo` or a disjunction containing it — the case where evaluating references individually gives the wrong answer |
 | preview | returns the set the archetype would produce if saved; malformed expression returns `400` with an offset |
@@ -960,13 +1026,15 @@ membership delta before save via `POST /archetypes/membership` (DAC005).
    profile selection. It blocks because shipping dependency criteria turns an edge case
    into the normal path. Resolving it is work in the assessment module, not here.
 
-2. **Dash segmentation in npm.** `-` is not a segment separator, so there is no
-   wildcarding within an npm package name. Python is settled by PEP 503, which declares
-   `-`, `_`, and `.` equivalent within a distribution name. npm is not: `.` and `-` are
-   distinct characters in distinct package names — `lodash.merge` and `lodash-merge` could
-   both exist — so segmenting on `-` conflates them with each other and with the separator
-   forms. The choice is between leaving npm names single-segment, costing wildcarding
-   within a name, and accepting the conflation. Java and Go are unaffected.
+2. **How far a prefix reaches is now an ecosystem property, and users will not expect
+   that.** Per-dialect splitting settles what was previously an open question about
+   dashes: `-` separates nothing anywhere, Python is one token per PEP 503, and npm
+   splits only at the scope boundary. The rules are each defensible on their own — npm
+   cannot split on `.` without breaking `@jsonjoy.com/util`, and `lodash.merge` and
+   `lodash-merge` are genuinely different packages — but the result is that `com.sun`
+   reaches a whole Java namespace while `lodash` matches one npm package and nothing
+   else. Whether that asymmetry needs surfacing in the UI, or only in documentation, is
+   unresolved.
 
 ## Drawbacks
 
@@ -1023,19 +1091,30 @@ weakest for Java, where ranges are rare in real `pom.xml` files.
 **PURL and VERS as the authoring syntax and internal model** — references as purls,
 constraints as `vers:` URIs, stored and matched in that form. Attractive because both are
 widely emitted (SPDX, CycloneDX, OSV, advisories) and carry the ecosystem explicitly.
-Adopted in part. Rejected as the model because a purl is an identifier, not a pattern:
-there is no wildcard layer, so `com.sun` cannot be written as one, and a glob over purl is
-no longer a purl — losing the interop that motivated it. The interop also runs one way:
-matching purl against purl means rendering stored `(provider, name, version)` as purls,
-which needs a group/artifact boundary the stored form does not carry. And percent-encoded
+Rejected as the model because a purl is an identifier, not a pattern: there is no wildcard
+layer, so `com.sun` cannot be written as one, and a glob over purl is no longer a purl —
+losing the interop that motivated it. The interop also runs one way: matching purl against
+purl means rendering stored `(provider, name, version)` as purls, which needs a
+group/artifact boundary the stored form does not carry. And percent-encoded
 `pkg:maven/...?vers=...%7C...` is a machine format, not hand-authored.
 
-Adopted: VERS comparator syntax, purl types as block names, purl-spec normalization rules,
-purl as a paste-in form. Not adopted: multi-interval VERS containment, purl as the
-internal representation. Worth reopening if SBOM or advisory ingestion lands, since the
-hub would then hold purl-typed data and the group/artifact objection disappears. OSV and
-CPE were also considered — OSV is an advisory schema rather than an expression language,
-CPE identifies vendor and product rather than build coordinates.
+**Package URLs as a paste-in reference form** — a narrower version of the above, where a
+purl is accepted alongside the block form for a single fully-qualified reference. Carried
+in earlier revisions of this proposal and since dropped. The justification was pasting
+from an advisory, and a purl cannot carry a range, so it covers coordinates — the half
+that was never hard — and not the affected interval, which is the half that is. Keeping
+it would have meant either a second full-fidelity authoring form, with a canonicalization
+rule for which one is stored and displayed, or an extended purl-shaped syntax that is
+purl-incompatible in exactly the cases where interop was the point. Neither is worth it
+for a workflow better served by a generator; see
+[Advisory-driven criteria](#advisory-driven-criteria).
+
+Adopted from these specs: VERS comparator syntax, purl types as block names, purl-spec's
+per-type normalization rules. Not adopted: multi-interval VERS containment, purl as a
+reference form, purl as the internal representation. Worth reopening if SBOM ingestion
+lands, since the hub would then hold purl-typed data and the group/artifact objection
+would disappear. OSV and CPE were also considered — OSV is an advisory schema rather than
+an expression language, CPE identifies vendor and product rather than build coordinates.
 
 **Ecosystem-agnostic references** — no blocks, one neutral coordinate grammar, ordering
 selected per candidate from the recorded provider. The ecosystem is needed before any
@@ -1093,3 +1172,14 @@ depended on a library but no longer does should not be classified by it.
   Konveyor behavior cut throughout; speculative dependency-count arithmetic replaced by a
   single stated estimate; Alternatives and Test Plan compressed. No design decisions
   changed.
+- 2026-11-18: Purl as a paste-in reference form dropped. Its only stated motivation was
+  pasting from an advisory, and a purl cannot carry a range, so it covered the half of
+  that workflow that was never hard; advisory ingestion is now named as out of scope,
+  with the reasoning for a generator over an authoring shortcut recorded in
+  [Advisory-driven criteria](#advisory-driven-criteria). Coordinate splitting moved from
+  a universal rule into the per-ecosystem dialect, resolving a contradiction between the
+  grammar and the `@jsonjoy.com/util` test case; the open question on dashes is settled
+  and replaced by one on prefix reach. The coordinate plugin is renamed a dialect and its
+  responsibilities enumerated. The Implementation table no longer presents purl-spec
+  normalization as a delegated dependency — no Go library exposes it at the component
+  level.
