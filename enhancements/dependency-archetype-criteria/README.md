@@ -11,6 +11,7 @@ last-updated: 2026-11-18
 status: provisional
 see-also:
   - "/enhancements/assessment-module/README.md"
+  - "/enhancements/tech-discovery-dependencies/README.md"
 ---
 
 # Dependency-Based Archetype Criteria
@@ -56,18 +57,18 @@ Three things, all in systems that already work:
   tag-bearing archetype that also matches. It would produce members only when nothing
   tagged matched, which defeats half the feature. Selection becomes a product order over
   both dimensions. See [Specificity](#specificity).
-- **Tech-discovery starts reporting.** Today it tags and returns without creating a
-  report, so dependency data exists only after a full analysis — too rare for this
-  feature to be useful. Under this proposal tech-discovery reports dependencies with an
-  empty insight set, which means it supersedes a prior analysis and that application's
-  insights go with it. See
-  [Dependency Data from Tech-Discovery](#dependency-data-from-tech-discovery).
+- **Membership becomes coupled to analysis having run.** Dependency data exists only
+  after a full analysis today, which is too rare for this feature to be useful on a
+  portfolio that has merely been onboarded.
+  [Dependency Reporting from Tech-Discovery](../tech-discovery-dependencies/README.md)
+  closes that gap and is a prerequisite; it is a separate enhancement because it changes
+  behavior for users who never adopt dependency criteria. Until it lands, an application
+  that satisfies an expression but has not been analyzed does not match, and nothing
+  distinguishes that from not satisfying it. See
+  [Source of Dependency Data](#source-of-dependency-data).
 - **Membership resolution gets roughly 20× more expensive.** Unmeasured. My estimate is
   that it becomes a problem near 1000 applications, and `/applications` — which is not
   paginated — reaches that first. See [Resolving Membership](#resolving-membership).
-
-There is also an adoption hazard: adding an expression to an existing archetype drops
-every member with no dependency data. A preview endpoint surfaces the delta before save.
 
 ### The expression language
 
@@ -88,7 +89,7 @@ The two halves come from different places:
 | `<constraint>` | [VERS](https://github.com/package-url/vers-spec) comparators — `>=`, `<=`, `>`, `<`, `=`, `!=`, separated by `\|` | **no** |
 
 Coordinates are ecosystem-specific because that is what users have in hand — a line
-copied from a `pom.xml`, a `package.json`, or an advisory. Constraints are uniform
+copied from a `pom.xml` or a `package.json`. Constraints are uniform
 because every ecosystem's *range* dialect is a separate published spec, and implementing
 four of them buys little. A Java clause and an npm clause differ in their package names
 and in nothing else.
@@ -99,8 +100,9 @@ Blocks compose, so one expression can span ecosystems:
 [maven](org.springframework.boot:spring-boot@>=2|<3) && [npm](react@>=16|<17)
 ```
 
-Version ordering, boolean evaluation, and name normalization are delegated to existing
-implementations rather than written here. See [Implementation](#implementation).
+Version ordering and boolean evaluation are delegated to existing implementations.
+Name splitting and normalization follow published per-ecosystem rules but are implemented
+here, because no Go library exposes them. See [Implementation](#implementation).
 
 ## Motivation
 
@@ -139,8 +141,9 @@ The cases users describe most often:
   rather than reimplementing them.
 - Extend the Archetype model and API to store dependency criteria alongside criteria
   tags, without breaking existing clients.
-- Make dependency data available from tech-discovery, so criteria work on a portfolio
-  that has been onboarded but not fully analyzed.
+- Define behavior when an application has no dependency data, and identify what has to
+  be true elsewhere for criteria to be useful on a portfolio that has been onboarded but
+  not fully analyzed.
 - Define matching and selection semantics when dependency criteria combine with criteria
   tags, including the interaction with existing specificity rules.
 - Bound the cost of membership resolution: identify the scaling limit, the endpoint that
@@ -162,6 +165,9 @@ The cases users describe most often:
   authoring form, and no dependency is rendered *as* a purl. Generating an expression
   from an advisory is a worthwhile feature and is deliberately left out; see
   [Advisory-driven criteria](#advisory-driven-criteria).
+- **Changing how dependencies are produced.** Making tech-discovery report them is a
+  prerequisite and a separate enhancement; see
+  [Dependency Reporting from Tech-Discovery](../tech-discovery-dependencies/README.md).
 - **Tag inference from dependencies.** A separate concern.
 - **Scaling beyond roughly 1000 applications.** Levers are identified in
   [Resolving Membership](#resolving-membership); none is implemented here.
@@ -169,6 +175,8 @@ The cases users describe most often:
 ## Proposal
 
 ### User Stories
+
+DAC005 is retired; see [Alternatives](#alternatives). Identifiers are not reused.
 
 #### DAC001
 
@@ -188,18 +196,14 @@ so that I can separate applications on Spring Boot 2 from those already on 3.*
 #### DAC004
 
 *As an Architect, I want to match a whole package namespace without enumerating
-artifacts, so that I can express "anything importing WebLogic".*
-
-#### DAC005
-
-*As an Architect, I want to see which applications an archetype's criteria currently
-match before I save it, so that I can tell whether the expression says what I meant.*
+artifacts, so that I can express "anything importing WebLogic". How far this reaches is
+ecosystem-specific; see [Dependency reference](#dependency-reference).*
 
 #### DAC006
 
 *As an Architect, I want to write package names in the form my build files already use,
-so that I can paste a coordinate out of a `pom.xml`, a `package.json`, or a security
-advisory instead of translating it.*
+so that I can paste a coordinate out of a `pom.xml` or a `package.json` instead of
+translating it.*
 
 #### DAC007
 
@@ -636,25 +640,6 @@ would silently mean the opposite of what a Python user intends. `[java]` is wort
 specific message because `java` is the provider value stored on the dependency and will
 be the first guess of anyone who has looked at the data.
 
-#### Membership preview
-
-`POST /archetypes/membership` accepts `{criteria, criteriaDeps}` and returns the matching
-application refs and their count without persisting an archetype. For an existing
-archetype the UI diffs the result against current membership to show the delta before
-save (DAC005), which is what surfaces the hazard in
-[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
-
-The count matters as much as the list: because names match by segment prefix, the
-characteristic authoring error is an expression that matches *more* than intended — a
-reference truncated by one segment widens silently, where under an exact-match rule it
-would have failed visibly.
-
-Preview resolves membership across the whole portfolio and costs the same as
-`GET /archetypes/{id}/applications`, so it is an explicit action rather than a
-keystroke-driven one. Syntax validation is separable and cheap — a malformed expression
-returns `400` before any dependency set is fetched — so the same endpoint serves both and
-no separate `validate` route is needed.
-
 ### Matching Semantics
 
 Membership resolves in two steps: *matching* (does this archetype match this
@@ -745,8 +730,9 @@ invalidate when a report lands. Preserving that is the main performance constrai
 
 ### Source of Dependency Data
 
-Dependencies are reported by two kinds of run: a full **analysis**, and — under this
-proposal — **tech-discovery**. Criteria are evaluated against the dependencies of the
+Dependencies are reported by two kinds of run: a full **analysis**, and — once the
+[prerequisite](#prerequisite-dependency-data-from-tech-discovery) lands —
+**tech-discovery**. Criteria are evaluated against the dependencies of the
 **most recent** report, whichever kind produced it, which is the same scoping the
 analysis report endpoints already use. Superseded reports are never considered.
 
@@ -758,59 +744,25 @@ An application that has had neither an analysis nor a tech-discovery has no depe
 data, so no expression is satisfied and it does not match — including for negated
 expressions. The consequence is a behavior change for an archetype that previously
 matched on tags alone and later gains an expression: every member with no dependency data
-drops. It is surfaced before save (DAC005) and in
-[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy).
+drops. See [Drawbacks](#drawbacks).
 
-### Dependency Data from Tech-Discovery
+### Prerequisite: Dependency Data from Tech-Discovery
 
 Dependency criteria are only useful if dependency data is widely available, and today it
 is produced only by a full analysis, which is not routinely run across a portfolio.
-Tech-discovery is, but it currently discards dependency information: `Analyzer.Run()`
-skips dependency resolution during tech-discovery, and `updateApplication()` returns
-after tagging without creating a report.
+Tech-discovery is run broadly, but it currently discards dependency information.
 
-**Proposed change.** Tech-discovery resolves dependencies and reports them with an empty
-insight set. The upload manifest already carries report, insights, and dependencies as
-separate parts, so this populates only the last. The change is confined to
-`konveyor/tackle2-addon-analyzer` and relies on existing hub behavior.
+[Dependency Reporting from Tech-Discovery](../tech-discovery-dependencies/README.md)
+proposes the addon change that closes this. It is a prerequisite for this feature being
+useful in practice rather than part of it, for two reasons: the change is confined to
+`konveyor/tackle2-addon-analyzer` and touches nothing here, and its principal consequence
+— a tech-discovery report supersedes a prior analysis, so editing an application discards
+its insights — affects every user, including those who never define a dependency
+expression. Bundling it would have meant a reviewer objecting to that behavior had to
+block this feature as well.
 
-This makes dependency criteria usable on a portfolio that has had tech-discovery but no
-analysis — the common state during onboarding, and when archetype classification is most
-valuable.
-
-Note that tech-discovery is not a profile setting; it arrives through the task data.
-Varying dependency collection *by profile* would require extending the analysis profile
-mode first, and is not proposed.
-
-#### A tech-discovery report replaces the previous one
-
-The hub already treats the newest report per application as current, so a tech-discovery
-supersedes whatever preceded it, including a full analysis. No change required.
-
-This is the right outcome rather than an accident. Tech-discovery is triggered by an edit,
-and an edit can change what the application points at, so the insights of the previous
-analysis may describe a codebase the application no longer refers to. "Latest report has
-dependencies and no insights" accurately states *we know what it depends on, we have not
-evaluated rules against this version*. It also closes an existing gap: today an
-application can be edited and retain a stale analysis indefinitely.
-
-No **addon-mode** discriminator is added to `Analysis`. Marking the producing run on the
-report would exist only to defeat the superseding behavior, and would make "the latest
-report" mean different things to different consumers.
-
-**One ambiguity this leaves.** After a tech-discovery the UI shows zero insights, which
-is indistinguishable from a full analysis of a genuinely clean application — one means
-"not evaluated", the other "evaluated, nothing found", and reporting an application as
-clean when it was never checked is a meaningful misstatement. Content cannot separate
-them. Provenance is available outside the report, in the task history, which distinguishes
-an `analyzer` run from a `tech-discovery` run; that is where the UI should resolve it.
-
-**To confirm during implementation.** Whether dependency resolution returns a complete
-transitive closure in source-only mode. Full analysis mode is selected only when
-dependencies are requested, and without it the addon is doing source analysis alone. If
-the dependency list is incomplete in that mode, tech-discovery must either enable full
-mode — spending the time tech-discovery exists to avoid — or mark the reported
-dependencies partial, which would weaken transitive matching.
+This proposal is implementable without it, and would simply be restricted to applications
+that have had a full analysis.
 
 ## Design Details
 
@@ -933,7 +885,6 @@ Scope is the set of applications the request actually needs:
 | `GET /applications` | all, narrowed by the request's existing filter |
 | `GET /archetypes/{id}/applications` | all |
 | `GET /archetypes` with member counts | all |
-| `POST /archetypes/membership` (preview) | all |
 
 **Ecosystem blocks partition the candidate set.** A `[maven]` block can only match
 dependencies whose provider is `java`, which is known at parse time. Provider is the
@@ -974,8 +925,9 @@ Benchmarks against current tag-only resolution are owed before this moves off
 ### Test Plan
 
 The budget follows the ownership split above. The comparator is a maintained library
-tested against its own specs, so it is verified rather than tested; name matching and
-validation have no library and no oracle, so they carry the weight.
+tested against its own specs, so it is verified rather than tested. Name matching,
+normalization, and validation carry the weight: none has a library, and only
+normalization has a published oracle to cite.
 
 Three cases are called out because a regression in them is silent rather than loud: an
 unparseable version must not satisfy a *negated* reference; `@>=v0|<v1` must fail to match
@@ -992,68 +944,55 @@ selection must produce exactly the current result.
 | constraint semantics | each comparator and `\|`; `@2` does not match `2.7.18` but `@>=2\|<3` does; a second interval rejected with the `\|\|` equivalent; `>=2.13` excludes `2.13.0-rc1` and `2.13-SNAPSHOT`, includes `2.13-sp` |
 | Go idioms | `@>=v4\|<v5` selects `/v4` not `/v5`; the v0 pseudo-version case above; `v2.0.0+incompatible` behaves as `v2.0.0` |
 | per-ecosystem splitting | the separator table: `com.foo:bar` and `com.foo.bar` segment identically in maven; `@jsonjoy.com/util` is two npm segments, not three; `zope.interface` is one pypi segment; `-` never separates anywhere |
-| membership (`test/binding`) | dependency criteria only, tags only, both; no dependency data; a latest report superseding an earlier matching one |
-| no dependency data | neither analysis nor tech-discovery must not match `!foo` or a disjunction containing it — the case where evaluating references individually gives the wrong answer |
-| preview | returns the set the archetype would produce if saved; malformed expression returns `400` with an offset |
+| membership (`test/binding`) | dependency criteria only, tags only, both |
+| no dependency data | an application with neither an analysis nor a tech-discovery must not match `!foo`, nor a disjunction containing it — the case where evaluating references individually gives the wrong answer |
 | specificity | each row of the product-order table; the regression property above; dependency-only vs. tag-only, which the tag-only rule got wrong |
-| tech-discovery | reports dependencies with an empty insight set; supersedes a prior full analysis entirely, and is superseded by a later one |
+| report currency | an archetype matches on the latest report only; a newer report supersedes an earlier matching one, whichever kind produced it |
 
 ### Upgrade / Downgrade Strategy
 
 A migration adds the `archetype.CriteriaDeps` column. No existing data is modified and no
 existing archetype changes behavior: an empty expression resolves as it does today.
 
-The analyzer addon change requires no hub schema change and no sequencing — a
-tech-discovery reports through the existing manifest upload, and the hub already
-supersedes the previous report.
-
 Downgrade drops the column. Archetypes revert to tag-only criteria, which widens their
 membership because the dependency gate is removed. This should be called out in release
 notes rather than mitigated; preserving a filter the schema can no longer express is not
 possible.
 
-The one upgrade hazard is behavioral: **adding a dependency expression to an existing
-archetype drops every application with no dependency data.** The UI surfaces the
-membership delta before save via `POST /archetypes/membership` (DAC005).
-
 ## Open Questions
 
-1. **How do the consumers of membership handle conflicting archetypes?** *This blocks
-   `implementable`.* Because two different expressions are incomparable under the product
-   order, applications will belong to more archetypes once expressions are in use.
-   Multiple membership is not new — incomparable tag sets already produce it — so this is
-   a pre-existing gap in assessment inheritance, inherited review and risk, and target
-   profile selection. It blocks because shipping dependency criteria turns an edge case
-   into the normal path. Resolving it is work in the assessment module, not here.
-
-2. **How far a prefix reaches is now an ecosystem property, and users will not expect
-   that.** Per-dialect splitting settles what was previously an open question about
-   dashes: `-` separates nothing anywhere, Python is one token per PEP 503, and npm
-   splits only at the scope boundary. The rules are each defensible on their own — npm
-   cannot split on `.` without breaking `@jsonjoy.com/util`, and `lodash.merge` and
-   `lodash-merge` are genuinely different packages — but the result is that `com.sun`
-   reaches a whole Java namespace while `lodash` matches one npm package and nothing
-   else. Whether that asymmetry needs surfacing in the UI, or only in documentation, is
-   unresolved.
+1. **What does membership resolution actually cost?** *This blocks `implementable`.* The
+   20× figure in [Resolving Membership](#resolving-membership) is arithmetic, not
+   measurement, and the ~1000-application threshold derived from it is a guess.
+   Benchmarks against current tag-only resolution are owed, and which of the three levers
+   is needed — if any — should follow from them rather than from argument.
 
 ## Drawbacks
 
 Dependency criteria couple archetype membership to analysis, two subsystems that are
 currently independent. An archetype that looks correct can match nothing because the
 portfolio has not been analyzed, and the failure is silent — an empty member list, not an
-error.
+error. The same coupling makes a dropped member ambiguous in a way a tag criterion never
+is: adding a criteria tag drops applications that genuinely lack it, while adding an
+expression also drops applications that satisfy it but have not been analyzed.
 
-**Segment prefix matching makes the characteristic failure over-matching.** A reference
-truncated by one segment silently widens, and an archetype that captures too many
-applications looks plausible where an empty one does not. The preview count exposes it
-after the fact; completing references against the coordinates the portfolio actually
-reports would prevent most of it, since the hub already holds every name every report has
-produced.
+**Segment prefix matching leans toward over-matching rather than under-matching.** An
+imprecise reference widens, where an exact-match rule would have narrowed. This is not
+a new class of error — omitting a criteria tag widens an archetype the same way — but
+the mechanism differs: a tag list shows what was written, while `org.apache.struts`
+reads as more specific than it is. The mitigation is the same one tag criteria have:
+edit the archetype and look at the membership it produces.
+
+**How far a prefix reaches is an ecosystem property, and users will not expect it to be.**
+`com.sun` reaches a whole Java namespace, while `lodash` matches one npm package and
+nothing else. Each rule is defensible on its own — npm cannot split on `.` without
+breaking `@jsonjoy.com/util`, and `lodash.merge` and `lodash-merge` are genuinely
+different packages — but the asymmetry is invisible in an expression and has to be
+learned from documentation.
 
 The pressure on application listing is the drawback I am least able to bound. Membership
-is calculated when applications are fetched, so the implementation has to build in-memory
-dependency maps for whole pages of applications, and the effect on listing a large estate
-is hard to predict in advance. Adopting this at scale means accepting a latency regression
+is calculated when applications are fetched, so listing a large estate means resolving
+dependency criteria across it, and the effect is hard to predict in advance. Adopting this at scale means accepting a latency regression
 there, or sequencing one of the levers in
 [Resolving Membership](#resolving-membership) first.
 
@@ -1133,6 +1072,18 @@ namespace. The exact reading is rarely what is wanted: a coordinate reported at 
 depth would not match its own shorter form, and every namespace query would carry a `**`.
 The trade is real and recorded in [Drawbacks](#drawbacks).
 
+**A membership preview endpoint** — `POST /archetypes/membership`, accepting unsaved
+`{criteria, criteriaDeps}` and returning the matching applications and their count, so
+the UI could show a delta before an archetype is saved. Carried in earlier revisions and
+dropped. Membership is derived and archetypes are editable, so saving and viewing the
+result already shows the same set, one step later; the endpoint bought ordering, not
+information. It was also the most expensive call in the proposal — a whole-portfolio
+resolution, invoked speculatively while authoring — and it arrived justified by problems
+that turned out to be ordinary: over-matching behaves no differently from omitting a
+criteria tag, and the drop of members with no dependency data largely disappears once
+tech-discovery reports them. Worth adding if the UI asks for it; the resolution logic is
+the same either way.
+
 **Materialized archetype membership** — an association table maintained on new reports and
 archetype edits. Keeping membership derived avoids a class of staleness bug, but this
 remains the escape hatch if the cheaper levers prove insufficient.
@@ -1145,41 +1096,18 @@ depended on a library but no longer does should not be classified by it.
 - 2026-10-30: Initial proposal.
 - 2026-11-04: `@` becomes the only constraint introducer; constraint enumeration dropped
   in favor of `||`; expression-level guard added for applications with no dependency
-  data; membership preview endpoint added (absorbing the validation-endpoint question);
-  version bounds restated as line endpoints; scaling limit moved from Goals to
-  Non-Goals.
-- 2026-11-10: PURL and VERS evaluated in Alternatives following review. Purl accepted as
-  an input form for references and purl-spec's per-type normalization adopted; vers
-  rejected as the constraint grammar. Open question on dashes narrowed to npm.
+  data.
+- 2026-11-10: PURL and VERS evaluated in Alternatives following review.
 - 2026-11-17: Ecosystem-agnostic authoring replaced by `[ecosystem](…)` blocks with
   native coordinates. Prefix version semantics replaced by VERS comparators, restricted
   to one interval. Explicit `**` dropped in favor of segment prefix matching. Version
-  ordering delegated to `osv-scalibr/semantic`, with behavior verified against v0.5.3 and
-  a validation wrapper added for the malformed-version gap it leaves. Candidate partition
-  by provider added to the scaling analysis. Test plan reweighted toward name matching
-  and validation.
-- 2026-11-17: Editorial pass. Implementation-level citation reduced throughout; blocks
-  made non-nestable in the grammar; ecosystem coverage and the unmatchable-provider
-  consequence stated; preview separated into validation (cheap, per keystroke) and
-  membership (whole-portfolio, on demand); open question on the single-interval
-  restriction folded into [Version constraint](#version-constraint).
-- 2026-11-18: Terminology pass. The cheap onboarding pass is called **tech-discovery**
-  throughout rather than "discovery", and the report it produces is called a
-  tech-discovery rather than an analysis — "analysis" now means a full analyzer run only.
-- 2026-11-18: Rewritten for a reader who already knows the architecture. Summary leads
-  with the three changes to existing behavior rather than with syntax; specificity moved
-  to the front of Matching Semantics as the algorithm this breaks; explanation of current
-  Konveyor behavior cut throughout; speculative dependency-count arithmetic replaced by a
-  single stated estimate; Alternatives and Test Plan compressed. No design decisions
-  changed.
-- 2026-11-18: Purl as a paste-in reference form dropped. Its only stated motivation was
-  pasting from an advisory, and a purl cannot carry a range, so it covered the half of
-  that workflow that was never hard; advisory ingestion is now named as out of scope,
-  with the reasoning for a generator over an authoring shortcut recorded in
-  [Advisory-driven criteria](#advisory-driven-criteria). Coordinate splitting moved from
-  a universal rule into the per-ecosystem dialect, resolving a contradiction between the
-  grammar and the `@jsonjoy.com/util` test case; the open question on dashes is settled
-  and replaced by one on prefix reach. The coordinate plugin is renamed a dialect and its
-  responsibilities enumerated. The Implementation table no longer presents purl-spec
-  normalization as a delegated dependency — no Go library exposes it at the component
-  level.
+  ordering delegated to `osv-scalibr/semantic`, verified against v0.5.3, with a
+  validation wrapper for the malformed-version gap it leaves.
+- 2026-11-18: Scope reduced on review. Tech-discovery dependency reporting extracted to
+  [its own enhancement](../tech-discovery-dependencies/README.md) and retained here as a
+  prerequisite. Purl dropped as a reference form and advisory ingestion named out of
+  scope. Membership preview endpoint dropped; DAC005 retired and identifiers are not
+  reused. Coordinate splitting moved from a universal rule into the per-ecosystem
+  dialect. Open question on conflicting archetypes removed — multiple membership is
+  produced by incomparable tag sets today. Rationale for each is recorded in
+  [Alternatives](#alternatives) and [Drawbacks](#drawbacks).
