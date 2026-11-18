@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-10-30
-last-updated: 2026-11-17
+last-updated: 2026-11-18
 status: provisional
 see-also:
   - "/enhancements/assessment-module/README.md"
@@ -22,8 +22,8 @@ it cannot express the single most objective fact analysis already discovers abou
 application: what it depends on.
 
 This enhancement proposes **dependency criteria** — a boolean expression over the
-dependencies reported by analysis — that may be used alone or in combination with
-Criteria Tags to determine archetype membership.
+dependencies reported by analysis and tech-discovery — that may be used alone or in
+combination with Criteria Tags to determine archetype membership.
 
 ## Release Signoff Checklist
 
@@ -36,7 +36,7 @@ Criteria Tags to determine archetype membership.
 ## Summary
 
 An archetype gains an optional dependency expression, matched against the dependencies
-reported by the application's most recent analysis:
+reported by the application's most recent analysis or tech-discovery:
 
 ```
 [maven](
@@ -96,12 +96,12 @@ profiles — so the inability to say "every application on Spring Boot 2" or "ev
 still pulling a vulnerable Jackson" forces users to maintain by hand a classification
 the tool could derive.
 
-Dependency data also stays current on its own. Discovery is triggered by an edit to an
-application, so once discovery reports dependencies
-([Dependency Data from Discovery](#dependency-data-from-discovery)) an application's
-dependency set is refreshed whenever the application changes. Criteria built on it keep
-classifying correctly across edits, where tag criteria depend on someone noticing the
-change and re-tagging.
+Dependency data also stays current on its own. Tech-discovery is triggered by an edit to
+an application, so once tech-discovery reports dependencies
+([Dependency Data from Tech-Discovery](#dependency-data-from-tech-discovery)) an
+application's dependency set is refreshed whenever the application changes. Criteria
+built on it keep classifying correctly across edits, where tag criteria depend on someone
+noticing the change and re-tagging.
 
 The cases users describe most often:
 
@@ -124,7 +124,7 @@ The cases users describe most often:
   of each ecosystem's rules rather than reimplementing them.
 - Extend the Archetype model and API to store dependency criteria alongside Criteria
   Tags, without breaking existing clients.
-- Make dependency data available from discovery runs, so criteria work on a portfolio
+- Make dependency data available from tech-discovery, so criteria work on a portfolio
   that has been onboarded but not fully analyzed.
 - Define **matching and selection** semantics when dependency criteria are combined with
   Criteria Tags, and how they interact with the existing archetype specificity rules.
@@ -145,7 +145,7 @@ The cases users describe most often:
   [Version constraint](#version-constraint).
 - **Dependency resolution in the hub.** The hub matches what the addon reported; it does
   not resolve or walk a dependency graph. The addon continues to do the resolving —
-  including, under this proposal, in discovery mode.
+  including, under this proposal, during tech-discovery.
 - **SBOM ingestion** as an alternative source of dependency data. Package URLs are
   accepted as a paste-in authoring form, but no SBOM is parsed and no dependency is ever
   rendered *as* a purl; see [Package URLs](#package-urls-as-an-input-form).
@@ -384,7 +384,7 @@ is reported as `io.netty:netty-transport-native-epoll:jar:linux-x86_64`, the ref
 `io.netty:netty-transport-native-epoll:jar`.
 
 This matters beyond convenience. If the analyzer later begins reporting more
-fully-qualified names, old and new analyses coexist in the same portfolio for as long as
+fully-qualified names, old and new reports coexist in the same portfolio for as long as
 the old ones survive, and references written against either depth keep working. No
 migration of stored expressions is required.
 
@@ -559,8 +559,8 @@ Blocks are terms like any other, so a block may be negated:
 ```
 
 This reads *Spring Boot 2, with a front end that is not React* — not *with no front
-end*. An application whose analysis never covered npm is excluded rather than matched,
-per the per-block guard in [Matching Semantics](#matching-semantics).
+end*. An application whose latest report never covered npm is excluded rather than
+matched, per the per-block guard in [Matching Semantics](#matching-semantics).
 
 ### Model and API Changes
 
@@ -661,21 +661,21 @@ expression. An archetype with neither matches every application, as today.
 dependency expression is unsatisfied regardless of its structure. The guard is applied to
 the expression as a whole, not to its references: a reference resolving to false would
 make `!jakarta.servlet:jakarta.servlet-api` resolve to *true*, so an expression leading
-with a negation would match every unanalyzed application — the opposite of the intent.
-See [Source of Dependency Data](#source-of-dependency-data).
+with a negation would match every application with no dependency data — the opposite of
+the intent. See [Source of Dependency Data](#source-of-dependency-data).
 
 **The same guard applies per block.** A block whose ecosystem contributed no
-dependencies at all to the application's latest analysis is unsatisfied regardless of
+dependencies at all to the application's latest report is unsatisfied regardless of
 its structure, so a negated block is false rather than true. Without this, `![npm](react)`
-would be satisfied by every application whose analysis never ran an npm provider —
-asserting the absence of a React dependency on evidence that was never collected. The
-reasoning is identical to the expression-level case one level down, and the hub cannot
-distinguish "has no npm dependencies" from "npm was not analyzed" from the reported data
-alone.
+would be satisfied by every application whose analysis or tech-discovery never ran an npm
+provider — asserting the absence of a React dependency on evidence that was never
+collected. The reasoning is identical to the expression-level case one level down, and
+the hub cannot distinguish "has no npm dependencies" from "npm was never inspected" from
+the reported data alone.
 
 The consequence is worth stating: **a negated block only ever means something for an
-ecosystem the analysis actually covered.** `![npm](react)` selects applications known to
-have npm dependencies, none of them React — not applications with no front end.
+ecosystem the latest report actually covered.** `![npm](react)` selects applications
+known to have npm dependencies, none of them React — not applications with no front end.
 
 **Unparseable versions.** A candidate dependency whose version string does not parse
 under its ecosystem's rules does not satisfy any constraint, including a negated one. The
@@ -744,98 +744,104 @@ reduces exactly to the current tag-subset rule and no existing behavior changes.
 
 ### Source of Dependency Data
 
+Dependencies are reported by two kinds of run: a full **analysis**, and — under this
+proposal — **tech-discovery**. Both produce a report, and the two are referred to
+separately throughout this document, because which one ran determines what else the
+report contains.
+
 Criteria are evaluated against the dependencies of the application's **most recent**
-analysis, which is the same scoping the analysis report endpoints already use.
-Dependencies from superseded analyses are never considered.
+report, whichever kind produced it, which is the same scoping the analysis report
+endpoints already use. Dependencies from superseded reports are never considered.
 
 A reported dependency carries a provider, a name, a version, and whether it was reached
 indirectly. All of it is passthrough from analyzer-lsp, and the hub does not interpret
 any of it today. This proposal interprets provider, name, and version, which is the
 extent of the coupling it introduces.
 
-**An application with no analysis has no dependency data, so no dependency expression is
-satisfied** and the application does not match — including for negated expressions, per
-the guard in [Matching Semantics](#matching-semantics).
+**An application that has had neither an analysis nor a tech-discovery has no dependency
+data, so no dependency expression is satisfied** and the application does not match —
+including for negated expressions, per the guard in
+[Matching Semantics](#matching-semantics).
 
 The consequence is a behavior change for an archetype that previously matched on tags
-alone and later gains a dependency expression: every unanalyzed member drops. It is
-surfaced before save (DAC005) and in
-[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy). Extending discovery to
+alone and later gains a dependency expression: every member with no dependency data
+drops. It is surfaced before save (DAC005) and in
+[Upgrade / Downgrade Strategy](#upgrade--downgrade-strategy). Extending tech-discovery to
 report dependencies is what keeps it from being a severe limitation in practice; see
-[Dependency Data from Discovery](#dependency-data-from-discovery).
+[Dependency Data from Tech-Discovery](#dependency-data-from-tech-discovery).
 
-### Dependency Data from Discovery
+### Dependency Data from Tech-Discovery
 
 Dependency criteria are only useful if dependency data is widely available. Today it is
 produced only by a full analysis, which is expensive and is not routinely run across a
-whole portfolio. Discovery is — it is the cheap pass that tags applications during
+whole portfolio. Tech-discovery is — it is the cheap pass that tags applications during
 onboarding — but it currently discards dependency information entirely.
 
 Two things in `konveyor/tackle2-addon-analyzer` produce that today: `Analyzer.Run()`
-skips dependency resolution when the mode is discovery, and `updateApplication()` returns
-after tagging without creating an analysis — so dependencies would not be reported even
+skips dependency resolution during tech-discovery, and `updateApplication()` returns
+after tagging without creating a report — so dependencies would not be reported even
 if they had been collected.
 
-Note that discovery mode is not a profile setting; it arrives through the task data.
+Note that tech-discovery is not a profile setting; it arrives through the task data.
 Varying dependency collection *by profile* would require extending the analysis profile
 mode first, and is not proposed.
 
-**Proposed change.** Discovery resolves dependencies and reports an analysis containing
-them with an empty insight set. The upload manifest already carries analysis, insights,
-and dependencies as separate parts, so this populates only the last.
+**Proposed change.** Tech-discovery resolves dependencies and reports them with an empty
+insight set. The upload manifest already carries the report, insights, and dependencies
+as separate parts, so this populates only the last.
 
-This makes dependency criteria usable on a portfolio that has been discovered but not
-analyzed — the common state during onboarding, and precisely when archetype
-classification is most valuable. It is what keeps "no analysis, no match" from being a
-severe practical limitation.
+This makes dependency criteria usable on a portfolio that has had tech-discovery run but
+has not been analyzed — the common state during onboarding, and precisely when archetype
+classification is most valuable. It is what keeps "no dependency data, no match" from
+being a severe practical limitation.
 
 The change is confined to the addon; it relies on existing hub behavior, described below.
 
-#### A discovery analysis replaces the previous report
+#### A tech-discovery report replaces the previous one
 
-The hub already treats the newest analysis per application as the current one, so a
-discovery run supersedes whatever preceded it, including a full analysis. That is the
+The hub already treats the newest report per application as the current one, so a
+tech-discovery supersedes whatever preceded it, including a full analysis. That is the
 intended behavior and requires no change.
 
-As noted in [Motivation](#motivation), discovery is triggered by an edit to the
+As noted in [Motivation](#motivation), tech-discovery is triggered by an edit to the
 application, and an edit can change what the application points at. The insights of the
 previous analysis then describe a codebase the application no longer refers to, and
 continuing to report them asserts findings about the wrong thing. Replacing the report is
-the correct outcome — "latest analysis has dependencies and no insights" accurately
+the correct outcome — "latest report has dependencies and no insights" accurately
 states *we know what it depends on, we have not evaluated rules against this version*.
 
 This also closes an existing gap: today an application can be edited and retain a stale
 analysis indefinitely, because nothing invalidates it.
 
-No **addon-mode** discriminator is added to `Analysis`. Marking the producing mode on the
+No **addon-mode** discriminator is added to `Analysis`. Marking the producing run on the
 report would exist only to defeat the superseding behavior described above, and it would
-make "the latest analysis" mean different things to different consumers.
+make "the latest report" mean different things to different consumers.
 
-**One ambiguity this leaves.** After a discovery run the UI shows zero insights, which
+**One ambiguity this leaves.** After a tech-discovery the UI shows zero insights, which
 is indistinguishable from a full analysis of a genuinely clean application. One means
 "not evaluated", the other "evaluated, nothing found", and reporting an application as
 clean when it was never checked is a meaningful misstatement. Content cannot separate
 them — a clean application also has dependencies and zero insights. Provenance is
-already available outside the analysis record, in the application's task history, which
+already available outside the report, in the application's task history, which
 distinguishes an `analyzer` run from a `tech-discovery` run. That is where the UI should
-resolve it rather than denormalizing addon mode onto the report.
+resolve it rather than denormalizing the producing run onto the report.
 
 **To confirm during implementation.** Whether dependency resolution returns a complete
 transitive closure in source-only mode. Full analysis mode is selected only when
 dependencies are requested, and without it the addon is doing source analysis alone. If
-the dependency list is incomplete in that mode, discovery must either enable full mode —
-spending the time discovery exists to avoid — or mark the reported dependencies partial.
-Marking the data is a narrower discriminator than marking the producing mode, so it does
-not conflict with the position above, but it would make the direct/transitive
-distinction unreliable and weaken transitive matching.
+the dependency list is incomplete in that mode, tech-discovery must either enable full
+mode — spending the time tech-discovery exists to avoid — or mark the reported
+dependencies partial. Marking the data is a narrower discriminator than marking the
+producing run, so it does not conflict with the position above, but it would make the
+direct/transitive distinction unreliable and weaken transitive matching.
 
 ### When Associations Are Evaluated
 
 Archetype membership is **not stored**. `MembershipResolver` is constructed per request
 and computes membership in memory from the application tag join. Dependency criteria
 follow the same model: membership stays derived, so there is no new consistency surface,
-no reconciliation, and no stale associations to invalidate on analysis completion or
-archetype edit. Results change the moment the underlying data changes.
+no reconciliation, and no stale associations to invalidate when a new report lands or an
+archetype is edited. Results change the moment the underlying data changes.
 
 Preserving that property is the main performance constraint. See
 [Resolving Membership](#resolving-membership).
@@ -928,11 +934,11 @@ going through the ecosystem's comparator.
 ### Resolving Membership
 
 Membership is resolved from an in-memory dataset. The distinct
-`(application, provider, name, version)` tuples of the latest analysis are fetched for
+`(application, provider, name, version)` tuples of the latest report are fetched for
 the applications in scope, each archetype expression is parsed once, and the expressions
 are evaluated against each application's dependency set. Distinctness has to be requested
 explicitly: dependencies are keyed by artifact hash as well, so one name and version can
-appear more than once in a single analysis.
+appear more than once in a single report.
 
 Scope is the set of applications whose membership the request actually needs:
 
@@ -965,7 +971,7 @@ pressure is the primary application list rather than an occasional report, becau
 The arithmetic behind that threshold, as estimates rather than measurements. An
 enterprise Java application reports on the order of 400 distinct dependencies — roughly
 120–250 for a modest WAR, 250–500 for a typical multi-module EAR, and up to 900 for an
-old EAR that bundles everything in `/lib`. So the latest-analysis dependency set is
+old EAR that bundles everything in `/lib`. So the latest-report dependency set is
 about 400k rows at 1000 applications and 4M at 10,000.
 
 Distinct `(name, version)` pairs behave very differently: an enterprise draws on a
@@ -989,7 +995,7 @@ settled by measurement rather than by argument:
   are needed instead; and because `.`, `:`, and `/` are interchangeable separators, a
   prefix is only selective against a *normalized* name column, not the name as stored.
   This composes with the provider partition above, on the same index.
-- **Caching the matched set**, invalidated on archetype write and analysis completion.
+- **Caching the matched set**, invalidated on archetype write and on a new report.
 
 For context on the baseline: `MembershipResolver` already loads the entire
 application-tag join on every request that resolves membership, including single
@@ -1057,11 +1063,12 @@ equivalent block-and-reference form; that its type constrains the ecosystem, so
 with a message rather than ignored.
 
 **Membership integration.** API-level tests using `test/binding`: archetypes with
-dependency criteria only, with tags only, and with both; applications with no analysis;
-and applications whose latest analysis supersedes an earlier matching one.
+dependency criteria only, with tags only, and with both; applications with no dependency
+data; and applications whose latest report supersedes an earlier matching one.
 
-**No dependency data.** An application with no analysis must not match a negated
-reference (`!foo`) or a disjunction containing one. This is the case where evaluating
+**No dependency data.** An application that has had neither an analysis nor a
+tech-discovery must not match a negated reference (`!foo`) or a disjunction containing
+one. This is the case where evaluating
 references individually gives the wrong answer, so it is asserted directly rather than
 inferred from the tag-only cases.
 
@@ -1075,10 +1082,10 @@ exactly the same result as the current tag-subset algorithm. The dependency-only
 tag-only case — where both must be assigned — is the one the previous tag-only rule got
 wrong, so it needs an assertion of its own.
 
-**Discovery analyses.** That a discovery run reports dependencies and an empty insight
-set; that a discovery run following a full analysis supersedes it entirely, so insight
+**Tech-discovery.** That a tech-discovery reports dependencies and an empty insight
+set; that a tech-discovery following a full analysis supersedes it entirely, so insight
 reporting returns nothing and dependency matching uses the newly reported set; and that
-a full analysis following a discovery run likewise supersedes it.
+a full analysis following a tech-discovery likewise supersedes it.
 
 ### Upgrade / Downgrade Strategy
 
@@ -1086,8 +1093,8 @@ A migration adds the `archetype.CriteriaDeps` column. No existing data is
 modified and no existing archetype changes behavior: an archetype with an empty
 expression resolves exactly as it does today.
 
-The analyzer addon change requires no hub schema change and no sequencing: a discovery
-run reports an analysis through the existing manifest upload, and the hub already
+The analyzer addon change requires no hub schema change and no sequencing: a
+tech-discovery reports through the existing manifest upload, and the hub already
 supersedes the previous report.
 
 Downgrade drops the column. Archetypes revert to tag-only criteria, which widens their
@@ -1096,8 +1103,8 @@ rather than mitigated, since preserving a filter the schema can no longer expres
 possible.
 
 The one upgrade hazard is behavioral rather than structural: **adding a dependency
-expression to an existing archetype will drop every application that has not been
-analyzed** (see [Source of Dependency Data](#source-of-dependency-data)). The UI
+expression to an existing archetype will drop every application with no dependency
+data** (see [Source of Dependency Data](#source-of-dependency-data)). The UI
 surfaces the resulting membership delta before the archetype is saved, via
 `POST /archetypes/membership` (DAC005).
 
@@ -1125,22 +1132,25 @@ surfaces the resulting membership delta before the archetype is saved, via
 
 ## Drawbacks
 
-Dependency criteria make archetype membership depend on analysis having run, coupling
-two subsystems that are currently independent. An archetype that looks correct can match
-nothing simply because the portfolio has not been analyzed, and the failure is silent —
-an empty member list, not an error.
+Dependency criteria make archetype membership depend on an analysis or a tech-discovery
+having run, coupling two subsystems that are currently independent. An archetype that
+looks correct can match nothing simply because the portfolio has neither been analyzed
+nor had tech-discovery run against it, and the failure is silent — an empty member list,
+not an error.
 
 **Segment prefix matching makes the characteristic failure over-matching rather than
 under-matching.** A reference truncated by one segment silently widens, and an archetype
 that captures too many applications looks plausible where an empty one does not. The
 match count in the preview exposes it after the fact; completing references against the
 coordinates the portfolio actually reports would prevent most of it, since the hub
-already holds every name every analysis has produced.
+already holds every name every report has produced.
 
-It does not scale past roughly 1000 applications as proposed, with the unpaginated
-application list under the most pressure. Adopting this on a large estate means
-accepting a latency regression there, or sequencing one of the levers in
-[Resolving Membership](#resolving-membership) first.
+The dependency matching adds potentially significant pressure on application listing scalability.
+Archetype membership is calculated when applications are fetched. The implementation will need
+to build in-memory dependency maps for pages of applications. The impact on listing large numbers
+of applications will be difficult to predict.
+Adopting this on a large estate means accepting a latency regression there, or sequencing one of
+the levers in[Resolving Membership](#resolving-membership) first.
 
 It adds a second *reference* syntax to the hub, alongside the `tag:category=name` form
 used for addon and extension selection. Sharing the boolean layer removes the
@@ -1284,12 +1294,12 @@ matching makes over-matching the default failure, where explicit wildcards would
 under-matching the default.
 
 **Materialized archetype membership.** Storing membership in an association table
-maintained on analysis completion and archetype edit would make reads trivially cheap.
+maintained on a new report and on archetype edit would make reads trivially cheap.
 Rejected because membership is currently derived, and keeping it derived avoids an entire
 class of staleness bug. It remains the escape hatch if the cheaper levers in
 [Resolving Membership](#resolving-membership) prove insufficient at scale.
 
-**Matching against all analyses rather than the latest.** Rejected: an application that
+**Matching against all reports rather than the latest.** Rejected: an application that
 once depended on a library but no longer does should not be classified by it.
 
 ## Implementation History
@@ -1315,3 +1325,7 @@ once depended on a library but no longer does should not be classified by it.
   consequence stated; preview separated into validation (cheap, per keystroke) and
   membership (whole-portfolio, on demand); open question on the single-interval
   restriction folded into [Version constraint](#version-constraint).
+- 2026-11-18: Terminology pass. The cheap onboarding pass is called **tech-discovery**
+  throughout rather than "discovery", and the report it produces is called a
+  tech-discovery rather than an analysis — "analysis" now means a full analyzer run only.
+  Where either kind of run is meant, the text says "report".
