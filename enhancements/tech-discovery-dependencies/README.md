@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-11-18
-last-updated: 2026-11-18
+last-updated: 2026-11-19
 status: provisional
 see-also:
   - "/enhancements/dependency-archetype-criteria/README.md"
@@ -16,75 +16,64 @@ see-also:
 # Dependency Reporting from Tech-Discovery
 
 Tech-discovery is the cheap pass that tags an application during onboarding. It runs the
-analyzer in source-only mode, applies tags, and returns. It does not report dependencies,
-and it does not create a report at all.
+analyzer in source-only mode, applies tags, and returns without creating a report.
 
-This enhancement makes tech-discovery resolve dependencies and report them with an empty
-insight set.
+This enhancement makes it resolve dependencies and send an analysis to report them, with
+an empty insight set. It applies only when the addon runs in discovery mode. Analysis mode
+is untouched.
 
 ## Release Signoff Checklist
 
 - [ ] Enhancement is `implementable`
 - [ ] Design details are appropriately documented from clear requirements
-- [x] Test plan is defined
+- [ ] Test plan is defined
 - [ ] Transitive closure in source-only mode confirmed
 - [ ] User-facing documentation is created
 
 ## Summary
 
-Two behaviors in `konveyor/tackle2-addon-analyzer` suppress dependency data during
-tech-discovery: it does not resolve dependencies, and it finishes by applying tags without
-creating a report. Both change. The addon already uploads report metadata, insights, and
-dependencies as separate parts, so this populates the last and leaves the others as they
-are.
+Two behaviors in `konveyor/tackle2-addon-analyzer` suppress dependency data in discovery
+mode: it does not resolve dependencies, and it finishes at tagging without creating a
+report. Both change. Report metadata, insights, and dependencies already upload as
+separate parts, so this populates the last and leaves the others alone.
 
-The change is confined to the addon. No hub schema change, no API change, no sequencing.
-
-**The consequence is not confined to the addon.** The hub treats the newest report per
-application as current, so a tech-discovery report supersedes whatever preceded it —
-including a full analysis, and including that analysis's insights. Because tech-discovery
-is triggered by an edit to an application, **editing an application will discard its
-insights.** That is a behavior change for every user, including those who never consume
-dependency data, and it is the substance of this proposal. See
-[Superseding an Analysis](#superseding-an-analysis).
+Dependencies are reported by sending an analysis, because that is the only carrier the hub
+provides for them. The analysis becomes the application's current one, superseding any
+previous analysis. That is existing hub behavior, and it is the one consequence worth
+weighing before approval. See
+[Superseding the Previous Analysis](#superseding-the-previous-analysis).
 
 ## Motivation
 
-Dependency data is produced only by a full analysis today. A full analysis is expensive
-and is not routinely run across a whole portfolio, so for most applications in most
-estates there is no dependency data at all.
-
-That is the binding constraint on anything built over dependencies.
+Dependency data is produced only by a full analysis, which is not routinely run across a
+whole portfolio, so for most applications there is none. That is the binding constraint on
+anything built over dependencies.
 [Dependency-Based Archetype Criteria](../dependency-archetype-criteria/README.md) is the
-immediate consumer: without this change, criteria built on dependencies would match
-nothing for applications that have been onboarded but not analyzed — which is the common
-state during onboarding, and precisely when automatic classification is most valuable.
+immediate consumer: dependency criteria would match nothing for an application that has
+been onboarded but not analyzed, which is the common state during onboarding and precisely
+when automatic classification is most valuable.
 
-Tech-discovery is already run broadly and already runs the analyzer. The dependency
-information exists in the provider output and is discarded.
-
-There is a second benefit independent of any consumer. Tech-discovery is triggered by an
-edit to an application, so once it reports, an application's dependency set is refreshed
-whenever the application changes. Today a dependency list can only be as current as the
-last full analysis.
+Tech-discovery already runs broadly and already runs the analyzer, and the dependency
+information is present in the provider output and discarded. A secondary benefit is that
+dependencies become as current as the last tech-discovery rather than the last full
+analysis.
 
 ### Goals
 
-- Report dependencies from tech-discovery, with an empty insight set.
+- Resolve and report dependencies in discovery mode, with an empty insight set.
 - Keep the change inside `tackle2-addon-analyzer`.
-- Establish the semantics of a report that carries dependencies and no insights.
 
 ### Non-Goals
 
-- **Reporting insights from tech-discovery.** Tech-discovery does not evaluate rules, and
-  this does not change that.
+- **Changing anything in analysis mode.** Full-analysis behavior is unchanged.
+- **Reporting insights from discovery mode.** The addon does not evaluate rules there.
+- **What invokes tech-discovery.** The addon reports for the run it is given; triggering is
+  hub and UI behavior.
 - **A discriminator on `Analysis` for the producing run.** See
-  [Superseding an Analysis](#superseding-an-analysis).
-- **Per-profile control of dependency collection.** Tech-discovery is not a profile
-  setting; it arrives through the task data. Varying collection by profile would require
-  extending the analysis profile mode first.
-- **Changing how the hub selects the current report.** The newest-wins behavior is
-  existing and is relied on here, not modified.
+  [Superseding the Previous Analysis](#superseding-the-previous-analysis).
+- **Per-profile control of dependency collection.** Discovery mode arrives through task
+  data rather than profile settings.
+- **Changing how the hub selects or archives analyses.** Relied on here, not modified.
 
 ## Proposal
 
@@ -98,191 +87,128 @@ rather than on the analyzed subset of it.*
 
 #### TDD002
 
-*As an Architect, I want an application's dependency list to refresh when the application
-is edited, so that it reflects what the application currently points at.*
-
-#### TDD003
-
-*As an Architect, I want to be able to tell whether an application has zero insights
-because it was analyzed and found clean, or because it was never analyzed, so that I do
-not read "no findings" as "no problems".*
+*As an Architect, I want an application's dependency list refreshed by tech-discovery, so
+that keeping it current does not require a full analysis.*
 
 ### The Change
 
-During tech-discovery, the addon resolves dependencies rather than skipping that step, and
-creates a report rather than finishing at tagging. The report carries:
+In discovery mode, the addon resolves dependencies rather than skipping that step, and
+sends an analysis rather than finishing at tagging:
 
-| part | tech-discovery | full analysis |
+| part | discovery mode *(changes)* | analysis mode *(unchanged)* |
 |---|---|---|
 | dependencies | populated | populated |
 | insights | empty | populated |
 | report metadata | populated | populated |
 
-Tagging behavior is unchanged.
+Only the first column changes. Tagging is unchanged in both modes.
 
-### Superseding an Analysis
+One consequence for consumers: the existence of an analysis no longer implies that rules
+were evaluated, so an empty insight set now means either "evaluated, nothing found" or
+"not evaluated".
 
-This is the part that needs agreement before anything is written.
+### Superseding the Previous Analysis
 
-The hub already treats the newest report per application as the current one. Creating a
-report from tech-discovery therefore supersedes whatever came before it, including a full
-analysis with insights. Since tech-discovery is triggered by an edit, the effect is:
+Dependencies hang off an `Analysis`, so reporting them means creating one, and creating
+one has two existing effects in the hub. Selection is newest-wins, so the per-application
+insight and dependency endpoints resolve to the most recent analysis. Creation also
+archives the prior ones, keeping an aggregate insight summary and deleting their `Insight`
+and `TechDependency` rows, with no summary equivalent for dependencies. This is gated by
+`ANALYSIS_ARCHIVER_ENABLED`, which defaults to true.
 
-> **Editing an application discards its insights.**
+A discovery-mode analysis therefore becomes the application's current one. Insights read
+empty, dependencies read as whatever tech-discovery resolved, and values derived from the
+latest analysis follow — `Application.effort` goes to zero, since there are no insights to
+sum.
 
-The position of this proposal is that this is correct, not a side effect to be worked
-around.
+Zeroing the insights is correct, not a side effect to be worked around. When an
+application is re-discovered, the state of its code is unknown; carrying the prior
+insights forward would assert findings that may no longer hold. Reporting dependencies
+with no insights states what is actually known: *we know what it depends on; we have not
+evaluated rules against this version.* For the same reason, no `addon-mode` discriminator
+is added to `Analysis` — it would exist only to defeat superseding, and would make "the
+latest analysis" mean different things to different consumers.
 
-An edit can change what the application points at — a different repository, a different
-branch, a different path. The insights of the previous analysis then describe a codebase
-the application no longer refers to, and continuing to report them asserts findings about
-the wrong thing. "Latest report has dependencies and no insights" accurately states *we
-know what it depends on; we have not evaluated rules against this version*.
-
-This also closes an existing gap. Today an application can be edited and retain a stale
-analysis indefinitely, because nothing invalidates it. The insights survive the edit and
-are silently wrong.
-
-**No `addon-mode` discriminator is added to `Analysis`.** Marking the producing run on the
-report would exist only to defeat the superseding behavior described above, and it would
-make "the latest report" mean different things to different consumers — some filtering to
-analyzer-produced reports, some not.
-
-**The counter-argument, stated plainly.** Not every edit changes what the application
-points at. Renaming an application, or editing its business service, discards insights
-that were still perfectly valid, and the user gets no warning. If that is judged too
-costly, the alternative is narrowing the tech-discovery trigger to edits that change the
-application's source coordinates — which is a change to the trigger, not to this proposal,
-and is worth considering on its own merits.
-
-### The Clean-Application Ambiguity
-
-After a tech-discovery, the UI shows zero insights. That is indistinguishable from a full
-analysis of a genuinely clean application. One means "not evaluated"; the other means
-"evaluated, nothing found". Reporting an application as clean when it was never checked is
-a meaningful misstatement (TDD003).
-
-Content cannot separate them — a clean application also has dependencies and zero
-insights. Provenance is available outside the report, in the application's task history,
-which distinguishes an `analyzer` run from a `tech-discovery` run. That is where the UI
-should resolve it, rather than denormalizing the producing run onto the report.
-
-This is listed as an [open question](#open-questions) because it requires UI work that is
-not in this proposal, and because shipping the hub side first leaves a window where the
-misstatement is live.
+How often supersession occurs depends on what invokes tech-discovery, which is hub and UI
+behavior and outside this proposal.
 
 ### Security, Risks, and Mitigations
 
 Dependency resolution reaches the network for ecosystems that resolve against a remote
-index. Tech-discovery currently does not, so applications that could previously be
-tech-discovered in an isolated environment may now fail or stall. Behavior under existing
-proxy and credential configuration needs to be confirmed, since those paths are exercised
-by full analysis today but not by tech-discovery.
-
-Resolution also makes tech-discovery slower, which matters because it is triggered by
-ordinary application edits rather than by an explicit user action.
+index, which discovery mode does not do today, so proxy and credential behavior needs
+confirming on this path. Failure is bounded by existing behavior, since dependency
+reporting can fail without failing the task, so tagging still succeeds in a
+restricted-network environment. Resolution also makes tech-discovery slower.
 
 ## Design Details
 
 ### To Confirm During Implementation
 
 **Whether dependency resolution returns a complete transitive closure in source-only
-mode.** Full analysis mode is selected only when dependencies are requested; without it
-the addon is doing source analysis alone. If the dependency list is incomplete in that
-mode, tech-discovery must either enable full mode — spending the time tech-discovery
-exists to avoid — or mark the reported dependencies partial.
+mode.** Full analysis mode is selected only when dependencies are requested. An incomplete
+closure is worse than a data-quality problem here, because the reported set replaces the
+complete set from any prior full analysis and nothing of it is retained. If it is
+incomplete, the options are to enable full mode, spending the time tech-discovery exists
+to avoid, or to mark the dependencies partial, which makes the direct/transitive
+distinction unreliable and does not prevent the replacement. This blocks `implementable`.
 
-Marking the data is a narrower discriminator than marking the producing run, so it does
-not conflict with the position in
-[Superseding an Analysis](#superseding-an-analysis), but it would make the
-direct/transitive distinction unreliable for consumers.
-
-This blocks `implementable`: if the closure is incomplete and full mode is required, the
-cost/benefit of the whole proposal changes.
+**Applications without source** already no-op in the addon. That path must continue to
+return without sending an analysis, since an empty one would supersede a real analysis
+while asserting nothing.
 
 ### Test Plan
 
 | area | cases |
 |---|---|
-| reporting | a tech-discovery produces a report with dependencies and an empty insight set; tagging behavior is unchanged |
-| supersession | a tech-discovery after a full analysis supersedes it entirely — insight reporting returns nothing, dependency queries return the new set; a full analysis after a tech-discovery likewise supersedes it |
-| edit trigger | editing an application runs tech-discovery and the resulting report replaces the prior analysis |
-| no regression | an application that has only ever had a full analysis is unaffected |
-| resolution | dependencies reported from tech-discovery match those from a full analysis of the same source, or the difference is characterized (see above) |
-| provenance | task history distinguishes an `analyzer` run from a `tech-discovery` run for the same application |
+| reporting | a tech-discovery sends an analysis with dependencies and an empty insight set; tagging is unchanged |
+| analysis mode | a full analysis resolves and reports exactly as it does today |
+| supersession | a tech-discovery after a full analysis becomes current, and a full analysis after a tech-discovery likewise; the prior analysis is archived with its summary intact and its insight and dependency rows removed |
+| derived values | reported effort follows the latest analysis — zero after a tech-discovery, restored by a subsequent full analysis |
+| resolution | dependencies from discovery mode match those from a full analysis of the same source, or the difference is characterized |
+| failure | resolution failure does not fail the task or suppress tagging, including with no route to a package index |
+| no source | an application without a repository, or analyzed from an uploaded binary, no-ops without sending an analysis |
+| no regression | an application that is never tech-discovered again is unaffected |
 
 ### Upgrade / Downgrade Strategy
 
-No schema change and no migration. The addon change takes effect for runs after upgrade;
-existing reports are untouched.
+No schema change and no migration. The addon change takes effect for runs after upgrade,
+and existing analyses are untouched until the next tech-discovery for that application.
+Downgrade returns discovery mode to tagging without reporting, and analyses it already
+sent remain current until a full analysis runs.
 
-Downgrade returns tech-discovery to tagging without reporting. Reports already produced by
-a tech-discovery remain and continue to be treated as current, so an application whose
-most recent report came from a tech-discovery will show dependencies and no insights until
-a full analysis runs. No data is lost and nothing needs reconciling.
-
-**The upgrade hazard is behavioral and is not reversible by downgrade:** between upgrade
-and downgrade, any application that was edited has lost its insights. Release notes should
-say so directly.
+Supersession is not reversible by downgrade, so an application tech-discovered in between
+keeps only what archiving left of its prior analysis. The release note should say so.
 
 ## Open Questions
 
-1. **Does the UI distinguish "not evaluated" from "evaluated, nothing found" before this
-   ships, or after?** *This does not block `implementable`, but it does gate the release
-   note.* The data needed is in the task history and no model change is required. Shipping
-   the addon change first leaves a window in which an un-analyzed application reads as
-   clean.
-
-2. **Should the tech-discovery trigger narrow to edits that change source coordinates?**
-   Discarding insights is correct when an edit repoints the application and
-   over-aggressive when it renames it. Narrowing the trigger would preserve the correctness
-   argument while removing most of the cost. It is out of scope here because it changes
-   the trigger rather than the reporting, but it is the obvious mitigation if the cost is
-   judged too high.
+None.
 
 ## Drawbacks
 
-**Editing an application destroys its insights, and the user is not warned.** This is the
-substance of the proposal rather than an incidental cost. It is defensible when the edit
-repoints the application and hard to defend when it does not — see open question 2.
-
-Tech-discovery becomes slower and acquires a network dependency it did not have, on a path
-triggered by ordinary edits rather than by an explicit action.
-
-A report that carries dependencies and no insights is a new shape in the system. Consumers
-that assume a report implies evaluated rules will be wrong, and the ambiguity above is the
-user-facing form of that.
-
-If source-only resolution turns out to be incomplete, the proposal either loses its cost
-advantage or ships dependency data that is quietly partial.
+- A tech-discovery clears the insights of a prior full analysis, and archiving reduces
+  them to a summary; recovering the detail requires running the analysis again.
+- Tech-discovery becomes slower and acquires a network dependency.
+- Consumers that assume an analysis implies evaluated rules will be wrong until updated.
+- If source-only resolution is incomplete, the proposal either loses its cost advantage or
+  replaces complete dependency data with quietly partial data.
 
 ## Alternatives
 
-**Report dependencies without creating a report.** Not possible as the hub is built —
-dependencies hang off an `Analysis`, so reporting them means creating one.
+**Merge the resolved dependencies into the latest analysis** rather than sending a new
+one, preserving its insights.
 
-**Add an `addon-mode` discriminator to `Analysis`** so consumers can prefer the latest
-*analyzer* report for insights and the latest *any* report for dependencies. Rejected: it
-exists only to defeat superseding, and it makes "the latest report" ambiguous. It also
-preserves the existing gap where an edited application keeps insights describing a
-codebase it no longer points at.
-
-**Keep insights and merge dependencies into the existing report.** Rejected for the same
-reason — it asserts findings about a codebase that may have changed, and it makes report
-content depend on the history of runs rather than on one run.
-
-**Run a full analysis on edit instead.** Correct insights and correct dependencies, at a
-cost tech-discovery exists to avoid. Not viable as a default; an explicit re-analysis
-action already covers users who want it.
-
-**Leave it alone and require a full analysis for dependency data.** The status quo. It
-confines dependency-based features to the analyzed subset of a portfolio, which for most
-estates is a small fraction, and leaves dependency lists as stale as the last full run.
+This is the only practical alternative, and it has been discussed and rejected. Zeroing
+the insights on re-discovery is the expected outcome, not a cost to be avoided: the state
+of the application code is unknown at that point, so insights carried forward from an
+earlier analysis would assert findings that may no longer hold.
 
 ## Implementation History
 
 - 2026-11-18: Extracted from
   [Dependency-Based Archetype Criteria](../dependency-archetype-criteria/README.md), where
-  it was a sub-section. Separated because the superseding behavior is a behavior change
-  affecting all users, including those who never use dependency criteria, and because
-  bundling it meant a reviewer objecting to it had to block the consuming feature.
+  it was a sub-section. Separated because superseding affects all users, including those
+  who never use dependency criteria, and because bundling it meant a reviewer objecting to
+  it had to block the consuming feature.
+- 2026-11-19: Corrected the description of supersession — the hub archives prior analyses
+  destructively by default, not only newest-wins selection. Scoped the document to addon
+  behavior; what invokes tech-discovery is out of scope.
