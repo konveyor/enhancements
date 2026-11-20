@@ -7,7 +7,7 @@ reviewers:
 approvers:
   - TBD
 creation-date: 2026-10-30
-last-updated: 2026-11-18
+last-updated: 2026-11-20
 status: provisional
 see-also:
   - "/enhancements/assessment-module/README.md"
@@ -121,11 +121,6 @@ Analysis already produces a precise, machine-generated dependency inventory, ref
 on every run. Archetypes are how Konveyor groups applications for assessment, review,
 and target profiles, so the inability to say "every application on Spring Boot 2" forces
 users to maintain by hand a classification the tool could derive.
-
-Dependency data also stays current on its own. Tech-discovery is triggered by an edit to
-an application, so once it reports dependencies an application's dependency set is
-refreshed whenever the application changes. Tag criteria depend on someone noticing the
-change and re-tagging.
 
 The cases users describe most often:
 
@@ -324,8 +319,12 @@ This is how `weblogic` expresses "anything importing WebLogic" with no wildcard 
 and how a reference tolerates a dependency name carrying more coordinate components than
 the reference does — see [Coordinate depth](#coordinate-depth).
 
-`*` matches exactly one segment. It is only meaningful in a non-trailing position
-(`com.*.internal`), since trailing segments are already open. There is no `**`.
+`*` matches exactly one segment, and there is no `**`. It is most useful in a
+non-trailing position (`com.*.internal`), since trailing segments are already open. A
+trailing `*` is accepted rather than rejected, and it is not redundant: it requires the
+candidate to carry at least one further segment, so `com.sun.*` matches
+`com.sun.xml.bind` but not `com.sun` itself. That is rarely what an author means, and it
+is the one place in the syntax where a reference is *narrower* than it looks.
 
 Because segment count is ecosystem-specific, so is the reach of a prefix. Maven and
 golang names are multi-segment and prefix-match freely; npm reaches only the scope
@@ -344,11 +343,11 @@ scope `@babel`, name `core`, constraint `7`.
 
 **Normalization is per-ecosystem, and the rules are adopted rather than invented.**
 Splitting alone does not cover every convention: PEP 503 declares `-`, `_`, and `.`
-equivalent within a Python distribution name, and npm and golang names are case-folded.
-Each rule is specified per package type in
-[purl-spec](https://github.com/package-url/purl-spec/blob/main/PURL-TYPES.rst), and the
-hub adopts them. Because the block declares the ecosystem, the reference is reduced once
-at parse time and the stored name under the same rules at match time.
+equivalent within a Python distribution name, and case is significant in some ecosystems
+and not others. Each rule is specified per package type in purl-spec's
+[type definitions](https://github.com/package-url/purl-spec/tree/main/types), and the hub
+adopts them. Because the block declares the ecosystem, the reference is reduced once at
+parse time and the stored name under the same rules at match time.
 
 The rules are adopted, not an implementation of them; see
 [Dialects](#dialects).
@@ -370,7 +369,7 @@ comparison = [ '>=' | '<=' | '>' | '<' | '=' | '!=' ] version
 | `@>=2\|<3` | the 2 line |
 | `@>=2.9\|<2.14` | the 2.9 through 2.13 lines |
 | `@<5.4` | anything below 5.4 |
-| `@>=2.0-beta9\|!=2.12.2\|<2.15.0` | a range with a hole |
+| `@>=1.2\|!=1.4.1\|<2` | a range with a hole |
 | *omitted* | any version |
 
 **A bare version is exact, not a prefix.** `@2` matches a version string that is
@@ -394,9 +393,10 @@ so a constraint can be emitted as a canonical `vers:` string. The restriction is
 relaxable later; it would not be tightenable.
 
 **Prereleases sort below their release, in every ecosystem.** `>=2.13` excludes
-`2.13.0-rc1`, `2.13-SNAPSHOT`, and `2.13rc1`; it includes `2.13-sp` and `2.13.post1`.
+`2.13.0-rc1`, `2.13-SNAPSHOT`, and `2.13rc1`.
 This is not a rule defined here — it falls out of each ecosystem's published ordering.
-It has one severe consequence, in Go; see [Go major versions](#go-major-versions).
+It has two severe consequences, both in Go, one at each end of a range; see
+[Go major versions](#go-major-versions).
 
 #### Coordinate depth
 
@@ -419,7 +419,7 @@ matches `/v4` and `/v5` both. Constrain the version instead, which is equivalent
 a module's version major always agrees with its path:
 
 ```
-[golang]( github.com/golang-jwt/jwt@>=v4|<v5 )
+[golang]( github.com/golang-jwt/jwt@>=v4|<v5.0.0-0 )
 ```
 
 A leading `v` is accepted on either side and is not significant: `@>=v4` and `@>=4` are
@@ -429,12 +429,21 @@ Constraining the version also covers the two cases the path cannot express: v0 a
 share the unversioned path, and `+incompatible` modules carry a major in the version
 with no path suffix.
 
-**The v0 trap.** An untagged Go module has a pseudo-version —
-`v0.0.0-20210101120000-abcdef123456` — which is a *prerelease* of `0.0.0` under semver
-and therefore sorts **below** `v0`. So `@>=v0|<v1` matches almost no v0 module. Write
-`@<v1`, or `@>=v0.0.0-0|<v1` if a lower bound is wanted. This is the prerelease rule
-behaving as specified; it is severe here because Go's dominant version form is a
-prerelease.
+**Bound a major with `<vN.0.0-0`, not `<vN`.** A prerelease of the next major sorts
+below it, and the next major's module path prefix-matches the same reference. So
+`github.com/golang-jwt/jwt@>=v4|<v5` admits `github.com/golang-jwt/jwt/v5` at
+`v5.0.0-rc.1`: the coordinates match, and `v5.0.0-rc.1 < v5.0.0`. `-0` is the lowest
+possible prerelease of `5.0.0`, so `<v5.0.0-0` excludes every v5 prerelease and keeps
+all of v4. The verbose form is the correct one wherever a major is being excluded.
+
+**The v0 trap.** The same rule bites harder at the lower bound. An untagged Go module
+has a pseudo-version — `v0.0.0-20210101120000-abcdef123456` — which is a *prerelease* of
+`0.0.0` under semver and therefore sorts **below** `v0`. So `@>=v0|<v1` matches almost no
+v0 module. Write `@<v1.0.0-0`, or `@>=v0.0.0-0|<v1.0.0-0` if a lower bound is wanted.
+
+Both traps are the prerelease rule behaving as specified. They are severe in Go and
+nowhere else because Go's dominant version form is a prerelease and its major version is
+also a path segment, so the version constraint is carrying weight the coordinates cannot.
 
 #### Advisory-driven criteria
 
@@ -467,9 +476,12 @@ dropped: a purl carries coordinates but cannot carry a range, so it addresses th
 of the advisory workflow that was never the hard half. See
 [Alternatives](#alternatives).
 
-One wrinkle for whoever builds the generator: an advisory may report a fix on several
-branches — Log4Shell was patched at both 2.12.2 and 2.15.0 — which needs either an `!=`
-carve-out or a disjunction, and the choice is not mechanical.
+One wrinkle for whoever builds the generator: an advisory often reports several affected
+intervals rather than one, because a fix is backported to branches still in support.
+Log4Shell is three — `[2.0-beta9, 2.3.1)`, `[2.4, 2.12.2)`, and `[2.13.0, 2.15.0)` — not
+the single range its headline suggests. Each interval becomes its own reference, OR'd
+together, since a constraint carries one interval. The mapping is mechanical; what is
+not mechanical is noticing that there is more than one.
 
 #### Evaluating a reference
 
@@ -520,6 +532,7 @@ equal to any single segment. Trailing candidate segments are unconstrained:
 | `com.*` | `com.redhat.fuse-core` | yes — `*` matches `redhat`, rest is trailing |
 | `com.redhat:fuse` | `com.redhat.fuse-core` | no — different segments; `-` does not separate |
 | `com.redhat:fuse-core:jar` | `com.redhat.fuse-core` | no — reference is deeper than the candidate |
+| `com.redhat.*` | `com.redhat` | no — a trailing `*` still requires a segment |
 
 Both sides reduce to `(type, segments, constraint)`. That shape resembles a purl and
 deliberately is not one: the reference half may be a prefix or carry `*`, neither of
@@ -545,16 +558,21 @@ The constraint half *is* VERS and serializes as such.
 ```
 
 ```
-# Log4Shell exposure: affected range with the fixed 2.12.2 carved out
-[maven]( org.apache.logging.log4j:log4j-core@>=2.0-beta9|!=2.12.2|<2.15.0 )
+# Log4Shell (CVE-2021-44228) exposure: three affected branches, one reference each.
+# 2.3.1, 2.12.2 and 2.15.0 are the fixes, so each interval stops below its own.
+[maven](
+  org.apache.logging.log4j:log4j-core@>=2.0-beta9|<2.3.1
+  || org.apache.logging.log4j:log4j-core@>=2.4|<2.12.2
+  || org.apache.logging.log4j:log4j-core@>=2.13.0|<2.15.0
+)
 ```
 
 ```
-# Stranded on an old Go major; note <v1 rather than >=v0|<v1
+# Stranded on an old Go major; note the -0 upper bounds and no >=v0 lower bound
 [golang](
-  github.com/golang-jwt/jwt@>=v4|<v5
-  || github.com/go-chi/chi@<v5
-  || github.com/jortel/go-utils@<v1
+  github.com/golang-jwt/jwt@>=v4|<v5.0.0-0
+  || github.com/go-chi/chi@<v5.0.0-0
+  || github.com/jortel/go-utils@<v1.0.0-0
 )
 ```
 
@@ -606,8 +624,7 @@ type Archetype struct {
 }
 ```
 
-One field on the REST resource, alongside the existing `criteria`. Existing clients are
-unaffected; the field is omitted when empty.
+One field on the REST resource, alongside the existing `criteria`, omitted when empty.
 
 ```go
 type Archetype struct {
@@ -684,6 +701,13 @@ at least one. For the expression dimension:
 
 - an empty expression is less constrained than any non-empty expression
 - two non-empty expressions are comparable only if identical, otherwise incomparable
+
+*Identical* means the parsed forms serialize to the same canonical string. Whitespace,
+line breaks, and redundant parentheses are therefore insignificant, and operand order is
+not: `a && b` and `b && a` are the same predicate but are treated as incomparable, so an
+application matching both archetypes is assigned to both. The test is deliberately
+syntactic — recognizing commutativity is the first step toward the subsumption decision
+rejected above, and the product order already declines to rank far more common cases.
 
 | X | Y | result |
 |---|---|---|
@@ -841,9 +865,22 @@ only `FromString`, `String`, and `QualifiersFromMap`, and `packageurl-go` normal
 as a side effect of parsing a whole `PackageURL`. Reaching the rules through a library
 therefore means round-tripping a purl string, which cannot represent a reference carrying
 `*` or a bare namespace prefix, and cannot represent a candidate at all, since a stored
-name has no recoverable group/artifact boundary. The rules are small — lowercase for npm
-and golang, PEP 503 collapse for pypi, nothing for maven — so each dialect implements
-them against purl-spec as the specification, with the test plan citing it as the oracle.
+name has no recoverable group/artifact boundary. The rules are small — PEP 503 collapse
+and case folding for pypi, case preserved for maven, npm, and golang — so each dialect
+implements them against purl-spec as the specification, with the test plan citing it as
+the oracle.
+
+**Case is preserved outside pypi, and golang needs saying out loud.** Only
+`pypi-definition.json` declares `case_sensitive: false` with explicit
+`normalization_rules`; maven, npm, and golang all declare `case_sensitive: true`. npm
+says why — the 2015 rule forbidding uppercase grandfathered the names that already had
+it. `golang-definition.json` is self-contradictory: it sets `case_sensitive: true` and
+also carries a note that the namespace and name "shall be lowercased", on a type
+annotated as predating Go modules. Go module paths are case-sensitive, so the flag is
+followed and the note is not. Folding Go would be friendlier to someone typing
+`github.com/masterminds/semver` from memory, and it is rejected anyway: it would make
+two distinct module paths one reference, and the cost of that is silent
+misclassification rather than a failed lookup.
 
 Adding an ecosystem is a dialect plus a row in the mapping table.
 
@@ -939,18 +976,18 @@ normalization has a published oracle to cite.
 
 Three cases are called out because a regression in them is silent rather than loud: an
 unparseable version must not satisfy a *negated* reference; `@>=v0|<v1` must fail to match
-a Go pseudo-version while `@<v1` matches it; and with no archetype using an expression,
-selection must produce exactly the current result.
+a Go pseudo-version while `@<v1.0.0-0` matches it; and with no archetype using an
+expression, selection must produce exactly the current result.
 
 | area | cases |
 |---|---|
 | comparator conformance | contract test against `osv-scalibr/semantic` for the orderings relied on here, plus `2.13.5 > 2.13`; fails loudly if an upgrade changes ordering |
 | version validation | `banana`, `${project.version}`, `LATEST`, `""`, a Maven property placeholder — each rejected by the hub's validator, and a dependency carrying one satisfies no reference, negated included |
-| name matching | segment prefix across separator forms; `com.sun` matches `com.sun.xml.bind`, not `com.sunflower`; reference matching greater reported depth; `@jsonjoy.com/util`; `@babel/core@7`; `com.foo:3d-view`; Go path suffixes; non-trailing `*` |
-| normalization | PEP 503 equivalence (`apache_airflow`, `apache.airflow` → `apache-airflow`); npm and golang case folding; no leakage across ecosystems — `-` stays load-bearing in Maven and Go, Maven stays case-sensitive |
+| name matching | segment prefix across separator forms; `com.sun` matches `com.sun.xml.bind`, not `com.sunflower`; reference matching greater reported depth; `@jsonjoy.com/util`; `@babel/core@7`; `com.foo:3d-view`; Go path suffixes; non-trailing `*`; a trailing `*` requiring one more segment |
+| normalization | PEP 503 equivalence (`apache_airflow`, `apache.airflow` → `apache-airflow`) and pypi case folding; case preserved everywhere else — `github.com/Masterminds/semver` and `github.com/masterminds/semver` are distinct, as are `JSONStream` and `jsonstream` in npm; no leakage across ecosystems — `-` stays load-bearing in Maven and Go |
 | expression parsing | all four ecosystems; nested and negated blocks; every row of the rejection table, asserting the suggested equivalent; `1.2,2.0` and `group:artifact:1.2` rejected under any reading; a reference outside a block is a parse error |
-| constraint semantics | each comparator and `\|`; `@2` does not match `2.7.18` but `@>=2\|<3` does; a second interval rejected with the `\|\|` equivalent; `>=2.13` excludes `2.13.0-rc1` and `2.13-SNAPSHOT`, includes `2.13-sp` |
-| Go idioms | `@>=v4\|<v5` selects `/v4` not `/v5`; the v0 pseudo-version case above; `v2.0.0+incompatible` behaves as `v2.0.0` |
+| constraint semantics | each comparator and `\|`; `@2` does not match `2.7.18` but `@>=2\|<3` does; a second interval rejected with the `\|\|` equivalent; `>=2.13` excludes `2.13.0-rc1` and `2.13-SNAPSHOT`; per-ecosystem post-release forms that sort *above* their release are included — Maven `2.13-sp`, PEP 440 `2.13.post1` |
+| Go idioms | `@>=v4\|<v5.0.0-0` selects `/v4` and excludes both `v5.0.0` and `v5.0.0-rc.1`, where `@>=v4\|<v5` admits the latter; the v0 pseudo-version case above; `v2.0.0+incompatible` behaves as `v2.0.0` |
 | per-ecosystem splitting | the separator table: `com.foo:bar` and `com.foo.bar` segment identically in maven; `@jsonjoy.com/util` is two npm segments, not three; `zope.interface` is one pypi segment; `-` never separates anywhere |
 | membership (`test/binding`) | dependency criteria only, tags only, both |
 | no dependency data | an application with neither an analysis nor a tech-discovery must not match `!foo`, nor a disjunction containing it — the case where evaluating references individually gives the wrong answer |
@@ -1009,7 +1046,9 @@ edit the archetype and look at the membership it produces.
 nothing else. Each rule is defensible on its own — npm cannot split on `.` without
 breaking `@jsonjoy.com/util`, and `lodash.merge` and `lodash-merge` are genuinely
 different packages — but the asymmetry is invisible in an expression and has to be
-learned from documentation.
+learned from documentation. Case behaves the same way: `pypi` folds it and the other
+three do not, so a Go or npm reference typed in the wrong case matches nothing and
+reports that as an empty archetype.
 
 The pressure on application listing is the drawback I am least able to bound. Membership
 is calculated when applications are fetched, so listing a large estate means resolving
@@ -1301,6 +1340,14 @@ expressible either way.
   dialect. Open question on conflicting archetypes removed — multiple membership is
   produced by incomparable tag sets today. Rationale for each is recorded in
   [Alternatives](#alternatives) and [Drawbacks](#drawbacks).
+- 2026-11-20: Correctness fixes on review. Case is preserved for maven, npm, and golang
+  and folded only for pypi, following purl-spec's per-type definitions rather than the
+  retired `PURL-TYPES.rst`; golang's self-contradictory entry is called out. An excluded
+  Go major is bounded `<vN.0.0-0`, since `<vN` admits that major's prereleases — the
+  mirror of the v0 trap. The Log4Shell example becomes the three affected intervals the
+  advisory actually reports, replacing an `!=` carve-out that left the 2.3.x and 2.12.x
+  fixes in range. Expression equality for specificity defined as canonical-form
+  equality. Trailing `*` specified as accepted and depth-requiring.
 - 2026-11-18: Structured criteria reframed from a rejected alternative to a live design
   choice and specified in full. The previous rejection was wrong: it claimed the Spring
   Boot cohort could not be expressed as structured criteria, which an And/Any/Not rule
