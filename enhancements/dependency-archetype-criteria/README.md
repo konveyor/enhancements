@@ -721,6 +721,23 @@ For A/B the product order declines to rank them, so both are assigned. Ranking a
 against an expression would need a common scale of specificity that does not exist, and
 declining to invent one matches how the algorithm already treats incomparable tag sets.
 
+**The case this gives up on.** Two archetypes over the same cohort, one narrower by a
+conjunct:
+
+| archetype | expression |
+|---|---|
+| A — "Spring Boot 2" | `[maven]( spring-boot@>=2\|<3 )` |
+| B — "Boot 2, vulnerable Jackson" | `[maven]( spring-boot@>=2\|<3 && jackson-databind@>=2.9\|<2.14 )` |
+
+Every member of B is a member of A, so B is strictly narrower and a tag-subset rule
+would have assigned the application to B alone. Here the expressions are not identical,
+so both are assigned. This is the common shape — a cohort and the subset of it that
+needs urgent work — and it is given up deliberately; the cheap check that would catch
+it, and why it is rejected, are in [Alternatives](#alternatives). An author who wants
+the two to be
+exclusive can say so directly, by adding `&& !jackson-databind@>=2.9|<2.14` to A, which
+makes the partition explicit in the expression rather than inferred from it.
+
 When no archetype uses an expression the expression dimension is always equal, so this
 reduces exactly to the current tag-subset rule and nothing existing changes.
 
@@ -847,6 +864,56 @@ block this feature as well.
 
 This proposal is implementable without it, and would simply be restricted to applications
 that have had a full analysis.
+
+### Security, Risks, and Mitigations
+
+The surface is small, and most of it is small because of decisions already made
+elsewhere in this proposal rather than because of anything added here.
+
+**Expressions are authored by privileged users and interpret nothing.** Writing one
+requires archetype write access — the same authority that already decides membership by
+criteria tags. The expression is parsed into a fixed grammar and evaluated as
+propositional logic over literal segment comparisons. There is no regular-expression
+engine, no interpolation, no template, and nothing from the expression reaches a query
+or a shell. The usual worry about an expression language on a request path, a
+pathological pattern driving the matcher superlinear, does not arise: `*` matches one
+whole segment and comparison is equality.
+
+**Nothing new is exposed and nothing is fetched.** Criteria read dependencies the
+requester can already retrieve from the report endpoints and produce membership the
+requester can already obtain; no endpoint is added. The expression is stored on the
+archetype and is readable by anyone who can read archetypes, where it names packages
+and nothing else. Because [SBOM and advisory ingestion](#non-goals) are out of scope,
+evaluation makes no outbound request — worth stating because the obvious follow-on
+feature, generating an expression from a CVE identifier, would introduce one and should
+carry its own review. See [Advisory-driven criteria](#advisory-driven-criteria).
+
+**Package names and version strings originate in scanned application source**, which is
+the least-trusted data in the pipeline — it comes from the build files of whatever
+repository was onboarded. The hub treats both as opaque: compared, never executed or
+interpolated. The one place they reach third-party code is `osv-scalibr/semantic`, which
+accepts malformed input silently and is therefore wrapped by the hub's own validator;
+see [Version comparison](#version-comparison). That wrapper exists for correctness, and
+it is also what keeps an unparseable or hostile version string from reaching the
+comparator unchecked.
+
+**The real risk is availability, and it is not mitigated here.** Membership resolves on
+every fetch and `/applications` is unpaginated, so a user with archetype write access
+can make the primary application list slower for everyone. This is the subject of
+[Resolving Membership](#resolving-membership) and the second
+[Open Question](#open-questions); the benchmarks owed there settle it, and proposing a
+separate mitigation ahead of measurement would be guessing. Two things bound it in the
+meantime: the actor is authenticated and privileged rather than anonymous, and an
+expression is parsed once per resolution rather than once per application, so even a
+deeply nested one is amortized across the portfolio. Nothing here changes the hub's
+tenancy model.
+
+**Review.** The security surface above is small enough to be covered by ordinary
+enhancement review rather than a separate one. UX review is the one that matters and
+should happen before [Open Questions](#open-questions) is settled, because the choice
+between an expression language and structured criteria is a question about who can
+author a correct archetype — the strongest argument on each side is an authoring
+argument, and it is the half of this proposal least able to be decided by reading code.
 
 ## Design Details
 
@@ -1204,6 +1271,31 @@ namespace. The exact reading is rarely what is wanted: a coordinate reported at 
 depth would not match its own shorter form, and every namespace query would carry a `**`.
 The trade is real and recorded in [Drawbacks](#drawbacks).
 
+**Conjunct-superset dominance** — ranking two expressions when one's AND'd clauses are
+a superset of the other's, so that "Boot 2 + vulnerable Jackson" wins over "Boot 2"; see
+[Specificity](#specificity). Raised in review, and the case is real: it is the ordinary
+cohort-and-urgent-subset shape, and the tag rule would have ranked it. The check is also
+cheaper than the subsumption decision rejected above — conjuncts need never be
+interpreted, only serialized and compared as opaque strings, since `A && B && C` implies
+`A && B` whatever A, B and C are.
+
+Rejected on comprehensibility rather than cost. The rule would be sound but partial, and
+its edges are invisible to the author: one top-level `||`, or a negated block, and
+ranking silently switches off, so an archetype that was being discarded is suddenly
+assigned too. Its incompleteness also runs against intuition — `a && b` ranks against
+`a`, but not against `a && (b || c)`, though it is genuinely narrower than both. And
+restructuring an expression in a way that reads as formatting can move it across that
+line. Narrowest-match is already the least obvious part of archetype membership; a second
+rule that *usually* applies is worse than one that consistently declines, which is the
+same reasoning used above for refusing to rank a tag against an expression.
+
+What settles it is that the author does not need the inference. Exclusivity is directly
+writable — `A && !jackson-databind@>=2.9|<2.14` — which states the partition in the
+expression instead of leaving it to be recovered from one. Absent that, both archetypes
+are assigned, which is what incomparable tag sets already produce today. Worth revisiting
+only alongside an explain capability, since the objection is that the author cannot see
+when the rule applies.
+
 **A membership preview endpoint** — `POST /archetypes/membership`, accepting unsaved
 `{criteria, criteriaDeps}` and returning the matching applications and their count, so
 the UI could show a delta before an archetype is saved. Carried in earlier revisions and
@@ -1421,6 +1513,10 @@ expressible either way.
   dialect. Open question on conflicting archetypes removed — multiple membership is
   produced by incomparable tag sets today. Rationale for each is recorded in
   [Alternatives](#alternatives) and [Drawbacks](#drawbacks).
+- 2026-11-20: Conjunct-superset dominance evaluated following review and rejected; the
+  case it would have caught is now stated in [Specificity](#specificity) rather than
+  left implicit, with the explicit-exclusion form an author can write instead.
+- 2026-11-20: `Security, Risks, and Mitigations` added, per the enhancement template.
 - 2026-11-20: Missing-data handling reworked into [Decidability](#decidability). The
   expression-level guard, the per-block guard, and the unparseable-version rule were
   three patches that each named a result without supplying a mechanism, and none of
