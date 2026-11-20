@@ -609,7 +609,8 @@ Blocks are terms, so a block may be negated:
 
 This reads *Spring Boot 2, with a front end that is not React* — not *with no front
 end*. An application whose latest report never covered npm is excluded rather than
-matched, per the per-block guard in [Matching Semantics](#matching-semantics).
+matched, because the expression names npm and so requires npm to have been reported at
+all; see [Decidability](#decidability).
 
 ### Model and API Changes
 
@@ -726,30 +727,12 @@ reduces exactly to the current tag-subset rule and nothing existing changes.
 #### Matching
 
 All criteria are ANDed: the archetype's criteria tags must all be present **and** the
-dependency expression must be satisfied. Disjunction within dependency criteria is
+dependency expression must be satisfied — which first requires that it can be evaluated
+at all against this application; see [Decidability](#decidability). Disjunction within
+dependency criteria is
 expressed with `||` inside the expression; there is no way to OR a tag against a
 dependency. An archetype may have an expression and no tags, or tags and no expression;
 one with neither matches everything, as today.
-
-**No dependency data.** When an application has none, a non-empty expression is
-unsatisfied regardless of its structure. The guard applies to the expression as a whole,
-not to its references: a reference resolving to false would make
-`!jakarta.servlet:jakarta.servlet-api` resolve to *true*, so an expression leading with a
-negation would match every application with no dependency data.
-
-**The same guard applies per block.** A block whose ecosystem contributed no dependencies
-to the latest report is unsatisfied regardless of structure. Without this, `![npm](react)`
-would be satisfied by every application whose report never ran an npm provider —
-asserting the absence of React on evidence never collected. The hub cannot distinguish
-"has no npm dependencies" from "npm was never inspected".
-
-So a negated block only means something for an ecosystem the latest report actually
-covered: `![npm](react)` selects applications known to have npm dependencies, none of
-them React.
-
-**Unparseable versions.** A candidate whose version string does not parse under its
-ecosystem's rules satisfies no constraint, including a negated one. The comparator does
-not reject such strings; the hub must. See [Implementation](#implementation).
 
 **Direct vs. transitive.** A reference matches both. The motivating cases — vulnerable
 and EOL libraries — usually arrive transitively, and the analyzer already reports
@@ -759,6 +742,74 @@ Membership remains derived rather than stored: `MembershipResolver` is construct
 request and computes in memory, so there is no new consistency surface and nothing to
 invalidate when a report lands. Preserving that is the main performance constraint; see
 [Resolving Membership](#resolving-membership).
+
+#### Decidability
+
+Negation is why absent data cannot be treated as a negative result. A reference asks
+whether a matching dependency exists; when none does, the reference is false and `!ref`
+is true. That is correct when the dependency list is in hand and wrong when it is not —
+"no evidence of React" is not "evidence of no React", and negation converts the first
+silently into the second. An archetype leading with a `!` would otherwise match every
+application nobody has analyzed.
+
+**An expression is evaluated only when the data it needs is present. Otherwise the
+application does not match.** The requirement is read off the expression before any
+evaluation happens:
+
+- **Every ecosystem the expression names must be covered.** An expression names the
+  ecosystems of all its blocks; a block's ecosystem is covered when the latest report
+  contributed at least one dependency under the corresponding provider. If any named
+  ecosystem is uncovered, the application does not match.
+- **Every reference the expression contains must be decidable.** A reference is *true*
+  when some candidate confirms it, *false* when every candidate matching its coordinates
+  was evaluable and none satisfied it, and **undecidable** when neither holds — that is,
+  when nothing confirms it and at least one candidate matching its coordinates carries a
+  version string that does not parse under its ecosystem's rules. A single undecidable
+  reference disqualifies the application. The comparator does not reject malformed
+  version strings; the hub must. See [Implementation](#implementation).
+
+A reference that matches no candidate at all is **false**, not undecidable — the
+ecosystem was covered, so the package's absence was observed rather than assumed. That
+case is the one negation exists for, and it keeps `!jakarta.servlet` meaning what it
+reads as.
+
+An application that has no report at all is disqualified by the first rule rather than
+by a case of its own: with no dependencies, no ecosystem is covered.
+
+**The requirement is structural, not evaluated.** It is computed from the parse tree and
+the candidate set, so no amount of nesting or negation routes around it.
+`!([npm](react) && [maven](foo))` is gated on npm whether or not evaluation ever reaches
+the npm block. This is what a rule applied during evaluation cannot do: a block that
+merely resolved to false would still satisfy an enclosing `!`, which is the result the
+rule exists to prevent.
+
+So a negated block only means something for an ecosystem the latest report actually
+covered: `![npm](react)` selects applications known to have npm dependencies, none of
+them React. The trigger is per *reference*, not per application: an application carrying
+one unresolved `${project.version}` is disqualified only from archetypes whose
+expressions name that package, not from dependency criteria generally. That distinction
+matters because unresolved Maven properties are common in real analyzer output, and a
+blanket rule would strand a large share of the portfolio.
+
+**This errs toward non-membership, deliberately.** For a conjunction the requirement
+changes nothing — `[maven](a) && [npm](b)` is already false when npm is uncovered — so
+its whole footprint is negation and disjunction. In the negation case it is necessary.
+In the disjunction case it is stricter than it strictly has to be:
+`[maven](foo) || [npm](react)` does not match an application with satisfied Maven
+dependencies and no npm data, where in principle the Maven half settles the question.
+Propagating a third "unknown" value through the boolean layer would recover that case,
+at the cost of a tri-state evaluator and a set of propagation rules in place of one
+precondition.
+
+That trade is not worth taking, for two reasons that do not depend on each other. The
+shape being protected is rare on its own terms: an archetype asserts that its members
+take the same assessment and the same target profile, and a criterion satisfied by
+either a Java marker or a JavaScript one is describing two populations rather than one
+— which is why a polyglot archetype is conjunctive, as every polyglot example in this
+document is. And the two errors are not symmetric: a false negative is visible as a
+member that should be there and is fixed by analyzing the application, while a false
+positive is a misclassification nobody is prompted to look at. The same shape is rated
+low-realism in [The gap, in full](#the-gap-in-full), for the same reason.
 
 ### Source of Dependency Data
 
@@ -772,9 +823,10 @@ A reported dependency carries a provider, a name, a version, and whether it was 
 indirectly, all passthrough from analyzer-lsp. This proposal interprets provider, name,
 and version, which is the extent of the coupling it introduces.
 
-An application that has had neither an analysis nor a tech-discovery has no dependency
-data, so no expression is satisfied and it does not match — including for negated
-expressions. The consequence is a behavior change for an archetype that previously
+An application that has had neither an analysis nor a tech-discovery covers no ecosystem,
+so every expression is undecidable against it and it does not match — including a negated
+one; see [Decidability](#decidability). The consequence is a behavior change for an
+archetype that previously
 matched on tags alone and later gains an expression: every member with no dependency data
 drops. See [Drawbacks](#drawbacks).
 
@@ -833,6 +885,13 @@ dependency criteria supply a second resolver alongside the existing one.
 meaning in the propositional-logic language, so claiming it displaces nothing. The
 extension reads the ecosystem, parses the parenthesized sub-expression, and compiles each
 reference against that ecosystem.
+
+The boolean layer stays two-valued, which is what keeps it shareable. Missing data is
+handled by [Decidability](#decidability) as a precondition on the whole expression, not
+as a third value flowing through the operators, so the reference resolver returns a
+plain `bool` and `gval`'s own `&&`, `||`, and `!` are used as they are. A tri-state
+evaluator would have meant overriding those operators and would have put the two
+resolvers on different footings.
 
 #### Dialects
 
@@ -906,9 +965,11 @@ version, despite documenting that it does. Verified: `banana`, `${project.versio
 sort *below* real versions in most ecosystems but *above* them in Debian. An unresolved
 Maven property in analyzer output would therefore satisfy any `<X` constraint silently.
 
-The hub validates candidate version strings per ecosystem before comparison and treats
-failure as "this dependency does not satisfy this reference". The wrapper is thin, but it
-cannot be skipped and no library supplies it.
+The hub validates candidate version strings per ecosystem before comparison. Failure is
+not "this dependency does not satisfy this reference" — that reading would let an
+enclosing `!` turn a parse failure into a match. It makes the reference *undecidable*,
+which disqualifies the application outright; see [Decidability](#decidability). The
+wrapper is thin, but it cannot be skipped and no library supplies it.
 
 A parsed constraint is an optional lower bound, an optional upper bound, and a set of
 exclusions. A version satisfies it when it falls within whichever bounds are present and
@@ -921,6 +982,12 @@ Membership is resolved from an in-memory dataset: the distinct
 applications in scope, each expression is parsed once, and the expressions are evaluated
 per application. Distinctness has to be requested explicitly — dependencies are keyed by
 artifact hash as well, so one name and version can appear more than once in a report.
+
+[Decidability](#decidability) costs nothing on top of this. Ecosystem coverage is the
+set of distinct providers per application, which the same dataset already carries, and
+the ecosystems an expression requires are known once at parse time. Checking coverage
+first is also the cheaper order: a disqualified application is skipped before any name
+or version work happens.
 
 Scope is the set of applications the request actually needs:
 
@@ -982,7 +1049,7 @@ expression, selection must produce exactly the current result.
 | area | cases |
 |---|---|
 | comparator conformance | contract test against `osv-scalibr/semantic` for the orderings relied on here, plus `2.13.5 > 2.13`; fails loudly if an upgrade changes ordering |
-| version validation | `banana`, `${project.version}`, `LATEST`, `""`, a Maven property placeholder — each rejected by the hub's validator, and a dependency carrying one satisfies no reference, negated included |
+| version validation | `banana`, `${project.version}`, `LATEST`, `""`, a Maven property placeholder — each rejected by the hub's validator; a dependency carrying one makes a reference naming it undecidable, so neither `foo@<2` nor `!foo@<2` matches, while a second copy of `foo` at a parseable `1.5` makes `foo@<2` true; an expression naming other packages is unaffected |
 | name matching | segment prefix across separator forms; `com.sun` matches `com.sun.xml.bind`, not `com.sunflower`; reference matching greater reported depth; `@jsonjoy.com/util`; `@babel/core@7`; `com.foo:3d-view`; Go path suffixes; non-trailing `*`; a trailing `*` requiring one more segment |
 | normalization | PEP 503 equivalence (`apache_airflow`, `apache.airflow` → `apache-airflow`) and pypi case folding; case preserved everywhere else — `github.com/Masterminds/semver` and `github.com/masterminds/semver` are distinct, as are `JSONStream` and `jsonstream` in npm; no leakage across ecosystems — `-` stays load-bearing in Maven and Go |
 | expression parsing | all four ecosystems; nested and negated blocks; every row of the rejection table, asserting the suggested equivalent; `1.2,2.0` and `group:artifact:1.2` rejected under any reading; a reference outside a block is a parse error |
@@ -990,7 +1057,7 @@ expression, selection must produce exactly the current result.
 | Go idioms | `@>=v4\|<v5.0.0-0` selects `/v4` and excludes both `v5.0.0` and `v5.0.0-rc.1`, where `@>=v4\|<v5` admits the latter; the v0 pseudo-version case above; `v2.0.0+incompatible` behaves as `v2.0.0` |
 | per-ecosystem splitting | the separator table: `com.foo:bar` and `com.foo.bar` segment identically in maven; `@jsonjoy.com/util` is two npm segments, not three; `zope.interface` is one pypi segment; `-` never separates anywhere |
 | membership (`test/binding`) | dependency criteria only, tags only, both |
-| no dependency data | an application with neither an analysis nor a tech-discovery must not match `!foo`, nor a disjunction containing it — the case where evaluating references individually gives the wrong answer |
+| decidability | an application with neither an analysis nor a tech-discovery must not match `!foo` nor a disjunction containing it; `![npm](react)` must not match an application whose report covered maven only; `!([npm](react) && [maven](foo))` must not match it either — the nested case a rule applied during evaluation misses; a covered ecosystem with no matching dependency must still make `!foo` true |
 | specificity | each row of the product-order table; the regression property above; dependency-only vs. tag-only, which the tag-only rule got wrong |
 | report currency | an archetype matches on the latest report only; a newer report supersedes an earlier matching one, whichever kind produced it |
 
@@ -1033,6 +1100,16 @@ portfolio has not been analyzed, and the failure is silent — an empty member l
 error. The same coupling makes a dropped member ambiguous in a way a tag criterion never
 is: adding a criteria tag drops applications that genuinely lack it, while adding an
 expression also drops applications that satisfy it but have not been analyzed.
+
+**Disqualification is indistinguishable from a failed match.**
+[Decidability](#decidability) is the right default — it is the only way negation means
+what it says — but an application it removes looks exactly like one whose dependencies
+were checked and did not match. "No npm data was ever collected" and "this application
+has no React" produce the same empty row. The author's recourse is the same one tag
+criteria have, inspecting the membership an archetype produces, except that here the
+membership does not reveal the reason. What would fix it is an explain capability —
+per-application, why this archetype did or did not match — which is a feature in its
+own right and is not proposed here.
 
 **Segment prefix matching leans toward over-matching rather than under-matching.** An
 imprecise reference widens, where an exact-match rule would have narrowed. This is not
@@ -1210,8 +1287,12 @@ criteriaDeps:
 ```
 
 A negated block is a rule with only `Not`. `![npm](react)` is
-`{ecosystem: npm, not: [react]}`, and the per-block guard gives it the same meaning it
-has in the expression language: the application has npm dependencies, none of them React.
+`{ecosystem: npm, not: [react]}`, and [Decidability](#decidability) gives it the same
+meaning it has in the expression language: the application has npm dependencies, none of
+them React. The rule set names its ecosystems in a field rather than in block headers,
+so the requirement is if anything easier to compute — but it is the same requirement,
+and a `Not` list that skipped it would invert the user's meaning exactly as a negated
+block would.
 
 ### The gap, in full
 
@@ -1253,8 +1334,8 @@ incomparable criteria is already normal.
 - **Several ranges on one coordinate** — two `Any` entries naming the same package with
   different constraints, which is how a vulnerability spanning two release lines is
   written.
-- **A negated block** — `![npm](react)` is `{ecosystem: npm, not: [react]}`, and the
-  per-block guard gives it the same meaning.
+- **A negated block** — `![npm](react)` is `{ecosystem: npm, not: [react]}`, and
+  [Decidability](#decidability) gives it the same meaning.
 - **Tags combined with dependencies** — unchanged; criteria tags AND with dependency
   criteria under either design.
 
@@ -1340,6 +1421,13 @@ expressible either way.
   dialect. Open question on conflicting archetypes removed — multiple membership is
   produced by incomparable tag sets today. Rationale for each is recorded in
   [Alternatives](#alternatives) and [Drawbacks](#drawbacks).
+- 2026-11-20: Missing-data handling reworked into [Decidability](#decidability). The
+  expression-level guard, the per-block guard, and the unparseable-version rule were
+  three patches that each named a result without supplying a mechanism, and none of
+  them survived nesting — a no-data block inside a larger negation escaped all three.
+  They are replaced by one precondition evaluated from the parse tree: every ecosystem
+  an expression names must be covered and every reference it contains must be
+  decidable, or the application does not match. The boolean layer stays two-valued.
 - 2026-11-20: Correctness fixes on review. Case is preserved for maven, npm, and golang
   and folded only for pypi, following purl-spec's per-type definitions rather than the
   retired `PURL-TYPES.rst`; golang's self-contradictory entry is called out. An excluded
