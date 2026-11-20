@@ -694,7 +694,8 @@ members only when nothing tagged also matched.
 Counting references in the expression is not a fix: disjunction widens and conjunction
 narrows, so `a || b || c` has three references and is broader than `a`. Deciding genuine
 subsumption between two expressions is decidable but expensive, and not worth it for an
-ordering heuristic.
+ordering heuristic. A cheap partial check does exist and is rejected for a different
+reason; see [Alternatives](#alternatives).
 
 **Dominance becomes a product order over both dimensions.** X dominates Y when X is at
 least as constrained as Y in tags *and* in expression, and strictly more constrained in
@@ -732,11 +733,10 @@ conjunct:
 Every member of B is a member of A, so B is strictly narrower and a tag-subset rule
 would have assigned the application to B alone. Here the expressions are not identical,
 so both are assigned. This is the common shape — a cohort and the subset of it that
-needs urgent work — and it is given up deliberately; the cheap check that would catch
-it, and why it is rejected, are in [Alternatives](#alternatives). An author who wants
-the two to be
-exclusive can say so directly, by adding `&& !jackson-databind@>=2.9|<2.14` to A, which
-makes the partition explicit in the expression rather than inferred from it.
+needs urgent work — and it is given up deliberately; the cheap check that would catch it,
+and why it is rejected, are in [Alternatives](#alternatives). An author who wants the two
+to be exclusive can say so directly, by adding `&& !jackson-databind@>=2.9|<2.14` to A,
+which makes the partition explicit in the expression rather than inferred from it.
 
 When no archetype uses an expression the expression dimension is always equal, so this
 reduces exactly to the current tag-subset rule and nothing existing changes.
@@ -746,10 +746,9 @@ reduces exactly to the current tag-subset rule and nothing existing changes.
 All criteria are ANDed: the archetype's criteria tags must all be present **and** the
 dependency expression must be satisfied — which first requires that it can be evaluated
 at all against this application; see [Decidability](#decidability). Disjunction within
-dependency criteria is
-expressed with `||` inside the expression; there is no way to OR a tag against a
-dependency. An archetype may have an expression and no tags, or tags and no expression;
-one with neither matches everything, as today.
+dependency criteria is expressed with `||` inside the expression; there is no way to OR
+a tag against a dependency. An archetype may have an expression and no tags, or tags and
+no expression; one with neither matches everything, as today.
 
 **Direct vs. transitive.** A reference matches both. The motivating cases — vulnerable
 and EOL libraries — usually arrive transitively, and the analyzer already reports
@@ -818,15 +817,27 @@ Propagating a third "unknown" value through the boolean layer would recover that
 at the cost of a tri-state evaluator and a set of propagation rules in place of one
 precondition.
 
-That trade is not worth taking, for two reasons that do not depend on each other. The
-shape being protected is rare on its own terms: an archetype asserts that its members
-take the same assessment and the same target profile, and a criterion satisfied by
-either a Java marker or a JavaScript one is describing two populations rather than one
-— which is why a polyglot archetype is conjunctive, as every polyglot example in this
-document is. And the two errors are not symmetric: a false negative is visible as a
-member that should be there and is fixed by analyzing the application, while a false
-positive is a misclassification nobody is prompted to look at. The same shape is rated
-low-realism in [The gap, in full](#the-gap-in-full), for the same reason.
+That trade is not worth taking, for two reasons that do not depend on each other.
+
+The shape being protected is rare. Across ecosystems it is rare on its own terms: an
+archetype asserts that its members take the same assessment and the same target profile,
+and a criterion satisfied by either a Java marker or a JavaScript one describes two
+populations rather than one — which is why a polyglot archetype is conjunctive, as every
+polyglot example here is, and why the same shape is rated low-realism in
+[The gap, in full](#the-gap-in-full). Within a block the argument is different and
+narrower. A disjunction over *one* coordinate — the Log4Shell example, three intervals
+on `log4j-core` — is disqualified correctly, because an unparseable version makes every
+one of its references undecidable and the application's log4j version is genuinely
+unknown. The cost falls only on a disjunction over *different* packages where one is
+unparseable and another is confirmed: `[pypi]( pyyaml@<5.4 || jinja2@<2.11.3 )` drops an
+application whose jinja2 is known vulnerable because its pyyaml version will not parse.
+That is a real loss, and it is accepted rather than argued away.
+
+The second reason is that the errors are not symmetric. A disqualified application is
+absent from a membership list its author is looking at, and analyzing it resolves the
+question; the author can see that something is missing, even though — as
+[Drawbacks](#drawbacks) records — nothing says why. A false positive is a
+misclassification that prompts no one to look at anything.
 
 ### Source of Dependency Data
 
@@ -843,9 +854,8 @@ and version, which is the extent of the coupling it introduces.
 An application that has had neither an analysis nor a tech-discovery covers no ecosystem,
 so every expression is undecidable against it and it does not match — including a negated
 one; see [Decidability](#decidability). The consequence is a behavior change for an
-archetype that previously
-matched on tags alone and later gains an expression: every member with no dependency data
-drops. See [Drawbacks](#drawbacks).
+archetype that previously matched on tags alone and later gains an expression: every
+member with no dependency data drops. See [Drawbacks](#drawbacks).
 
 ### Prerequisite: Dependency Data from Tech-Discovery
 
@@ -1196,9 +1206,9 @@ reports that as an empty archetype.
 
 The pressure on application listing is the drawback I am least able to bound. Membership
 is calculated when applications are fetched, so listing a large estate means resolving
-dependency criteria across it, and the effect is hard to predict in advance. Adopting this at scale means accepting a latency regression
-there, or sequencing one of the levers in
-[Resolving Membership](#resolving-membership) first.
+dependency criteria across it, and the effect is hard to predict in advance. Adopting
+this at scale means accepting a latency regression there, or sequencing one of the
+levers in [Resolving Membership](#resolving-membership) first.
 
 It adds a second *reference* syntax alongside the `tag:category=name` form used for addon
 and extension selection. Sharing the boolean layer removes the implementation cost but not
